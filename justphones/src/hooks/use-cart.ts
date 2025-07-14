@@ -1,0 +1,187 @@
+
+'use client';
+
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react';
+import type { Product, ProductColor } from '@/lib/products';
+import { useToast } from './use-toast';
+import { useProducts } from './use-products';
+import { useCustomerRequests } from './use-customer-requests';
+
+export interface CartItem {
+  id: string; // Combination of product.id and color.hex
+  product: Product;
+  color: ProductColor;
+  quantity: number;
+}
+
+export interface CartContextType {
+  cartItems: CartItem[];
+  addToCart: (product: Product, color: ProductColor, quantity?: number) => void;
+  removeFromCart: (itemId: string) => void;
+  updateItemQuantity: (itemId: string, quantity: number) => void;
+  clearCart: () => void;
+  cartCount: number;
+  totalPrice: number;
+}
+
+export const CartContext = createContext<CartContextType | undefined>(undefined);
+
+const CART_STORAGE_KEY = 'justphones-cart';
+
+
+// The logic has been extracted into this hook
+export function useCartState() {
+  const { products } = useProducts();
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const { addCustomerRequest } = useCustomerRequests();
+  const { toast } = useToast();
+
+  const loadFromStorage = useCallback(() => {
+    try {
+      const storedCart = localStorage.getItem(CART_STORAGE_KEY);
+      
+      if (storedCart) {
+          const parsedItems = JSON.parse(storedCart);
+          // Data hydration: ensure product data is up-to-date
+          const hydratedItems = parsedItems.map((item: CartItem) => {
+              const freshProduct = products.find(p => p.id === item.product.id);
+              return freshProduct ? { ...item, product: freshProduct } : item;
+          }).filter((item: CartItem) => products.some(p => p.id === item.product.id)); // filter out stale products
+
+          setCartItems(hydratedItems);
+      }
+    } catch (error) {
+      console.error("Failed to load cart from local storage", error);
+    }
+  }, [products]);
+
+  useEffect(() => {
+    if (products.length > 0) {
+      loadFromStorage();
+    }
+  }, [products, loadFromStorage]);
+
+  useEffect(() => {
+    // We avoid saving an empty cart to not overwrite a cart from another tab on load
+    if (cartItems.length > 0) {
+        localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartItems));
+    } else {
+        localStorage.removeItem(CART_STORAGE_KEY);
+    }
+  }, [cartItems]);
+
+  const addToCart = async (product: Product, color: ProductColor, quantityToAdd: number = 1) => {
+    const itemId = `${product.id}-${color.hex}`;
+    
+    // Update current cart
+    const existingItem = cartItems.find(item => item.id === itemId);
+    if (existingItem) {
+      const newQuantity = existingItem.quantity + quantityToAdd;
+      if (newQuantity > color.stock) {
+        toast({
+          variant: 'destructive',
+          title: 'Stock insuficiente',
+          description: `No puedes añadir más unidades. Stock disponible: ${color.stock}.`,
+        });
+        return;
+      }
+      setCartItems(prevItems => prevItems.map(item =>
+        item.id === itemId ? { ...item, quantity: newQuantity } : item
+      ));
+      toast({
+        title: "Producto actualizado en el carrito",
+      });
+    } else {
+      if (quantityToAdd > color.stock) {
+         toast({
+          variant: 'destructive',
+          title: 'Stock insuficiente',
+          description: `No puedes añadir más unidades. Stock disponible: ${color.stock}.`,
+        });
+        return;
+      }
+      setCartItems(prevItems => [...prevItems, { id: itemId, product, color, quantity: quantityToAdd }]);
+      toast({
+        title: "Producto añadido al carrito",
+      });
+    }
+
+    await addCustomerRequest({
+      product_id: product.id,
+      product_name: product.name,
+      product_model: product.model,
+      color_name: color.name,
+      color_hex: color.hex,
+      quantity: quantityToAdd,
+    });
+  };
+
+  const removeFromCart = (itemId: string) => {
+    const newCartItems = cartItems.filter(item => item.id !== itemId);
+    setCartItems(newCartItems);
+    // If the cart is now empty, remove it from storage
+    if (newCartItems.length === 0) {
+        localStorage.removeItem(CART_STORAGE_KEY);
+    }
+    toast({
+      title: "Producto eliminado del carrito",
+    });
+  };
+  
+  const updateItemQuantity = (itemId: string, quantity: number) => {
+    const itemToUpdate = cartItems.find(item => item.id === itemId);
+    if (!itemToUpdate) return;
+    
+    if (quantity > itemToUpdate.color.stock) {
+      toast({
+        variant: 'destructive',
+        title: 'Stock insuficiente',
+        description: `No puedes añadir más unidades. Stock disponible: ${itemToUpdate.color.stock}.`,
+      });
+      return;
+    }
+
+    if (quantity <= 0) {
+      removeFromCart(itemId);
+    } else {
+       setCartItems(prevItems =>
+         prevItems.map(item =>
+          item.id === itemId ? { ...item, quantity } : item
+         )
+       );
+    }
+  };
+
+  const clearCart = () => {
+    setCartItems([]);
+    localStorage.removeItem(CART_STORAGE_KEY);
+  };
+
+  const cartCount = useMemo(() => {
+    return cartItems.reduce((total, item) => total + item.quantity, 0);
+  }, [cartItems]);
+
+  const totalPrice = useMemo(() => {
+    return cartItems.reduce((total, item) => total + item.product.price * item.quantity, 0);
+  }, [cartItems]);
+  
+  return { cartItems, addToCart, removeFromCart, updateItemQuantity, clearCart, cartCount, totalPrice };
+}
+
+export function CartProvider({ children }: { children: ReactNode }) {
+    const cartState = useCartState();
+    return React.createElement(
+        CartContext.Provider,
+        { value: cartState },
+        children
+    );
+}
+
+
+export function useCart() {
+  const context = useContext(CartContext);
+  if (context === undefined) {
+    throw new Error('useCart must be used within a CartProvider');
+  }
+  return context;
+}
