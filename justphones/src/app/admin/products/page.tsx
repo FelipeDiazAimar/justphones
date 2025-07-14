@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -66,26 +67,24 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 
 const colorSchema = z.object({
   name: z.string().min(1, "El nombre del color es requerido."),
-  hex: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex code"),
-  image: z.any().refine(val => (typeof val === 'string' && val) || (typeof window !== 'undefined' && val instanceof File), {
-    message: "La imagen es requerida.",
-  }),
-  stock: z.coerce.number().min(0, "Stock cannot be negative"),
+  hex: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Código hex inválido"),
+  image: z.any().optional(),
+  stock: z.coerce.number().min(0, "El stock no puede ser negativo"),
 });
 
 const productSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(1, "El nombre es requerido."),
   cost: z.coerce.number().min(0, "El costo debe ser positivo"),
-  price: z.coerce.number().min(0, "Price must be positive"),
-  coverImage: z.any().refine(val => (typeof val === 'string' && val) || (typeof window !== 'undefined' && val instanceof File), {
-    message: "La imagen de portada es requerida.",
+  price: z.coerce.number().min(0, "El precio debe ser positivo"),
+  coverImage: z.any().optional(),
+  category: z.enum(['case', 'accessory', 'auriculares'], {
+    errorMap: () => ({ message: "Categoría debe ser: case, accessory o auriculares" })
   }),
-  category: z.enum(['case', 'accessory', 'auriculares']),
-  model: z.string().min(1, "Model is required"),
+  model: z.string().min(1, "El modelo es requerido"),
   featured: z.boolean().optional(),
   is_new: z.boolean().optional(),
-  colors: z.array(colorSchema).min(1, "At least one color is required"),
+  colors: z.array(colorSchema).min(1, "Al menos un color es requerido"),
   created_at: z.string().optional(),
 });
 const productFormSchema = productSchema.omit({ id: true, created_at: true });
@@ -168,62 +167,6 @@ const ColorImageInput = ({ control, index, errors, setPreviewDialogUrl }: { cont
         />
     )
 }
-
-const resizeImage = (fileOrUrl: File | string, width: number, height: number): Promise<File | string> => {
-    if (typeof fileOrUrl === 'string') {
-        return Promise.resolve(fileOrUrl);
-    }
-
-    const file = fileOrUrl;
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = (event) => {
-            if (!event.target?.result) {
-                return reject(new Error('Failed to read file.'));
-            }
-            const img = new window.Image();
-            img.src = event.target.result as string;
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                if (!ctx) {
-                    return reject(new Error('Could not get canvas context.'));
-                }
-
-                const sourceRatio = img.width / img.height;
-                const targetRatio = width / height;
-                
-                let sx = 0, sy = 0, sWidth = img.width, sHeight = img.height;
-
-                if (sourceRatio > targetRatio) { 
-                    sWidth = img.height * targetRatio;
-                    sx = (img.width - sWidth) / 2;
-                } else if (sourceRatio < targetRatio) {
-                    sHeight = img.width / targetRatio;
-                    sy = (img.height - sHeight) / 2;
-                }
-                
-                ctx.drawImage(img, sx, sy, sWidth, sHeight, 0, 0, width, height);
-                
-                canvas.toBlob((blob) => {
-                    if (!blob) {
-                        return reject(new Error('Canvas to Blob conversion failed.'));
-                    }
-                    const newFile = new File([blob], file.name, {
-                        type: file.type,
-                        lastModified: Date.now(),
-                    });
-                    resolve(newFile);
-                }, file.type, 0.95);
-            };
-            img.onerror = (err) => reject(new Error('Image failed to load.'));
-        };
-        reader.onerror = (err) => reject(new Error('File reader failed.'));
-    });
-};
 
 export default function AdminProductsPage() {
   const supabase = createClient();
@@ -489,59 +432,74 @@ export default function AdminProductsPage() {
   };
 
   const onProductSubmit = async (formData: z.infer<typeof productFormSchema>) => {
-    const freshProduct = editingProduct ? getProductById(editingProduct.id) : null;
-    if (editingProduct && !freshProduct) {
-        toast({ variant: 'destructive', title: 'Error', description: 'No se pudo encontrar el producto para actualizar.' });
+    console.log("[Submit] Form data received:", formData);
+    
+    // Validar que hay al menos un color con imagen
+    const hasValidColors = formData.colors.every(color => 
+      color.name && 
+      color.hex && 
+      color.hex.match(/^#[0-9a-fA-F]{6}$/) && 
+      color.stock >= 0
+    );
+    
+    if (!hasValidColors) {
+        toast({ 
+          variant: 'destructive', 
+          title: "Error de Validación", 
+          description: "Todos los colores deben tener nombre, código hex válido y stock no negativo."
+        });
         return;
     }
 
-    const productToSubmit = { ...(freshProduct || {}), ...formData } as Product;
-
-    const processImage = async (fileOrUrl: File | string, dimensions: { width: number; height: number }, pathPrefix: string): Promise<string> => {
-        if (typeof fileOrUrl === 'string') {
-            return fileOrUrl;
+    const processImage = async (fileOrUrl: any, pathPrefix: string): Promise<string> => {
+        if (!fileOrUrl || typeof fileOrUrl === 'string') {
+            return fileOrUrl || '';
         }
+
         if (fileOrUrl instanceof File) {
             try {
-                const resizedFile = await resizeImage(fileOrUrl, dimensions.width, dimensions.height);
-                if (typeof resizedFile === 'string') return resizedFile;
-    
-                const filePath = `${pathPrefix}/${Date.now()}_${resizedFile.name.replace(/\s/g, '_')}`;
-                const { error: uploadError } = await supabase.storage.from('product-images').upload(filePath, resizedFile);
+                const filePath = `${pathPrefix}/${Date.now()}_${fileOrUrl.name.replace(/\s/g, '_')}`;
+                const { error: uploadError } = await supabase.storage.from('product-images').upload(filePath, fileOrUrl);
                 if (uploadError) throw uploadError;
                 const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(filePath);
                 return urlData.publicUrl;
             } catch (e: any) {
                 handleStorageError(e, 'Error al subir imagen');
-                throw e; // Re-throw to stop submission
+                throw e;
             }
         }
-        return ''; // Should not happen with validation
+        return '';
     };
 
     try {
-        const coverImageUrl = await processImage(productToSubmit.coverImage, { width: 400, height: 667 }, 'public');
-        
+        const coverImageUrl = await processImage(formData.coverImage, 'public');
+        console.log("[Submit] Cover image processed. URL:", coverImageUrl);
+
         const colorImageUrls = await Promise.all(
-            productToSubmit.colors.map(color => processImage(color.image, { width: 400, height: 667 }, 'public/colors'))
+            formData.colors.map(color => processImage(color.image, 'public/colors'))
         );
-        
+        console.log("[Submit] Color images processed. URLs:", colorImageUrls);
+
         const finalProductData = {
-            ...productToSubmit,
+            ...formData,
             coverImage: coverImageUrl,
-            colors: productToSubmit.colors.map((color, index) => ({
+            colors: formData.colors.map((color, index) => ({
                 ...color,
                 image: colorImageUrls[index],
             })),
         };
+        console.log("[Submit] Final data for submission:", finalProductData);
 
         let success;
         if (editingProduct) {
+            console.log(`[Submit] Calling updateProduct for ID: ${editingProduct.id}`);
             success = await updateProduct(editingProduct.id, finalProductData);
         } else {
+            console.log("[Submit] Calling addProduct for new product.");
             success = await addProduct(finalProductData);
         }
 
+        console.log("[Submit] Submission success status:", success);
         if (success) {
             toast({
                 title: editingProduct ? "Producto actualizado" : "Producto creado",
@@ -551,8 +509,8 @@ export default function AdminProductsPage() {
             setCoverImagePreview(null);
         }
     } catch (error) {
-        console.error("An error occurred during product submission:", error);
-        toast({ variant: 'destructive', title: 'Error Inesperado', description: 'Ocurrió un error al guardar el producto. Por favor, inténtelo de nuevo.' });
+        console.error("[Submit] An unexpected error occurred during product submission:", error);
+        toast({ variant: 'destructive', title: 'Error Inesperado', description: `Ocurrió un error al guardar el producto.` });
     }
   };
 
@@ -628,18 +586,17 @@ export default function AdminProductsPage() {
     if(saleAddSuccess) {
       toast({
         className: "border-primary/20 shadow-lg shadow-primary/10",
-        title: (
+        title: "¡Venta Exitosa!",
+        description: (
           <div className="flex w-full items-center gap-4">
-             <PartyPopper className="h-12 w-auto flex-shrink-0 text-primary" />
+             <PartyPopper className="h-8 w-8 flex-shrink-0 text-primary" />
              <div className="flex flex-col">
-                <h3 className="text-lg font-bold">¡Venta Exitosa!</h3>
-                <p className="text-sm text-muted-foreground">
-                  Vendiste ${data.quantity}x ${unslugify(productToUpdate.name)} (${productToUpdate.model}). ¡Sigue así!
+                <p className="text-sm">
+                  Vendiste {data.quantity}x {unslugify(productToUpdate.name)} ({productToUpdate.model}). ¡Sigue así!
                 </p>
              </div>
           </div>
         ),
-        description: <></>,
       });
       setIsSaleDialogOpen(false);
     } else {
@@ -1187,7 +1144,14 @@ export default function AdminProductsPage() {
                 {editingProduct ? 'Modifica los detalles del producto.' : 'Completa el formulario para agregar un nuevo producto.'}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit(onProductSubmit)} className="space-y-4 py-4">
+          <form onSubmit={handleSubmit(onProductSubmit, (formErrors) => {
+            console.error("Form validation errors:", formErrors);
+            toast({ 
+              variant: 'destructive', 
+              title: "Error de Validación", 
+              description: "Por favor, revisa los campos marcados en rojo."
+            });
+          })} className="space-y-4 py-4">
             <div className="grid grid-cols-1 md:grid-cols-4 items-start md:items-center gap-2 md:gap-4">
                 <Label className="md:text-right">Categoría</Label>
                 <div className="md:col-span-3">
@@ -1374,13 +1338,11 @@ export default function AdminProductsPage() {
                           <Label className="text-xs text-muted-foreground">Imagen</Label>
                           <ColorImageInput control={control} index={index} errors={errors} setPreviewDialogUrl={setPreviewDialogUrl} />
                       </div>
-                      {editingProduct && (
-                        <div className="md:col-span-2 space-y-1">
+                      <div className="md:col-span-2 space-y-1">
                           <Label htmlFor={`colors.${index}.stock`} className="text-xs text-muted-foreground">Stock</Label>
                           <Input id={`colors.${index}.stock`} type="number" {...register(`colors.${index}.stock`)} placeholder="Stock" />
                           {errors.colors?.[index]?.stock && <p className="text-red-500 text-xs mt-1">{errors.colors[index].stock.message}</p>}
-                        </div>
-                      )}
+                      </div>
                       <Button type="button" variant="destructive" size="icon" onClick={() => remove(index)} className="md:col-span-1 justify-self-center self-center rounded-full">
                           <Trash className="h-4 w-4" />
                           <span className="sr-only">Eliminar</span>
