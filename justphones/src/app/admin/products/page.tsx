@@ -82,8 +82,8 @@ const productSchema = z.object({
     errorMap: () => ({ message: "Categoría debe ser: case, accessory o auriculares" })
   }),
   model: z.string().min(1, "El modelo es requerido"),
-  featured: z.boolean().optional(),
-  is_new: z.boolean().optional(),
+  featured: z.boolean().nullable().transform(val => val ?? false).optional(),
+  is_new: z.boolean().nullable().transform(val => val ?? false).optional(),
   colors: z.array(colorSchema).min(1, "Al menos un color es requerido"),
   created_at: z.string().optional(),
 });
@@ -393,7 +393,7 @@ export default function AdminProductsPage() {
         tempProducts.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         break;
       case 'date-asc':
-        tempProducts.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        tempProducts.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.at).getTime());
         break;
       default:
         break;
