@@ -115,7 +115,7 @@ export default function ProductDetailPage() {
                     <Skeleton className="h-8 w-2/5 mx-auto mt-2" />
                     <Skeleton className="h-8 w-1/4 mx-auto mt-2" />
                 </div>
-                <Skeleton className="w-full relative aspect-video md:aspect-[3/5] rounded-lg mb-8" />
+                <Skeleton className="w-full relative aspect-[3/5] rounded-lg mb-8" />
                 <div className="space-y-4">
                     <Skeleton className="h-10 w-full" />
                     <Skeleton className="h-10 w-full" />
@@ -187,7 +187,7 @@ export default function ProductDetailPage() {
                 <CarouselContent>
                     {product.colors.map((color, index) => (
                         <CarouselItem key={index}>
-                            <div className="aspect-video md:aspect-[3/5] relative">
+                            <div className="aspect-[3/5] relative">
                                 <Image
                                     src={color.image || '/Cover.png?v=3'}
                                     alt={`${product.name} - ${color.name}`}
@@ -337,7 +337,7 @@ export default function ProductDetailPage() {
                         <div className="p-3 rounded-lg bg-card border">
                             <Truck className="mx-auto h-6 w-6 mb-1 text-primary" />
                             <p>Envío a domicilio</p>
-                            <p className="font-bold text-primary">Sin cargo</p>
+                            <p className="font-bold text-primary">Sin cargo (en Freyre)</p>
                         </div>
                         <div className="p-3 rounded-lg bg-card border">
                             <MessageSquare className="mx-auto h-6 w-6 mb-1 text-primary" />
