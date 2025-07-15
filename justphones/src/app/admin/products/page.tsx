@@ -432,8 +432,6 @@ export default function AdminProductsPage() {
   };
 
   const onProductSubmit = async (formData: z.infer<typeof productFormSchema>) => {
-    console.log("[Submit] Form data received:", formData);
-    
     const processImage = async (fileOrUrl: any, pathPrefix: string): Promise<string> => {
         if (!fileOrUrl || typeof fileOrUrl === 'string') {
             return fileOrUrl || '';
@@ -442,7 +440,6 @@ export default function AdminProductsPage() {
         if (fileOrUrl instanceof File) {
             try {
                 const filePath = `${pathPrefix}/${Date.now()}_${fileOrUrl.name.replace(/\s/g, '_')}`;
-                console.log(`[Submit] Uploading new file to: ${filePath}`);
                 const { error: uploadError } = await supabase.storage.from('product-images').upload(filePath, fileOrUrl);
                 if (uploadError) throw uploadError;
                 const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(filePath);
@@ -457,12 +454,10 @@ export default function AdminProductsPage() {
 
     try {
         const coverImageUrl = await processImage(formData.coverImage, 'public');
-        console.log("[Submit] Cover image processed. URL:", coverImageUrl);
 
         const colorImageUrls = await Promise.all(
             formData.colors.map(color => processImage(color.image, 'public/colors'))
         );
-        console.log("[Submit] Color images processed. URLs:", colorImageUrls);
 
         const finalProductData = {
             ...formData,
@@ -472,18 +467,14 @@ export default function AdminProductsPage() {
                 image: colorImageUrls[index],
             })),
         };
-        console.log("[Submit] Final data for submission:", finalProductData);
 
         let success;
         if (editingProduct) {
-            console.log(`[Submit] Calling updateProduct for ID: ${editingProduct.id}`);
             success = await updateProduct(editingProduct.id, finalProductData);
         } else {
-            console.log("[Submit] Calling addProduct for new product.");
             success = await addProduct(finalProductData);
         }
 
-        console.log("[Submit] Submission success status:", success);
         if (success) {
             toast({
                 title: editingProduct ? "Producto actualizado" : "Producto creado",
@@ -613,10 +604,6 @@ export default function AdminProductsPage() {
   };
 
   const handleBulkStockUpdate = useCallback(async () => {
-    console.log("Starting bulk stock update...");
-    console.log("Current stockUpdates state:", stockUpdates);
-    console.log("Current products list:", productsRef.current);
-
     const updatesToProcess = Object.entries(stockUpdates).filter(
       ([, value]) => value && parseInt(value, 10) > 0
     );
@@ -640,12 +627,9 @@ export default function AdminProductsPage() {
       const colorHex = key.substring(lastHyphenIndex + 1);
       const quantityAdded = parseInt(value as string, 10);
       
-      console.log(`Processing key: ${key}, productId: ${productId}, colorHex: ${colorHex}`);
-      
       const product = productsRef.current.find((p) => p.id === productId);
       
       if (!product) {
-        console.error(`Could not find product for key: ${key}`);
         skippedItems.push(`Producto ID: ${productId.substring(0, 8)}...`);
         continue;
       }
@@ -653,7 +637,6 @@ export default function AdminProductsPage() {
       const color = product.colors.find((c) => c.hex === colorHex);
       
       if (!color) {
-        console.error(`Could not find color for key: ${key}`);
         skippedItems.push(`${product.name} - Color ${colorHex}`);
         continue;
       }
@@ -734,41 +717,31 @@ export default function AdminProductsPage() {
     setMobileStockInputs(prev => ({ ...prev, [key]: value }));
   };
 
-  const handleMobileStockUpdate = async (product: Product, color: ProductColor, newStock: number) => {
-    console.log(`[Mobile Update] Trying to update stock for ${product.name} - ${color.name}.`);
-    console.log(`[Mobile Update] Current stock in state: ${color.stock}, New stock value: ${newStock}`);
+  const handleMobileStockUpdate = async (product: Product, newStock: number, colorHex: string) => {
+    if (newStock < 0) return;
     
-    if (newStock < 0) {
-      console.log("[Mobile Update] New stock is negative, aborting.");
-      setMobileStockInputs(prev => ({ ...prev, [`${product.id}-${color.hex}`]: color.stock }));
+    const colorToUpdate = product.colors.find(c => c.hex === colorHex);
+    if (!colorToUpdate || newStock === colorToUpdate.stock) {
       return;
     }
-    
-    if (newStock === color.stock) {
-      console.log("[Mobile Update] New stock is same as old stock, no update needed.");
-      return;
-    }
+
+    console.log(`[Mobile Update] Trying to update stock for ${product.name} - ${colorToUpdate.name}. Old stock: ${colorToUpdate.stock}, New stock: ${newStock}`);
     
     const updatedColors = product.colors.map(c =>
-      c.hex === color.hex ? { ...c, stock: newStock } : c
+      c.hex === colorHex ? { ...c, stock: newStock } : c
     );
     
     const success = await updateProduct(product.id, { colors: updatedColors });
     
-    console.log(`[Mobile Update] updateProduct success status: ${success}`);
-
     if (success) {
       toast({
         title: "Stock Actualizado",
-        description: `Stock de ${unslugify(product.name)} (${color.name}) ahora es ${newStock}.`,
+        description: `Stock de ${unslugify(product.name)} (${colorToUpdate.name}) ahora es ${newStock}.`,
       });
     } else {
-      console.error("[Mobile Update] Failed to update product, reverting local input state.");
-      // Revert local state on failure
-      setMobileStockInputs(prev => ({...prev, [`${product.id}-${color.hex}`]: color.stock}));
+      setMobileStockInputs(prev => ({...prev, [`${product.id}-${colorHex}`]: colorToUpdate.stock}));
     }
   };
-
 
   useEffect(() => {
     const newStockInputs: Record<string, number> = {};
@@ -793,7 +766,6 @@ export default function AdminProductsPage() {
     const staleKeys = Object.keys(stockUpdates).filter(key => !validKeys.has(key));
     
     if (staleKeys.length > 0) {
-      console.log('Cleaning up stale stock updates:', staleKeys);
       setStockUpdates(prevUpdates => {
         const cleanedUpdates = { ...prevUpdates };
         staleKeys.forEach(key => delete cleanedUpdates[key]);
@@ -1058,7 +1030,7 @@ export default function AdminProductsPage() {
                                 const currentStock = Number(mobileStockInputs[key] || 0);
 
                                 return (
-                                <div key={color.hex} className="flex items-center justify-between text-sm p-2 rounded-md bg-background">
+                                <div key={key} className="flex items-center justify-between text-sm p-2 rounded-md bg-background">
                                   <div className="flex items-center gap-2">
                                     <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: color.hex }} />
                                     <span>{color.name}</span>
@@ -1068,7 +1040,7 @@ export default function AdminProductsPage() {
                                           onClick={() => {
                                               const newStock = Math.max(0, currentStock - 1);
                                               handleMobileStockInputChange(key, String(newStock));
-                                              handleMobileStockUpdate(product, color, newStock);
+                                              handleMobileStockUpdate(product, newStock, color.hex);
                                           }}>
                                           <Minus className="h-4 w-4" />
                                       </Button>
@@ -1079,7 +1051,7 @@ export default function AdminProductsPage() {
                                           onBlur={(e) => {
                                               const newStock = parseInt(e.target.value, 10);
                                               if (!isNaN(newStock)) {
-                                                  handleMobileStockUpdate(product, color, newStock);
+                                                  handleMobileStockUpdate(product, newStock, color.hex);
                                               } else {
                                                   handleMobileStockInputChange(key, String(color.stock));
                                               }
@@ -1088,7 +1060,7 @@ export default function AdminProductsPage() {
                                             if (e.key === 'Enter') {
                                               const newStock = parseInt(e.currentTarget.value, 10);
                                               if (!isNaN(newStock)) {
-                                                  handleMobileStockUpdate(product, color, newStock);
+                                                  handleMobileStockUpdate(product, newStock, color.hex);
                                               }
                                             }
                                           }}
@@ -1098,7 +1070,7 @@ export default function AdminProductsPage() {
                                         onClick={() => {
                                             const newStock = currentStock + 1;
                                             handleMobileStockInputChange(key, String(newStock));
-                                            handleMobileStockUpdate(product, color, newStock);
+                                            handleMobileStockUpdate(product, newStock, color.hex);
                                         }}>
                                           <Plus className="h-4 w-4" />
                                       </Button>
