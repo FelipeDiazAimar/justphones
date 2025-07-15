@@ -193,7 +193,7 @@ export function CartSheet() {
                     <SelectContent>
                       <SelectItem value="Retiro (Freyre)">Retiro (Freyre)</SelectItem>
                       <SelectItem value="Coordinamos!">¡Coordinamos!</SelectItem>
-                      <SelectItem value="Envío a domicilio (Sin cargo)">Envío a domicilio (Sin cargo)</SelectItem>
+                      <SelectItem value="Envío a domicilio (Sin cargo en Freyre)">Envío a domicilio (Sin cargo)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
