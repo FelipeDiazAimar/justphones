@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import {
@@ -43,6 +43,9 @@ import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCarouselImages } from '@/hooks/use-carousel-images';
 import { createClient } from '@/lib/supabase/client';
+import ReactCrop, { type Crop, centerCrop, makeAspectCrop } from 'react-image-crop';
+
+const CAROUSEL_ASPECT = 1200 / 400;
 
 const carouselImageSchema = z.object({
   id: z.string().optional(),
@@ -51,56 +54,47 @@ const carouselImageSchema = z.object({
   sort_order: z.coerce.number().int("El orden debe ser un número entero."),
 });
 
-const resizeImage = (file: File, width: number, height: number): Promise<File> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (event) => {
-        if (!event.target?.result) {
-          return reject(new Error('Failed to read file.'));
-        }
-        const img = new window.Image();
-        img.src = event.target.result as string;
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) {
-            return reject(new Error('Could not get canvas context.'));
+function getCroppedImg(image: HTMLImageElement, crop: Crop, fileName: string): Promise<File> {
+  const canvas = document.createElement('canvas');
+  const scaleX = image.naturalWidth / image.width;
+  const scaleY = image.naturalHeight / image.height;
+  canvas.width = crop.width;
+  canvas.height = crop.height;
+  const ctx = canvas.getContext('2d');
+
+  if (!ctx) {
+      return Promise.reject(new Error('Could not get canvas context.'));
+  }
+
+  const pixelRatio = window.devicePixelRatio;
+  canvas.width = crop.width * pixelRatio;
+  canvas.height = crop.height * pixelRatio;
+  ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  ctx.imageSmoothingQuality = 'high';
+
+  ctx.drawImage(
+      image,
+      crop.x * scaleX,
+      crop.y * scaleY,
+      crop.width * scaleX,
+      crop.height * scaleY,
+      0,
+      0,
+      crop.width,
+      crop.height
+  );
+
+  return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+          if (!blob) {
+              reject(new Error('Canvas to Blob conversion failed.'));
+              return;
           }
-  
-          const sourceRatio = img.width / img.height;
-          const targetRatio = width / height;
-          
-          let sx = 0, sy = 0, sWidth = img.width, sHeight = img.height;
-  
-          if (sourceRatio > targetRatio) { 
-            sWidth = img.height * targetRatio;
-            sx = (img.width - sWidth) / 2;
-          } else if (sourceRatio < targetRatio) {
-            sHeight = img.width / targetRatio;
-            sy = (img.height - sHeight) / 2;
-          }
-          
-          ctx.drawImage(img, sx, sy, sWidth, sHeight, 0, 0, width, height);
-          
-          canvas.toBlob((blob) => {
-            if (!blob) {
-              return reject(new Error('Canvas to Blob conversion failed.'));
-            }
-            const newFile = new File([blob], file.name, {
-              type: file.type,
-              lastModified: Date.now(),
-            });
-            resolve(newFile);
-          }, file.type, 0.95);
-        };
-        img.onerror = (err) => reject(new Error('Image failed to load.'));
-      };
-      reader.onerror = (err) => reject(new Error('File reader failed.'));
-    });
-};
+          const file = new File([blob], fileName, { type: 'image/png' });
+          resolve(file);
+      }, 'image/png', 1);
+  });
+}
 
 export default function AdminCarouselPage() {
   const supabase = createClient();
@@ -109,6 +103,15 @@ export default function AdminCarouselPage() {
   const [isImageDialogOpen, setIsImageDialogOpen] = useState(false);
   const [editingImage, setEditingImage] = useState<CarouselImage | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+
+  // Cropping state
+  const [crop, setCrop] = useState<Crop>();
+  const [completedCrop, setCompletedCrop] = useState<Crop>();
+  const [imgSrc, setImgSrc] = useState('');
+  const [isCropperOpen, setIsCropperOpen] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const [originalFile, setOriginalFile] = useState<File | null>(null);
+
   
   const { toast } = useToast();
 
@@ -126,6 +129,7 @@ export default function AdminCarouselPage() {
     reset: resetImage,
     control: controlImage,
     watch: watchImage,
+    setValue: setImageValue,
     formState: { errors: errorsImage },
   } = useForm<z.infer<typeof carouselImageSchema>>({
     resolver: zodResolver(carouselImageSchema),
@@ -140,11 +144,7 @@ export default function AdminCarouselPage() {
 
   useEffect(() => {
     if (watchedImageUrl instanceof File) {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            setImagePreview(reader.result as string);
-        };
-        reader.readAsDataURL(watchedImageUrl);
+        setImagePreview(URL.createObjectURL(watchedImageUrl));
     } else if (typeof watchedImageUrl === 'string' && watchedImageUrl) {
         setImagePreview(watchedImageUrl);
     } else {
@@ -176,20 +176,50 @@ export default function AdminCarouselPage() {
     }
   };
 
+  function onImageLoad(e: React.SyntheticEvent<HTMLImageElement>) {
+      const { width, height } = e.currentTarget;
+      setCrop(centerCrop(
+          makeAspectCrop({ unit: '%', width: 90 }, CAROUSEL_ASPECT, width, height),
+          width,
+          height
+      ));
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+        setCrop(undefined); // Makes crop preview update between images
+        const file = e.target.files[0];
+        setOriginalFile(file);
+        const reader = new FileReader();
+        reader.addEventListener('load', () => setImgSrc(reader.result?.toString() || ''));
+        reader.readAsDataURL(file);
+        setIsCropperOpen(true);
+        e.target.value = ''; // Reset input to allow re-uploading the same file
+    }
+  };
+
+  const handleCropConfirm = async () => {
+      if (!completedCrop || !imgRef.current || !originalFile) {
+          toast({ variant: 'destructive', title: 'Error de recorte', description: 'No se pudo procesar la imagen recortada.' });
+          return;
+      }
+      try {
+          const croppedImageFile = await getCroppedImg(imgRef.current, completedCrop, originalFile.name);
+          setImageValue('image_url', croppedImageFile, { shouldValidate: true });
+          setIsCropperOpen(false);
+          setImgSrc('');
+      } catch (error) {
+          console.error('Error cropping image:', error);
+          toast({ variant: 'destructive', title: 'Error', description: 'Ocurrió un error al recortar la imagen.' });
+      }
+  };
+
   const onImageSubmit = async (data: z.infer<typeof carouselImageSchema>) => {
     let success;
     let finalImageUrl = '';
 
     if (data.image_url instanceof File) {
-      const resizedFile = await resizeImage(data.image_url, 1200, 400).catch(e => {
-        console.error("Error resizing carousel image", e);
-        toast({ variant: 'destructive', title: 'Error al procesar imagen', description: e.message });
-        return null;
-      });
-
-      if (!resizedFile) return;
-
-      const file = resizedFile;
+      const file = data.image_url;
       const filePath = `public/${Date.now()}_${file.name.replace(/\s/g, '_')}`;
       
       const { data: uploadData, error: uploadError } = await supabase.storage
@@ -329,20 +359,14 @@ export default function AdminCarouselPage() {
                                             <p className="mb-2 text-sm text-muted-foreground">
                                                 <span className="font-semibold">Click para subir</span> o arrastra y suelta
                                             </p>
-                                            <p className="text-xs text-muted-foreground">PNG, JPG, WEBP (MAX. 5MB)</p>
+                                            <p className="text-xs text-muted-foreground">PNG, JPG, WEBP (1200x400)</p>
                                         </div>
                                         <input
                                             id="image-upload-input"
                                             type="file"
                                             className="hidden"
                                             accept="image/png, image/jpeg, image/webp"
-                                            ref={ref}
-                                            name={name}
-                                            onChange={(e) => {
-                                                if (e.target.files && e.target.files[0]) {
-                                                    onChange(e.target.files[0]);
-                                                }
-                                            }}
+                                            onChange={handleFileChange}
                                         />
                                     </label>
 
@@ -355,26 +379,13 @@ export default function AdminCarouselPage() {
                                                 size="icon"
                                                 className="absolute top-2 right-2 h-7 w-7 z-10"
                                                 onClick={() => {
-                                                    onChange('');
+                                                    setImageValue('image_url', '');
                                                 }}
                                             >
                                                 <X className="h-4 w-4"/>
                                             </Button>
                                         </div>
                                     )}
-
-                                    <div className="relative flex items-center">
-                                        <div className="flex-grow border-t border-muted"></div>
-                                        <span className="flex-shrink mx-2 text-muted-foreground text-xs">O</span>
-                                        <div className="flex-grow border-t border-muted"></div>
-                                    </div>
-
-                                    <Input
-                                        placeholder="Pega una URL de imagen aquí..."
-                                        value={typeof value === 'string' ? value : ''}
-                                        onChange={(e) => onChange(e.target.value)}
-                                        disabled={value instanceof File}
-                                    />
                                 </div>
                             )}
                         />
@@ -403,6 +414,37 @@ export default function AdminCarouselPage() {
                 </DialogFooter>
             </form>
         </DialogContent>
+      </Dialog>
+      <Dialog open={isCropperOpen} onOpenChange={setIsCropperOpen}>
+          <DialogContent className="max-w-4xl">
+              <DialogHeader>
+                  <DialogTitle>Recortar Imagen</DialogTitle>
+                  <DialogDescription>Ajusta la imagen para que encaje perfectamente en el carrusel.</DialogDescription>
+              </DialogHeader>
+              <div className="mt-4" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+                  {imgSrc && (
+                      <ReactCrop
+                          crop={crop}
+                          onChange={(_, percentCrop) => setCrop(percentCrop)}
+                          onComplete={(c) => setCompletedCrop(c)}
+                          aspect={CAROUSEL_ASPECT}
+                          className="w-full"
+                      >
+                          <img
+                              ref={imgRef}
+                              alt="Crop me"
+                              src={imgSrc}
+                              onLoad={onImageLoad}
+                              className="w-full"
+                          />
+                      </ReactCrop>
+                  )}
+              </div>
+              <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsCropperOpen(false)}>Cancelar</Button>
+                  <Button onClick={handleCropConfirm}>Confirmar Recorte</Button>
+              </DialogFooter>
+          </DialogContent>
       </Dialog>
     </>
   );

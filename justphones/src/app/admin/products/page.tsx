@@ -63,7 +63,9 @@ import { useStockHistory } from '@/hooks/use-stock-history';
 import type { StockHistory } from '@/lib/stock-history';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import ReactCrop, { type Crop, centerCrop, makeAspectCrop } from 'react-image-crop';
 
+const PRODUCT_ASPECT = 3 / 5;
 
 const colorSchema = z.object({
   name: z.string().min(1, "El nombre del color es requerido."),
@@ -95,17 +97,55 @@ const saleSchema = z.object({
   quantity: z.coerce.number().min(1, "La cantidad debe ser al menos 1."),
 });
 
-const ColorImageInput = ({ control, index, errors, setPreviewDialogUrl }: { control: any; index: number; errors: any; setPreviewDialogUrl: (url: string) => void; }) => {
+function getCroppedImg(image: HTMLImageElement, crop: Crop, fileName: string): Promise<File> {
+  const canvas = document.createElement('canvas');
+  const scaleX = image.naturalWidth / image.width;
+  const scaleY = image.naturalHeight / image.height;
+  canvas.width = crop.width;
+  canvas.height = crop.height;
+  const ctx = canvas.getContext('2d');
+
+  if (!ctx) {
+      return Promise.reject(new Error('Could not get canvas context.'));
+  }
+
+  const pixelRatio = window.devicePixelRatio;
+  canvas.width = crop.width * pixelRatio;
+  canvas.height = crop.height * pixelRatio;
+  ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  ctx.imageSmoothingQuality = 'high';
+
+  ctx.drawImage(
+      image,
+      crop.x * scaleX,
+      crop.y * scaleY,
+      crop.width * scaleX,
+      crop.height * scaleY,
+      0,
+      0,
+      crop.width,
+      crop.height
+  );
+
+  return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+          if (!blob) {
+              reject(new Error('Canvas to Blob conversion failed.'));
+              return;
+          }
+          const file = new File([blob], fileName, { type: 'image/png' });
+          resolve(file);
+      }, 'image/png', 1);
+  });
+}
+
+const ColorImageInput = ({ control, index, errors, onFileSelect, setPreviewDialogUrl }: { control: any; index: number; errors: any; onFileSelect: (file: File, fieldIndex: number) => void; setPreviewDialogUrl: (url: string) => void; }) => {
     const value = useWatch({ control, name: `colors.${index}.image` });
     const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
 
     React.useEffect(() => {
         if (value instanceof File) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setPreviewUrl(reader.result as string);
-            };
-            reader.readAsDataURL(value);
+            setPreviewUrl(URL.createObjectURL(value));
         } else if (typeof value === 'string' && value) {
             setPreviewUrl(value);
         } else {
@@ -127,27 +167,13 @@ const ColorImageInput = ({ control, index, errors, setPreviewDialogUrl }: { cont
                             type="file"
                             className="hidden"
                             accept="image/png, image/jpeg, image/webp"
-                            ref={ref}
-                            name={name}
                             onChange={(e) => {
                                 if (e.target.files && e.target.files[0]) {
-                                    onChange(e.target.files[0]);
+                                    onFileSelect(e.target.files[0], index);
                                 }
                             }}
                         />
                     </label>
-                    <div className="relative flex items-center">
-                        <div className="flex-grow border-t border-muted"></div>
-                        <span className="flex-shrink mx-2 text-muted-foreground text-xs">O</span>
-                        <div className="flex-grow border-t border-muted"></div>
-                    </div>
-                    <Input
-                        placeholder="Pega una URL..."
-                        value={typeof value === 'string' ? value : ''}
-                        onChange={(e) => onChange(e.target.value)}
-                        disabled={value instanceof File}
-                        className="h-8 text-xs"
-                    />
                     
                     {previewUrl && (
                         <div className="flex items-center gap-2 mt-2">
@@ -209,6 +235,15 @@ export default function AdminProductsPage() {
   const [isSalesHistoryDialogOpen, setIsSalesHistoryDialogOpen] = useState(false);
   const [isProductHistoryDialogOpen, setIsProductHistoryDialogOpen] = useState(false);
   const [isStockHistoryDialogOpen, setIsStockHistoryDialogOpen] = useState(false);
+
+  // Cropping state
+  const [crop, setCrop] = useState<Crop>();
+  const [completedCrop, setCompletedCrop] = useState<Crop>();
+  const [imgSrc, setImgSrc] = useState('');
+  const [isCropperOpen, setIsCropperOpen] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const [originalFile, setOriginalFile] = useState<File | null>(null);
+  const [activeCropField, setActiveCropField] = useState<{ type: 'cover' | 'color', index?: number } | null>(null);
 
 
   const { toast } = useToast();
@@ -274,11 +309,7 @@ export default function AdminProductsPage() {
  
   useEffect(() => {
     if (watchedCoverImage instanceof File) {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            setCoverImagePreview(reader.result as string);
-        };
-        reader.readAsDataURL(watchedCoverImage);
+        setCoverImagePreview(URL.createObjectURL(watchedCoverImage));
     } else if (typeof watchedCoverImage === 'string' && watchedCoverImage) {
         setCoverImagePreview(watchedCoverImage);
     } else {
@@ -431,7 +462,49 @@ export default function AdminProductsPage() {
     if(success) toast({ title: "Producto eliminado", description: "El producto ha sido eliminado exitosamente." });
   };
 
+  function onImageLoad(e: React.SyntheticEvent<HTMLImageElement>) {
+      const { width, height } = e.currentTarget;
+      setCrop(centerCrop(
+          makeAspectCrop({ unit: '%', width: 90 }, PRODUCT_ASPECT, width, height),
+          width,
+          height
+      ));
+  }
+
+  const handleFileSelect = (file: File, type: 'cover' | 'color', index?: number) => {
+      setCrop(undefined);
+      setActiveCropField({ type, index });
+      setOriginalFile(file);
+      const reader = new FileReader();
+      reader.addEventListener('load', () => setImgSrc(reader.result?.toString() || ''));
+      reader.readAsDataURL(file);
+      setIsCropperOpen(true);
+  };
+
+  const handleCropConfirm = async () => {
+      if (!completedCrop || !imgRef.current || !originalFile || !activeCropField) {
+          toast({ variant: 'destructive', title: 'Error de recorte', description: 'No se pudo procesar la imagen recortada.' });
+          return;
+      }
+      try {
+          const croppedImageFile = await getCroppedImg(imgRef.current, completedCrop, originalFile.name);
+          if (activeCropField.type === 'cover') {
+              setValue('coverImage', croppedImageFile, { shouldValidate: true });
+          } else if (activeCropField.type === 'color' && activeCropField.index !== undefined) {
+              setValue(`colors.${activeCropField.index}.image`, croppedImageFile, { shouldValidate: true });
+          }
+          setIsCropperOpen(false);
+          setImgSrc('');
+          setActiveCropField(null);
+      } catch (error) {
+          console.error('Error cropping image:', error);
+          toast({ variant: 'destructive', title: 'Error', description: 'Ocurrió un error al recortar la imagen.' });
+      }
+  };
+
+
   const onProductSubmit = async (formData: z.infer<typeof productFormSchema>) => {
+    console.log("Form submitted. Data:", formData);
     const processImage = async (fileOrUrl: any, pathPrefix: string): Promise<string> => {
         if (!fileOrUrl || typeof fileOrUrl === 'string') {
             return fileOrUrl || '';
@@ -470,8 +543,10 @@ export default function AdminProductsPage() {
 
         let success;
         if (editingProduct) {
+            console.log("Updating existing product:", editingProduct.id);
             success = await updateProduct(editingProduct.id, finalProductData);
         } else {
+            console.log("Adding new product.");
             success = await addProduct(finalProductData);
         }
 
@@ -482,6 +557,13 @@ export default function AdminProductsPage() {
             });
             setIsProductDialogOpen(false);
             setCoverImagePreview(null);
+        } else {
+           console.log("Submit failed. Success was false.");
+           toast({
+                variant: 'destructive',
+                title: 'Error al Guardar',
+                description: 'No se pudo guardar el producto. Revisa la consola para más detalles.',
+            });
         }
     } catch (error) {
         console.error("[Submit] An unexpected error occurred during product submission:", error);
@@ -718,14 +800,12 @@ export default function AdminProductsPage() {
   };
 
   const handleMobileStockUpdate = async (product: Product, newStock: number, colorHex: string) => {
-    if (newStock < 0) return;
-    
     const colorToUpdate = product.colors.find(c => c.hex === colorHex);
-    if (!colorToUpdate || newStock === colorToUpdate.stock) {
+    if (!colorToUpdate || newStock === colorToUpdate.stock || newStock < 0) {
       return;
     }
 
-    console.log(`[Mobile Update] Trying to update stock for ${product.name} - ${colorToUpdate.name}. Old stock: ${colorToUpdate.stock}, New stock: ${newStock}`);
+    console.log(`[Mobile Update] Trying to update stock for ${product.name} - ${colorToUpdate.name}. Old: ${colorToUpdate.stock}, New: ${newStock}`);
     
     const updatedColors = product.colors.map(c =>
       c.hex === colorHex ? { ...c, stock: newStock } : c
@@ -734,11 +814,13 @@ export default function AdminProductsPage() {
     const success = await updateProduct(product.id, { colors: updatedColors });
     
     if (success) {
+      console.log(`[Mobile Update] Success!`);
       toast({
         title: "Stock Actualizado",
         description: `Stock de ${unslugify(product.name)} (${colorToUpdate.name}) ahora es ${newStock}.`,
       });
     } else {
+      console.log(`[Mobile Update] Failed!`);
       setMobileStockInputs(prev => ({...prev, [`${product.id}-${colorHex}`]: colorToUpdate.stock}));
     }
   };
@@ -1215,7 +1297,7 @@ export default function AdminProductsPage() {
                     <Controller
                         name="coverImage"
                         control={control}
-                        render={({ field: { onChange, value, name, ref } }) => (
+                        render={({ field: { onChange, value } }) => (
                             <div className="flex flex-col gap-3">
                                 <label
                                     htmlFor="cover-image-upload-input"
@@ -1226,35 +1308,20 @@ export default function AdminProductsPage() {
                                         <p className="mb-2 text-sm text-muted-foreground">
                                             <span className="font-semibold">Click para subir</span> o arrastra y suelta
                                         </p>
-                                        <p className="text-xs text-muted-foreground">PNG, JPG, WEBP (MAX. 5MB)</p>
+                                        <p className="text-xs text-muted-foreground">PNG, JPG, WEBP (recorte 3:5)</p>
                                     </div>
                                     <input
                                         id="cover-image-upload-input"
                                         type="file"
                                         className="hidden"
                                         accept="image/png, image/jpeg, image/webp"
-                                        ref={ref}
-                                        name={name}
                                         onChange={(e) => {
                                             if (e.target.files && e.target.files[0]) {
-                                                onChange(e.target.files[0]);
+                                                handleFileSelect(e.target.files[0], 'cover');
                                             }
                                         }}
                                     />
                                 </label>
-
-                                <div className="relative flex items-center">
-                                    <div className="flex-grow border-t border-muted"></div>
-                                    <span className="flex-shrink mx-2 text-muted-foreground text-xs">O</span>
-                                    <div className="flex-grow border-t border-muted"></div>
-                                </div>
-
-                                <Input
-                                    placeholder="Pega una URL de imagen aquí..."
-                                    value={typeof value === 'string' ? value : ''}
-                                    onChange={(e) => onChange(e.target.value)}
-                                    disabled={value instanceof File}
-                                />
                                 {coverImagePreview && (
                                   <div className="flex items-center gap-2 mt-2">
                                     <div className="relative w-10 h-10 rounded-md overflow-hidden border flex-shrink-0">
@@ -1323,7 +1390,7 @@ export default function AdminProductsPage() {
                       </div>
                       <div className="md:col-span-4">
                           <Label className="text-xs text-muted-foreground">Imagen</Label>
-                          <ColorImageInput control={control} index={index} errors={errors} setPreviewDialogUrl={setPreviewDialogUrl} />
+                          <ColorImageInput control={control} index={index} errors={errors} onFileSelect={(file) => handleFileSelect(file, 'color', index)} setPreviewDialogUrl={setPreviewDialogUrl} />
                       </div>
                       <div className="md:col-span-2 space-y-1">
                           <Label htmlFor={`colors.${index}.stock`} className="text-xs text-muted-foreground">Stock</Label>
@@ -1767,6 +1834,37 @@ export default function AdminProductsPage() {
             </DialogClose>
           </DialogFooter>
         </DialogContent>
+      </Dialog>
+      <Dialog open={isCropperOpen} onOpenChange={setIsCropperOpen}>
+          <DialogContent className="max-w-4xl">
+              <DialogHeader>
+                  <DialogTitle>Recortar Imagen de Producto</DialogTitle>
+                  <DialogDescription>Ajusta la imagen para que encaje perfectamente. La relación de aspecto es 3:5.</DialogDescription>
+              </DialogHeader>
+              <div className="mt-4" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+                  {imgSrc && (
+                      <ReactCrop
+                          crop={crop}
+                          onChange={(_, percentCrop) => setCrop(percentCrop)}
+                          onComplete={(c) => setCompletedCrop(c)}
+                          aspect={PRODUCT_ASPECT}
+                          className="w-full"
+                      >
+                          <img
+                              ref={imgRef}
+                              alt="Crop me"
+                              src={imgSrc}
+                              onLoad={onImageLoad}
+                              className="w-full"
+                          />
+                      </ReactCrop>
+                  )}
+              </div>
+              <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsCropperOpen(false)}>Cancelar</Button>
+                  <Button onClick={handleCropConfirm}>Confirmar Recorte</Button>
+              </DialogFooter>
+          </DialogContent>
       </Dialog>
     </>
   );
