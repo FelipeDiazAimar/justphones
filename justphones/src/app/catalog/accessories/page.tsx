@@ -1,6 +1,7 @@
+
 "use client"
 
-import React, { useState, useMemo, Suspense } from 'react';
+import React, { useState, useMemo, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { MainLayout } from '@/components/main-layout';
 import type { Product } from '@/lib/products';
@@ -22,6 +23,7 @@ function AccessoriesCatalogPageContent() {
   const { subcategories, isLoading: isLoadingSubcategories } = useSubcategories();
   const searchParams = useSearchParams();
   const subCategoryParam = searchParams.get('subCategory');
+  const searchQuery = searchParams.get('q');
   
   const [filters, setFilters] = useState({
     colors: [] as string[],
@@ -45,7 +47,7 @@ function AccessoriesCatalogPageContent() {
     }
   }, [accessoryProducts, filters.priceRange]);
   
-  React.useEffect(() => {
+  useEffect(() => {
     if (subCategoryParam) {
       setFilters(f => ({ ...f, subCategories: [subCategoryParam] }));
     } else {
@@ -59,7 +61,8 @@ function AccessoriesCatalogPageContent() {
       const inColor = filters.colors.length === 0 || product.colors.some(c => filters.colors.includes(c.hex));
       const inModel = filters.models.length === 0 || expandModelString(product.model).some(productModel => filters.models.includes(productModel));
       const inPrice = product.price >= filters.priceRange[0] && product.price <= filters.priceRange[1];
-      return inSubCategory && inColor && inModel && inPrice;
+      const inSearch = !searchQuery || unslugify(product.name).toLowerCase().includes(searchQuery.toLowerCase()) || product.model.toLowerCase().includes(searchQuery.toLowerCase());
+      return inSubCategory && inColor && inModel && inPrice && inSearch;
     });
 
     switch (filters.sortBy) {
@@ -78,11 +81,11 @@ function AccessoriesCatalogPageContent() {
     }
 
     return filtered;
-  }, [filters, accessoryProducts]);
+  }, [filters, accessoryProducts, searchQuery]);
 
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [filters, subCategoryParam]);
+  }, [filters, subCategoryParam, searchQuery]);
 
   const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE);
   const paginatedProducts = useMemo(() => {
@@ -147,24 +150,29 @@ function AccessoriesCatalogPageContent() {
   return (
     <MainLayout>
       <div>
-        <div className="flex justify-between items-center mb-6">
+        <div className="mb-6">
           <h2 className="text-3xl font-bold tracking-tight">{titleComponent}</h2>
-          <div className="lg:hidden">
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="outline" size="icon" className="rounded-full animate-pulse">
-                  <Filter className="h-4 w-4" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="left">
-                <SheetHeader className="sr-only">
-                  <SheetTitle>Filtros</SheetTitle>
-                  <SheetDescription>Filtra los productos para encontrar lo que buscas.</SheetDescription>
-                </SheetHeader>
-                <ProductFilters filters={filters} setFilters={setFilters} products={accessoryProducts} showSubCategoryFilter={true} subCategoryList={subcategories.accessory} />
-              </SheetContent>
-            </Sheet>
-          </div>
+          {searchQuery && (
+              <p className="text-lg text-muted-foreground mt-1">
+                  Resultados para: <span className="text-primary font-semibold">"{searchQuery}"</span>
+              </p>
+          )}
+        </div>
+        <div className="flex justify-end mb-4 lg:hidden">
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="outline" size="icon" className="rounded-full animate-pulse">
+                <Filter className="h-4 w-4" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left">
+              <SheetHeader className="sr-only">
+                <SheetTitle>Filtros</SheetTitle>
+                <SheetDescription>Filtra los productos para encontrar lo que buscas.</SheetDescription>
+              </SheetHeader>
+              <ProductFilters filters={filters} setFilters={setFilters} products={accessoryProducts} showSubCategoryFilter={true} subCategoryList={subcategories.accessory} />
+            </SheetContent>
+          </Sheet>
         </div>
         <div className="grid grid-cols-12 gap-8">
           <ProductFilters filters={filters} setFilters={setFilters} products={accessoryProducts} showSubCategoryFilter={true} subCategoryList={subcategories.accessory} className="hidden lg:block lg:col-span-3" />

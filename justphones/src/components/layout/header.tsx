@@ -2,7 +2,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   Menu,
   Search,
@@ -36,6 +36,7 @@ export function Header({ showCart = true }: { showCart?: boolean }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const [searchValue, setSearchValue] = React.useState('');
   const router = useRouter();
+  const pathname = usePathname();
   const { models } = useModels();
   const { subcategories } = useSubcategories();
 
@@ -56,12 +57,12 @@ export function Header({ showCart = true }: { showCart?: boolean }) {
 
   const handleSearchSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const searchTerm = searchValue.trim().toLowerCase();
+    const searchTerm = searchValue.trim();
     
-    if (searchTerm === 'admin') {
+    if (searchTerm.toLowerCase() === 'admin') {
       router.push('/admin');
     } else if (searchTerm) {
-      alert(`Buscando: ${searchTerm}`);
+      router.push(`/search?q=${encodeURIComponent(searchTerm)}`);
     }
 
     setSearchValue('');
@@ -210,17 +211,21 @@ export function Header({ showCart = true }: { showCart?: boolean }) {
             </Button>
             <ThemeToggle />
             {showCart && <CartSheet />}
-            <Button variant="ghost" size="icon" className="rounded-full" onClick={() => router.back()}>
-                <ArrowLeft className="h-6 w-6" />
-                <span className="sr-only">Volver</span>
-            </Button>
+            {pathname !== '/catalog' && (
+                <Button variant="ghost" size="icon" className="rounded-full" onClick={() => router.back()}>
+                    <ArrowLeft className="h-6 w-6" />
+                    <span className="sr-only">Volver</span>
+                </Button>
+            )}
         </nav>
 
         <div className="md:hidden flex items-center space-x-1">
-            <Button variant="ghost" size="icon" className="rounded-full" onClick={() => router.back()}>
-                <ArrowLeft className="h-6 w-6" />
-                <span className="sr-only">Volver</span>
-            </Button>
+            {pathname !== '/catalog' && (
+                <Button variant="ghost" size="icon" className="rounded-full" onClick={() => router.back()}>
+                    <ArrowLeft className="h-6 w-6" />
+                    <span className="sr-only">Volver</span>
+                </Button>
+            )}
             {showCart && <CartSheet />}
             <ThemeToggle />
             <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
