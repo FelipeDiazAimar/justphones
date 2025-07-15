@@ -182,7 +182,7 @@ export function Header({ showCart = true }: { showCart?: boolean }) {
                 </Button>
               </CollapsibleTrigger>
               <CollapsibleContent className="absolute inset-x-0 top-full">
-                <div className="fixed inset-x-0 top-20 border-b bg-background py-4">
+                <div className="fixed inset-x-0 top-20 border-b bg-gradient-to-b from-background/60 via-background/95 to-background/95 backdrop-blur py-4">
                   <div className="container px-4 md:px-6">
                     <form onSubmit={handleSearchSubmit}>
                       <div className="grid gap-4">
