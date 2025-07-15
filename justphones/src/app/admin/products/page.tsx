@@ -235,10 +235,10 @@ export default function AdminProductsPage() {
       name: '',
       price: 0,
       cost: 0,
-      coverImage: '/Cover.png?v=3',
+      coverImage: '',
       category: 'case',
-      model: 'iPhone 15',
-      colors: [{ name: 'Negro', hex: '#000000', image: '/Cover.png?v=3', stock: 0 }],
+      model: '',
+      colors: [],
       featured: false,
       is_new: false,
     },
@@ -407,15 +407,15 @@ export default function AdminProductsPage() {
       name: '',
       price: 0,
       cost: 0,
-      coverImage: '/Cover.png?v=3',
+      coverImage: '',
       category: 'case',
       model: 'iPhone 15',
-      colors: [{ name: 'Negro', hex: '#000000', image: '/Cover.png?v=3', stock: 0 }],
+      colors: [{ name: 'Negro', hex: '#000000', image: '', stock: 0 }],
       featured: false,
       is_new: false,
     });
     setEditingProduct(null);
-    setCoverImagePreview('/Cover.png?v=3');
+    setCoverImagePreview(null);
     setIsProductDialogOpen(true);
   };
 
@@ -434,23 +434,6 @@ export default function AdminProductsPage() {
   const onProductSubmit = async (formData: z.infer<typeof productFormSchema>) => {
     console.log("[Submit] Form data received:", formData);
     
-    // Validar que hay al menos un color con imagen
-    const hasValidColors = formData.colors.every(color => 
-      color.name && 
-      color.hex && 
-      color.hex.match(/^#[0-9a-fA-F]{6}$/) && 
-      color.stock >= 0
-    );
-    
-    if (!hasValidColors) {
-        toast({ 
-          variant: 'destructive', 
-          title: "Error de Validación", 
-          description: "Todos los colores deben tener nombre, código hex válido y stock no negativo."
-        });
-        return;
-    }
-
     const processImage = async (fileOrUrl: any, pathPrefix: string): Promise<string> => {
         if (!fileOrUrl || typeof fileOrUrl === 'string') {
             return fileOrUrl || '';
@@ -459,6 +442,7 @@ export default function AdminProductsPage() {
         if (fileOrUrl instanceof File) {
             try {
                 const filePath = `${pathPrefix}/${Date.now()}_${fileOrUrl.name.replace(/\s/g, '_')}`;
+                console.log(`[Submit] Uploading new file to: ${filePath}`);
                 const { error: uploadError } = await supabase.storage.from('product-images').upload(filePath, fileOrUrl);
                 if (uploadError) throw uploadError;
                 const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(filePath);
@@ -750,26 +734,41 @@ export default function AdminProductsPage() {
     setMobileStockInputs(prev => ({ ...prev, [key]: value }));
   };
 
-  const handleMobileStockUpdate = async (product: Product, color: ProductColor) => {
-    const key = `${product.id}-${color.hex}`;
-    const newStockValue = mobileStockInputs[key];
-    const newStock = typeof newStockValue === 'string' ? parseInt(newStockValue, 10) : newStockValue;
+  const handleMobileStockUpdate = async (product: Product, color: ProductColor, newStock: number) => {
+    console.log(`[Mobile Update] Trying to update stock for ${product.name} - ${color.name}.`);
+    console.log(`[Mobile Update] Current stock in state: ${color.stock}, New stock value: ${newStock}`);
+    
+    if (newStock < 0) {
+      console.log("[Mobile Update] New stock is negative, aborting.");
+      setMobileStockInputs(prev => ({ ...prev, [`${product.id}-${color.hex}`]: color.stock }));
+      return;
+    }
+    
+    if (newStock === color.stock) {
+      console.log("[Mobile Update] New stock is same as old stock, no update needed.");
+      return;
+    }
+    
+    const updatedColors = product.colors.map(c =>
+      c.hex === color.hex ? { ...c, stock: newStock } : c
+    );
+    
+    const success = await updateProduct(product.id, { colors: updatedColors });
+    
+    console.log(`[Mobile Update] updateProduct success status: ${success}`);
 
-    if (typeof newStock === 'number' && !isNaN(newStock) && newStock >= 0 && newStock !== color.stock) {
-        const updatedColors = product.colors.map(c =>
-            c.hex === color.hex ? { ...c, stock: newStock } : c
-        );
-        const success = await updateProduct(product.id, { colors: updatedColors });
-        if (success) {
-            toast({
-                title: "Stock Actualizado",
-                description: `Stock de ${unslugify(product.name)} (${color.name}) ahora es ${newStock}.`,
-            });
-        }
+    if (success) {
+      toast({
+        title: "Stock Actualizado",
+        description: `Stock de ${unslugify(product.name)} (${color.name}) ahora es ${newStock}.`,
+      });
     } else {
-        setMobileStockInputs(prev => ({...prev, [key]: color.stock}));
+      console.error("[Mobile Update] Failed to update product, reverting local input state.");
+      // Revert local state on failure
+      setMobileStockInputs(prev => ({...prev, [`${product.id}-${color.hex}`]: color.stock}));
     }
   };
+
 
   useEffect(() => {
     const newStockInputs: Record<string, number> = {};
@@ -1054,7 +1053,11 @@ export default function AdminProductsPage() {
                         <div className="px-4 pb-4 space-y-3">
                             <p className="text-sm font-medium">Inventario por Color:</p>
                             <div className="space-y-2">
-                              {product.colors.map(color => (
+                              {product.colors.map(color => {
+                                const key = `${product.id}-${color.hex}`;
+                                const currentStock = Number(mobileStockInputs[key] || 0);
+
+                                return (
                                 <div key={color.hex} className="flex items-center justify-between text-sm p-2 rounded-md bg-background">
                                   <div className="flex items-center gap-2">
                                     <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: color.hex }} />
@@ -1063,33 +1066,45 @@ export default function AdminProductsPage() {
                                   <div className="flex items-center gap-2">
                                       <Button variant="default" size="icon" className="h-8 w-8 rounded-full bg-primary hover:bg-accent"
                                           onClick={() => {
-                                              const key = `${product.id}-${color.hex}`;
-                                              const currentStock = Number(mobileStockInputs[key] || 0);
-                                              handleMobileStockInputChange(key, String(Math.max(0, currentStock - 1)));
-                                              handleMobileStockUpdate(product, {...color, stock: Math.max(0, currentStock - 1)});
+                                              const newStock = Math.max(0, currentStock - 1);
+                                              handleMobileStockInputChange(key, String(newStock));
+                                              handleMobileStockUpdate(product, color, newStock);
                                           }}>
                                           <Minus className="h-4 w-4" />
                                       </Button>
                                       <Input
                                           type="number"
-                                          value={mobileStockInputs[`${product.id}-${color.hex}`] ?? ''}
-                                          onChange={(e) => handleMobileStockInputChange(`${product.id}-${color.hex}`, e.target.value)}
-                                          onBlur={() => handleMobileStockUpdate(product, color)}
-                                          onKeyDown={(e) => e.key === 'Enter' && handleMobileStockUpdate(product, color)}
+                                          value={mobileStockInputs[key] ?? ''}
+                                          onChange={(e) => handleMobileStockInputChange(key, e.target.value)}
+                                          onBlur={(e) => {
+                                              const newStock = parseInt(e.target.value, 10);
+                                              if (!isNaN(newStock)) {
+                                                  handleMobileStockUpdate(product, color, newStock);
+                                              } else {
+                                                  handleMobileStockInputChange(key, String(color.stock));
+                                              }
+                                          }}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                              const newStock = parseInt(e.currentTarget.value, 10);
+                                              if (!isNaN(newStock)) {
+                                                  handleMobileStockUpdate(product, color, newStock);
+                                              }
+                                            }
+                                          }}
                                           className="w-16 h-8 text-center font-medium"
                                       />
                                       <Button variant="default" size="icon" className="h-8 w-8 rounded-full bg-primary hover:bg-accent"
                                         onClick={() => {
-                                            const key = `${product.id}-${color.hex}`;
-                                            const currentStock = Number(mobileStockInputs[key] || 0);
-                                            handleMobileStockInputChange(key, String(currentStock + 1));
-                                            handleMobileStockUpdate(product, {...color, stock: currentStock + 1});
+                                            const newStock = currentStock + 1;
+                                            handleMobileStockInputChange(key, String(newStock));
+                                            handleMobileStockUpdate(product, color, newStock);
                                         }}>
                                           <Plus className="h-4 w-4" />
                                       </Button>
                                   </div>
                                 </div>
-                              ))}
+                              )})}
                             </div>
                         </div>
                       </CollapsibleContent>
@@ -1350,7 +1365,7 @@ export default function AdminProductsPage() {
                   </div>
               ))}
                 {errors.colors && <p className="text-red-500 text-sm mt-1">{errors.colors.message || errors.colors.root?.message}</p>}
-              <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => append({ name: 'Nuevo Color', hex: '#FFFFFF', image: '/Cover.png?v=3', stock: 0 })}>
+              <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => append({ name: 'Nuevo Color', hex: '#FFFFFF', image: '', stock: 0 })}>
                   <PlusCircle className="mr-2 h-4 w-4"/> Añadir Color
               </Button>
             </div>
