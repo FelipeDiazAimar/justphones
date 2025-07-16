@@ -194,6 +194,7 @@ export default function ProductDetailPage() {
                                             fill
                                             className="object-cover"
                                             data-ai-hint="phone case"
+                                            unoptimized={true}
                                             />
                                     </div>
                                 </CarouselItem>

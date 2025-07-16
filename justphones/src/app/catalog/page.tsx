@@ -116,6 +116,7 @@ export default function CatalogPage() {
                           alt={image.alt_text || 'Carousel image'}
                           fill
                           className="object-cover"
+                          unoptimized={true}
                       />
                       </div>
                   </CarouselItem>

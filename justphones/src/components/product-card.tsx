@@ -27,6 +27,7 @@ export function ProductCard({ product }: ProductCardProps) {
           fill
           className="object-cover"
           data-ai-hint="phone case"
+          unoptimized={true}
         />
 
         {isSoldOut && (
@@ -86,4 +87,3 @@ export function ProductCard({ product }: ProductCardProps) {
 }
 
     
-

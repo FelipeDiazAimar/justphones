@@ -207,7 +207,7 @@ const ColorImageInput = ({ control, index, errors, onFileSelect, setPreviewDialo
             {previewUrl && (
                 <div className="flex items-center gap-2 mt-2">
                     <div className="relative w-10 h-10 rounded-md overflow-hidden border flex-shrink-0">
-                        <Image src={previewUrl} alt={`Thumbnail ${index}`} fill className="object-cover"/>
+                        <Image src={previewUrl} alt={`Thumbnail ${index}`} fill className="object-cover" unoptimized={true} />
                     </div>
                     <Button type="button" variant="outline" size="sm" className="flex-grow" onClick={() => setPreviewDialogUrl(previewUrl)}>Ver Previa</Button>
                     <Button type="button" variant="destructive" size="icon" className="h-9 w-9 flex-shrink-0 rounded-full" onClick={() => setValue(`colors.${index}.image`, '')}>
@@ -1382,7 +1382,7 @@ export default function AdminProductsPage() {
                     {coverImagePreview && (
                       <div className="flex items-center gap-2 mt-4">
                         <div className="relative w-10 h-10 rounded-md overflow-hidden border flex-shrink-0">
-                            <Image src={coverImagePreview} alt="Thumbnail de portada" fill className="object-cover"/>
+                            <Image src={coverImagePreview} alt="Thumbnail de portada" fill className="object-cover" unoptimized={true} />
                         </div>
                         <Button type="button" variant="outline" size="sm" className="flex-grow" onClick={() => setPreviewDialogUrl(coverImagePreview)}>Ver Previa</Button>
                         <Button
@@ -1717,7 +1717,7 @@ export default function AdminProductsPage() {
             </DialogHeader>
             {previewDialogUrl &&
                 <div className="relative w-full aspect-[3/5] rounded-md overflow-hidden border">
-                    <Image src={previewDialogUrl} alt="Vista previa" fill className="object-cover"/>
+                    <Image src={previewDialogUrl} alt="Vista previa" fill className="object-cover" unoptimized={true} />
                 </div>
             }
         </DialogContent>

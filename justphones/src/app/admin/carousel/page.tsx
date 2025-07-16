@@ -308,7 +308,7 @@ export default function AdminCarouselPage() {
                   {carouselImages.map((image) => (
                       <TableRow key={image.id}>
                           <TableCell>
-                              <Image src={image.image_url} alt={image.alt_text || 'Carousel image'} width={120} height={40} className="object-cover rounded-md bg-muted" />
+                              <Image src={image.image_url} alt={image.alt_text || 'Carousel image'} width={120} height={40} className="object-cover rounded-md bg-muted" unoptimized={true} />
                           </TableCell>
                           <TableCell className="text-muted-foreground">{image.alt_text || 'Sin texto'}</TableCell>
                           <TableCell>{image.sort_order}</TableCell>
@@ -404,7 +404,7 @@ export default function AdminCarouselPage() {
 
                 {imagePreview && (
                     <div className="relative w-full aspect-[3/1] rounded-md overflow-hidden border">
-                        <Image src={imagePreview} alt="Vista previa" fill className="object-cover"/>
+                        <Image src={imagePreview} alt="Vista previa" fill className="object-cover" unoptimized={true} />
                         <Button
                             type="button"
                             variant="destructive"
