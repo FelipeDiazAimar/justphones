@@ -40,6 +40,12 @@ const nextConfig: NextConfig = {
         hostname: 'xjmqwbahruxdvozalcnv.supabase.co',
         port: '',
         pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'omnitech.ar',
+        port: '',
+        pathname: '/**',
       }
     ],
   },

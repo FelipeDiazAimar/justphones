@@ -38,23 +38,27 @@ import type { CarouselImage } from '@/lib/carousel';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Trash, Edit, PlusCircle, UploadCloud, X } from 'lucide-react';
+import { Trash, Edit, PlusCircle, UploadCloud, X, Crop } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCarouselImages } from '@/hooks/use-carousel-images';
 import { createClient } from '@/lib/supabase/client';
-import ReactCrop, { type Crop, centerCrop, makeAspectCrop } from 'react-image-crop';
+import ReactCrop, { type Crop as CropType, centerCrop, makeAspectCrop } from 'react-image-crop';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const CAROUSEL_ASPECT = 1200 / 400;
 
 const carouselImageSchema = z.object({
   id: z.string().optional(),
-  image_url: z.any().optional(),
+  image_url: z.any().refine(val => (typeof val === 'string' && val.length > 0) || (typeof val === 'object'), {
+    message: "Debes proporcionar una URL o subir un archivo."
+  }),
   alt_text: z.string().optional(),
   sort_order: z.coerce.number().int("El orden debe ser un número entero."),
 });
 
-function getCroppedImg(image: HTMLImageElement, crop: Crop, fileName: string): Promise<File> {
+
+function getCroppedImg(image: HTMLImageElement, crop: CropType, fileName: string): Promise<File> {
   const canvas = document.createElement('canvas');
   const scaleX = image.naturalWidth / image.width;
   const scaleY = image.naturalHeight / image.height;
@@ -105,12 +109,13 @@ export default function AdminCarouselPage() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
   // Cropping state
-  const [crop, setCrop] = useState<Crop>();
-  const [completedCrop, setCompletedCrop] = useState<Crop>();
+  const [crop, setCrop] = useState<CropType>();
+  const [completedCrop, setCompletedCrop] = useState<CropType>();
   const [imgSrc, setImgSrc] = useState('');
   const [isCropperOpen, setIsCropperOpen] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
   const [originalFile, setOriginalFile] = useState<File | null>(null);
+  const [urlInputValue, setUrlInputValue] = useState('');
 
   
   const { toast } = useToast();
@@ -156,6 +161,7 @@ export default function AdminCarouselPage() {
     resetImage({ image_url: '', alt_text: '', sort_order: 0 });
     setEditingImage(null);
     setImagePreview(null);
+    setUrlInputValue('');
     setIsImageDialogOpen(true);
   };
 
@@ -166,6 +172,7 @@ export default function AdminCarouselPage() {
     });
     setEditingImage(image);
     setImagePreview(image.image_url);
+    setUrlInputValue(image.image_url)
     setIsImageDialogOpen(true);
   };
 
@@ -236,8 +243,13 @@ export default function AdminCarouselPage() {
 
     } else if (typeof data.image_url === 'string' && data.image_url.trim()) {
         finalImageUrl = data.image_url;
+        if (!finalImageUrl.startsWith('http')) {
+            toast({ variant: 'destructive', title: 'URL Inválida', description: 'Por favor, ingresa una URL de imagen válida que comience con http.' });
+            return;
+        }
     } else {
-        finalImageUrl = 'https://placehold.co/1200x400.png';
+        toast({ variant: 'destructive', title: 'Sin Imagen', description: 'Debes subir un archivo o proveer una URL.' });
+        return;
     }
     
     const imageData = {
@@ -342,70 +354,84 @@ export default function AdminCarouselPage() {
                 </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmitImage(onImageSubmit)} className="space-y-4 py-4">
-                <div className="grid grid-cols-1 md:grid-cols-4 items-start gap-4">
-                    <Label className="md:text-right pt-2">Imagen</Label>
-                    <div className="col-span-3">
-                        <Controller
-                            name="image_url"
-                            control={controlImage}
-                            render={({ field: { onChange, value, name, ref } }) => (
-                                <div className="flex flex-col gap-3">
-                                    <label
-                                        htmlFor="image-upload-input"
-                                        className="relative flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted hover:bg-card"
-                                    >
-                                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                                            <UploadCloud className="w-8 h-8 mb-2 text-muted-foreground" />
-                                            <p className="mb-2 text-sm text-muted-foreground">
-                                                <span className="font-semibold">Click para subir</span> o arrastra y suelta
-                                            </p>
-                                            <p className="text-xs text-muted-foreground">PNG, JPG, WEBP (1200x400)</p>
-                                        </div>
-                                        <input
-                                            id="image-upload-input"
-                                            type="file"
-                                            className="hidden"
-                                            accept="image/png, image/jpeg, image/webp"
-                                            onChange={handleFileChange}
-                                        />
-                                    </label>
+                
+                <Tabs defaultValue="upload" className="w-full">
+                    <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="upload">Subir Archivo</TabsTrigger>
+                        <TabsTrigger value="url">Usar URL</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="upload">
+                        <div className="pt-4">
+                            <Label>Imagen</Label>
+                            <div className="flex flex-col gap-3 mt-2">
+                                <label
+                                    htmlFor="image-upload-input"
+                                    className="relative flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted hover:bg-card"
+                                >
+                                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                        <UploadCloud className="w-8 h-8 mb-2 text-muted-foreground" />
+                                        <p className="mb-2 text-sm text-muted-foreground">
+                                            <span className="font-semibold">Click para subir</span> o arrastra y suelta
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">PNG, JPG, WEBP (1200x400)</p>
+                                    </div>
+                                    <input
+                                        id="image-upload-input"
+                                        type="file"
+                                        className="hidden"
+                                        accept="image/png, image/jpeg, image/webp"
+                                        onChange={handleFileChange}
+                                    />
+                                </label>
+                            </div>
+                        </div>
+                    </TabsContent>
+                    <TabsContent value="url">
+                         <div className="pt-4 space-y-2">
+                          <Label htmlFor="image_url_input">URL de la Imagen</Label>
+                          <Input
+                            id="image_url_input"
+                            placeholder="https://ejemplo.com/imagen.png"
+                            value={urlInputValue}
+                            onChange={(e) => {
+                                setUrlInputValue(e.target.value);
+                                setImageValue('image_url', e.target.value, { shouldValidate: true });
+                            }}
+                          />
+                        </div>
+                    </TabsContent>
+                </Tabs>
 
-                                    {imagePreview && (
-                                        <div className="relative w-full aspect-video rounded-md overflow-hidden border">
-                                            <Image src={imagePreview} alt="Vista previa" fill className="object-cover"/>
-                                            <Button
-                                                type="button"
-                                                variant="destructive"
-                                                size="icon"
-                                                className="absolute top-2 right-2 h-7 w-7 z-10"
-                                                onClick={() => {
-                                                    setImageValue('image_url', '');
-                                                }}
-                                            >
-                                                <X className="h-4 w-4"/>
-                                            </Button>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        />
-                        {errorsImage.image_url && <p className="text-red-500 text-sm mt-1">{typeof errorsImage.image_url.message === 'string' ? errorsImage.image_url.message : ''}</p>}
+                {imagePreview && (
+                    <div className="relative w-full aspect-[3/1] rounded-md overflow-hidden border">
+                        <Image src={imagePreview} alt="Vista previa" fill className="object-cover"/>
+                        <Button
+                            type="button"
+                            variant="destructive"
+                            size="icon"
+                            className="absolute top-2 right-2 h-7 w-7 z-10"
+                            onClick={() => {
+                              setImageValue('image_url', '');
+                              setUrlInputValue('');
+                            }}
+                        >
+                            <X className="h-4 w-4"/>
+                        </Button>
                     </div>
+                )}
+                {errorsImage.image_url && <p className="text-red-500 text-sm mt-1">{typeof errorsImage.image_url.message === 'string' ? errorsImage.image_url.message : ''}</p>}
+                
+                <div className="space-y-2">
+                    <Label htmlFor="alt_text">Texto Alternativo</Label>
+                    <Input id="alt_text" {...registerImage('alt_text')} />
+                    {errorsImage.alt_text && <p className="text-red-500 text-sm mt-1">{errorsImage.alt_text.message}</p>}
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-4 items-center gap-4">
-                    <Label htmlFor="alt_text" className="md:text-right">Texto Alternativo</Label>
-                    <div className="col-span-3">
-                      <Input id="alt_text" {...registerImage('alt_text')} />
-                      {errorsImage.alt_text && <p className="text-red-500 text-sm mt-1">{errorsImage.alt_text.message}</p>}
-                    </div>
+                <div className="space-y-2">
+                    <Label htmlFor="sort_order">Orden</Label>
+                    <Input id="sort_order" type="number" {...registerImage('sort_order')} />
+                    {errorsImage.sort_order && <p className="text-red-500 text-sm mt-1">{errorsImage.sort_order.message}</p>}
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-4 items-center gap-4">
-                    <Label htmlFor="sort_order" className="md:text-right">Orden</Label>
-                    <div className="col-span-3">
-                      <Input id="sort_order" type="number" {...registerImage('sort_order')} />
-                      {errorsImage.sort_order && <p className="text-red-500 text-sm mt-1">{errorsImage.sort_order.message}</p>}
-                    </div>
-                </div>
+
                 <DialogFooter>
                     <DialogClose asChild>
                         <Button type="button" variant="secondary">Cancelar</Button>
