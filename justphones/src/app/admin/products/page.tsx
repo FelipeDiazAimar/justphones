@@ -67,10 +67,18 @@ import ReactCrop, { type Crop, centerCrop, makeAspectCrop } from 'react-image-cr
 
 const PRODUCT_ASPECT = 3 / 5;
 
+const imageFieldSchema = z.any().optional().refine(val => 
+    val === undefined ||
+    val === '' ||
+    val instanceof File ||
+    (typeof val === 'string' && val.startsWith('http')), {
+    message: "Debe ser un archivo válido o una URL que comience con http."
+});
+
 const colorSchema = z.object({
   name: z.string().min(1, "El nombre del color es requerido."),
   hex: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Código hex inválido"),
-  image: z.any().optional(),
+  image: imageFieldSchema,
   stock: z.coerce.number().min(0, "El stock no puede ser negativo"),
 });
 
@@ -79,7 +87,7 @@ const productSchema = z.object({
   name: z.string().min(1, "El nombre es requerido."),
   cost: z.coerce.number().min(0, "El costo debe ser positivo"),
   price: z.coerce.number().min(0, "El precio debe ser positivo"),
-  coverImage: z.any().optional(),
+  coverImage: imageFieldSchema,
   category: z.enum(['case', 'accessory', 'auriculares'], {
     errorMap: () => ({ message: "Categoría debe ser: case, accessory o auriculares" })
   }),
@@ -139,27 +147,33 @@ function getCroppedImg(image: HTMLImageElement, crop: Crop, fileName: string): P
   });
 }
 
-const ColorImageInput = ({ control, index, errors, onFileSelect, setPreviewDialogUrl }: { control: any; index: number; errors: any; onFileSelect: (file: File, fieldIndex: number) => void; setPreviewDialogUrl: (url: string) => void; }) => {
+const ColorImageInput = ({ control, index, errors, onFileSelect, setPreviewDialogUrl, setValue }: { control: any; index: number; errors: any; onFileSelect: (file: File, fieldIndex: number) => void; setPreviewDialogUrl: (url: string) => void; setValue: any }) => {
     const value = useWatch({ control, name: `colors.${index}.image` });
     const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
+    const [urlInputValue, setUrlInputValue] = React.useState('');
 
     React.useEffect(() => {
         if (value instanceof File) {
             setPreviewUrl(URL.createObjectURL(value));
+            setUrlInputValue('');
         } else if (typeof value === 'string' && value) {
             setPreviewUrl(value);
+            setUrlInputValue(value);
         } else {
             setPreviewUrl(null);
+            setUrlInputValue('');
         }
     }, [value]);
     
     return (
-        <Controller
-            name={`colors.${index}.image`}
-            control={control}
-            render={({ field: { onChange, name, ref } }) => (
-                <div className="flex flex-col gap-2 mt-1">
-                    <label htmlFor={`color-image-upload-${index}`} className="relative flex flex-col items-center justify-center w-full h-20 border-2 border-dashed rounded-lg cursor-pointer bg-muted hover:bg-card">
+        <div className="flex flex-col gap-2 mt-1">
+            <Tabs defaultValue="upload" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="upload">Subir</TabsTrigger>
+                    <TabsTrigger value="url">URL</TabsTrigger>
+                </TabsList>
+                <TabsContent value="upload">
+                    <label htmlFor={`color-image-upload-${index}`} className="relative flex flex-col items-center justify-center w-full h-20 border-2 border-dashed rounded-lg cursor-pointer bg-muted hover:bg-card mt-2">
                         <UploadCloud className="w-6 h-6 mb-1 text-muted-foreground" />
                         <p className="text-xs text-center text-muted-foreground">Click o arrastrar</p>
                         <input
@@ -174,23 +188,36 @@ const ColorImageInput = ({ control, index, errors, onFileSelect, setPreviewDialo
                             }}
                         />
                     </label>
-                    
-                    {previewUrl && (
-                        <div className="flex items-center gap-2 mt-2">
-                            <div className="relative w-10 h-10 rounded-md overflow-hidden border flex-shrink-0">
-                                <Image src={previewUrl} alt={`Thumbnail ${index}`} fill className="object-cover"/>
-                            </div>
-                            <Button type="button" variant="outline" size="sm" className="flex-grow" onClick={() => setPreviewDialogUrl(previewUrl)}>Ver Previa</Button>
-                            <Button type="button" variant="destructive" size="icon" className="h-9 w-9 flex-shrink-0 rounded-full" onClick={() => onChange('')}>
-                                <X className="h-4 w-4" />
-                            </Button>
-                        </div>
-                    )}
-                    
-                    {errors?.colors?.[index]?.image && <p className="text-red-500 text-xs mt-1">{typeof errors.colors[index].image.message === 'string' ? errors.colors[index].image.message : ''}</p>}
+                </TabsContent>
+                <TabsContent value="url">
+                    <div className="pt-2 space-y-2">
+                        <Input
+                            id={`color_url_input-${index}`}
+                            placeholder="https://ejemplo.com/imagen.png"
+                            value={urlInputValue}
+                            onChange={(e) => {
+                                setUrlInputValue(e.target.value);
+                                setValue(`colors.${index}.image`, e.target.value, { shouldValidate: true });
+                            }}
+                        />
+                    </div>
+                </TabsContent>
+            </Tabs>
+            
+            {previewUrl && (
+                <div className="flex items-center gap-2 mt-2">
+                    <div className="relative w-10 h-10 rounded-md overflow-hidden border flex-shrink-0">
+                        <Image src={previewUrl} alt={`Thumbnail ${index}`} fill className="object-cover"/>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" className="flex-grow" onClick={() => setPreviewDialogUrl(previewUrl)}>Ver Previa</Button>
+                    <Button type="button" variant="destructive" size="icon" className="h-9 w-9 flex-shrink-0 rounded-full" onClick={() => setValue(`colors.${index}.image`, '')}>
+                        <X className="h-4 w-4" />
+                    </Button>
                 </div>
             )}
-        />
+            
+            {errors?.colors?.[index]?.image && <p className="text-red-500 text-xs mt-1">{typeof errors.colors[index].image.message === 'string' ? errors.colors[index].image.message : ''}</p>}
+        </div>
     )
 }
 
@@ -230,6 +257,7 @@ export default function AdminProductsPage() {
   });
   
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
+  const [coverImageUrlInput, setCoverImageUrlInput] = useState('');
   const [previewDialogUrl, setPreviewDialogUrl] = useState<string | null>(null);
 
   const [isSalesHistoryDialogOpen, setIsSalesHistoryDialogOpen] = useState(false);
@@ -273,9 +301,9 @@ export default function AdminProductsPage() {
       coverImage: '',
       category: 'case',
       model: '',
-      colors: [],
       featured: false,
       is_new: false,
+      colors: [],
     },
   });
 
@@ -310,10 +338,13 @@ export default function AdminProductsPage() {
   useEffect(() => {
     if (watchedCoverImage instanceof File) {
         setCoverImagePreview(URL.createObjectURL(watchedCoverImage));
+        setCoverImageUrlInput('');
     } else if (typeof watchedCoverImage === 'string' && watchedCoverImage) {
         setCoverImagePreview(watchedCoverImage);
+        setCoverImageUrlInput(watchedCoverImage);
     } else {
         setCoverImagePreview(null);
+        setCoverImageUrlInput('');
     }
   }, [watchedCoverImage]);
 
@@ -447,13 +478,19 @@ export default function AdminProductsPage() {
     });
     setEditingProduct(null);
     setCoverImagePreview(null);
+    setCoverImageUrlInput('');
     setIsProductDialogOpen(true);
   };
 
   const handleEditProduct = (product: Product) => {
-    reset(product);
+    reset({
+      ...product,
+      featured: product.featured ?? false,
+      is_new: product.is_new ?? false,
+    });
     setEditingProduct(product);
     setCoverImagePreview(product.coverImage);
+    setCoverImageUrlInput(product.coverImage);
     setIsProductDialogOpen(true);
   };
 
@@ -506,8 +543,14 @@ export default function AdminProductsPage() {
   const onProductSubmit = async (formData: z.infer<typeof productFormSchema>) => {
     console.log("Form submitted. Data:", formData);
     const processImage = async (fileOrUrl: any, pathPrefix: string): Promise<string> => {
-        if (!fileOrUrl || typeof fileOrUrl === 'string') {
-            return fileOrUrl || '';
+        if (!fileOrUrl) return '';
+
+        if (typeof fileOrUrl === 'string') {
+          if (!fileOrUrl.startsWith('http')) {
+            toast({ variant: 'destructive', title: 'URL Inválida', description: `La URL '${fileOrUrl.substring(0,30)}...' no es válida.` });
+            throw new Error('Invalid URL');
+          }
+          return fileOrUrl;
         }
 
         if (fileOrUrl instanceof File) {
@@ -567,7 +610,6 @@ export default function AdminProductsPage() {
         }
     } catch (error) {
         console.error("[Submit] An unexpected error occurred during product submission:", error);
-        toast({ variant: 'destructive', title: 'Error Inesperado', description: `Ocurrió un error al guardar el producto.` });
     }
   };
 
@@ -1294,57 +1336,68 @@ export default function AdminProductsPage() {
             <div className="grid grid-cols-1 md:grid-cols-4 items-start gap-4">
                 <Label className="md:text-right pt-2">Imagen de Portada</Label>
                 <div className="md:col-span-3">
-                    <Controller
-                        name="coverImage"
-                        control={control}
-                        render={({ field: { onChange, value } }) => (
-                            <div className="flex flex-col gap-3">
-                                <label
-                                    htmlFor="cover-image-upload-input"
-                                    className="relative flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted hover:bg-card"
-                                >
-                                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                                        <UploadCloud className="w-8 h-8 mb-2 text-muted-foreground" />
-                                        <p className="mb-2 text-sm text-muted-foreground">
-                                            <span className="font-semibold">Click para subir</span> o arrastra y suelta
-                                        </p>
-                                        <p className="text-xs text-muted-foreground">PNG, JPG, WEBP (recorte 3:5)</p>
-                                    </div>
-                                    <input
-                                        id="cover-image-upload-input"
-                                        type="file"
-                                        className="hidden"
-                                        accept="image/png, image/jpeg, image/webp"
-                                        onChange={(e) => {
-                                            if (e.target.files && e.target.files[0]) {
-                                                handleFileSelect(e.target.files[0], 'cover');
-                                            }
-                                        }}
-                                    />
-                                </label>
-                                {coverImagePreview && (
-                                  <div className="flex items-center gap-2 mt-2">
-                                    <div className="relative w-10 h-10 rounded-md overflow-hidden border flex-shrink-0">
-                                        <Image src={coverImagePreview} alt="Thumbnail de portada" fill className="object-cover"/>
-                                    </div>
-                                    <Button type="button" variant="outline" size="sm" className="flex-grow" onClick={() => setPreviewDialogUrl(coverImagePreview)}>Ver Previa</Button>
-                                    <Button
-                                        type="button"
-                                        variant="destructive"
-                                        size="icon"
-                                        className="h-9 w-9 flex-shrink-0 rounded-full"
-                                        onClick={() => {
-                                            onChange('');
-                                            setCoverImagePreview(null);
-                                        }}
-                                    >
-                                        <X className="h-4 w-4"/>
-                                    </Button>
-                                  </div>
-                                )}
+                    <Tabs defaultValue="upload" className="w-full">
+                        <TabsList className="grid w-full grid-cols-2">
+                            <TabsTrigger value="upload">Subir Archivo</TabsTrigger>
+                            <TabsTrigger value="url">Usar URL</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="upload">
+                            <label
+                                htmlFor="cover-image-upload-input"
+                                className="relative flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted hover:bg-card mt-4"
+                            >
+                                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                    <UploadCloud className="w-8 h-8 mb-2 text-muted-foreground" />
+                                    <p className="mb-2 text-sm text-muted-foreground"><span className="font-semibold">Click para subir</span></p>
+                                    <p className="text-xs text-muted-foreground">PNG, JPG, WEBP (recorte 3:5)</p>
+                                </div>
+                                <input
+                                    id="cover-image-upload-input"
+                                    type="file"
+                                    className="hidden"
+                                    accept="image/png, image/jpeg, image/webp"
+                                    onChange={(e) => {
+                                        if (e.target.files && e.target.files[0]) {
+                                            handleFileSelect(e.target.files[0], 'cover');
+                                        }
+                                    }}
+                                />
+                            </label>
+                        </TabsContent>
+                        <TabsContent value="url">
+                            <div className="pt-4 space-y-2">
+                                <Input
+                                    id="cover_image_url_input"
+                                    placeholder="https://ejemplo.com/imagen.png"
+                                    value={coverImageUrlInput}
+                                    onChange={(e) => {
+                                        setCoverImageUrlInput(e.target.value);
+                                        setValue('coverImage', e.target.value, { shouldValidate: true });
+                                    }}
+                                />
                             </div>
-                        )}
-                    />
+                        </TabsContent>
+                    </Tabs>
+
+                    {coverImagePreview && (
+                      <div className="flex items-center gap-2 mt-4">
+                        <div className="relative w-10 h-10 rounded-md overflow-hidden border flex-shrink-0">
+                            <Image src={coverImagePreview} alt="Thumbnail de portada" fill className="object-cover"/>
+                        </div>
+                        <Button type="button" variant="outline" size="sm" className="flex-grow" onClick={() => setPreviewDialogUrl(coverImagePreview)}>Ver Previa</Button>
+                        <Button
+                            type="button"
+                            variant="destructive"
+                            size="icon"
+                            className="h-9 w-9 flex-shrink-0 rounded-full"
+                            onClick={() => {
+                                setValue('coverImage', '');
+                            }}
+                        >
+                            <X className="h-4 w-4"/>
+                        </Button>
+                      </div>
+                    )}
                     {errors.coverImage && <p className="text-red-500 text-sm mt-1">{typeof errors.coverImage.message === 'string' ? errors.coverImage.message : ''}</p>}
                 </div>
             </div>
@@ -1390,7 +1443,7 @@ export default function AdminProductsPage() {
                       </div>
                       <div className="md:col-span-4">
                           <Label className="text-xs text-muted-foreground">Imagen</Label>
-                          <ColorImageInput control={control} index={index} errors={errors} onFileSelect={(file) => handleFileSelect(file, 'color', index)} setPreviewDialogUrl={setPreviewDialogUrl} />
+                          <ColorImageInput control={control} index={index} errors={errors} onFileSelect={(file) => handleFileSelect(file, 'color', index)} setPreviewDialogUrl={setPreviewDialogUrl} setValue={setValue} />
                       </div>
                       <div className="md:col-span-2 space-y-1">
                           <Label htmlFor={`colors.${index}.stock`} className="text-xs text-muted-foreground">Stock</Label>
