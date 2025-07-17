@@ -64,6 +64,7 @@ import type { StockHistory } from '@/lib/stock-history';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import ReactCrop, { type Crop, centerCrop, makeAspectCrop } from 'react-image-crop';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const PRODUCT_ASPECT = 3 / 5;
 
@@ -91,7 +92,7 @@ const productSchema = z.object({
   category: z.enum(['case', 'accessory', 'auriculares'], {
     errorMap: () => ({ message: "Categoría debe ser: case, accessory o auriculares" })
   }),
-  model: z.string().min(1, "El modelo es requerido"),
+  model: z.string().min(1, "Debe seleccionar al menos un modelo."),
   featured: z.boolean().nullable().transform(val => val ?? false).optional(),
   is_new: z.boolean().nullable().transform(val => val ?? false).optional(),
   colors: z.array(colorSchema).min(1, "Al menos un color es requerido"),
@@ -471,7 +472,7 @@ export default function AdminProductsPage() {
       cost: 0,
       coverImage: '',
       category: 'case',
-      model: 'iPhone 15',
+      model: '',
       colors: [{ name: 'Negro', hex: '#000000', image: '', stock: 0 }],
       featured: false,
       is_new: false,
@@ -905,6 +906,11 @@ export default function AdminProductsPage() {
     return subcategories[watchedCategory] || [];
   }, [watchedCategory, subcategories]);
 
+  const modelOptions = useMemo(() => {
+      if (!watchedCategory || !models) return [];
+      return models[watchedCategory] || [];
+  }, [watchedCategory, models]);
+
   const groupedStockHistory = useMemo(() => {
     if (!stockHistory || stockHistory.length === 0) return [];
   
@@ -1275,11 +1281,7 @@ export default function AdminProductsPage() {
                               const newCategory = value as 'case' | 'accessory' | 'auriculares';
                               field.onChange(newCategory);
                               setValue('name', '');
-                              if (newCategory === 'case') {
-                                  setValue('model', 'iPhone 15');
-                              } else { 
-                                  setValue('model', 'Universal');
-                              }
+                              setValue('model', '');
                             }}
                             value={field.value}
                           >
@@ -1402,28 +1404,34 @@ export default function AdminProductsPage() {
                 </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-4 items-start md:items-center gap-2 md:gap-4">
-                <Label className="md:text-right">Modelo</Label>
+            <div className="grid grid-cols-1 md:grid-cols-4 items-start gap-4">
+                <Label className="md:text-right pt-2">Modelo(s)</Label>
                 <div className="md:col-span-3">
-                  <Controller
-                      control={control}
-                      name="model"
-                      render={({ field }) => (
-                          <Select onValueChange={field.onChange} value={field.value}>
-                              <SelectTrigger>
-                                  <SelectValue placeholder="Selecciona modelo" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                  {(() => {
-                                      if (watchedCategory === 'case') return caseModels.map(mod => <SelectItem key={mod} value={mod}>{mod}</SelectItem>);
-                                      if (watchedCategory === 'accessory') return accessoryModels.map(mod => <SelectItem key={mod} value={mod}>{mod}</SelectItem>);
-                                      if (watchedCategory === 'auriculares') return auricularesModels.map(mod => <SelectItem key={mod} value={mod}>{mod}</SelectItem>);
-                                      return [];
-                                  })()}
-                              </SelectContent>
-                          </Select>
-                      )}
-                  />
+                    <Controller
+                        name="model"
+                        control={control}
+                        render={({ field }) => (
+                            <div className="space-y-2 border p-2 rounded-md max-h-40 overflow-y-auto">
+                                {modelOptions.map((modelItem) => (
+                                    <div key={modelItem} className="flex items-center space-x-2">
+                                        <Checkbox
+                                            id={`model-${modelItem}`}
+                                            checked={field.value?.split(' / ').includes(modelItem)}
+                                            onCheckedChange={(checked) => {
+                                                const currentModels = field.value ? field.value.split(' / ') : [];
+                                                const newModels = checked
+                                                    ? [...currentModels, modelItem]
+                                                    : currentModels.filter((m) => m !== modelItem);
+                                                field.onChange(newModels.join(' / '));
+                                            }}
+                                        />
+                                        <Label htmlFor={`model-${modelItem}`} className="font-normal">{modelItem}</Label>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    />
+                     {errors.model && <p className="text-red-500 text-sm mt-1">{errors.model.message}</p>}
                 </div>
             </div>
             

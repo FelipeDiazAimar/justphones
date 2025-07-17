@@ -22,6 +22,7 @@ export function slugify(text: string): string {
 }
 
 export function expandModelString(modelStr: string): string[] {
+  if (!modelStr) return [];
   const parts = modelStr.split('/').map(s => s.trim());
   if (parts.length <= 1) {
     return parts;
@@ -32,11 +33,20 @@ export function expandModelString(modelStr: string): string[] {
   
   const firstPartWords = parts[0].split(' ');
   
+  // Heuristic to find the base name, e.g., "iPhone" from "iPhone 13"
   if (firstPartWords.length > 1) {
     baseName = firstPartWords.slice(0, -1).join(' ');
+  } else {
+    // If the first part is a single word, it could be the base name itself
+    const firstWord = firstPartWords[0];
+    if (isNaN(parseInt(firstWord, 10))) { // Check if it's not just a number
+      baseName = firstWord;
+    }
   }
 
   for (const part of parts) {
+    // If a part already contains the base name (e.g., "iPhone 14 Pro"), use it as is.
+    // Also handles the initial case where baseName might be empty.
     if (part.toLowerCase().startsWith(baseName.toLowerCase()) || baseName === '') {
       result.push(part);
       const currentPartWords = part.split(' ');
@@ -44,6 +54,7 @@ export function expandModelString(modelStr: string): string[] {
          baseName = currentPartWords.slice(0, -1).join(' ');
       }
     } else {
+      // If the part is just a suffix (e.g., "14" after "iPhone 13"), prepend the base name.
       result.push(`${baseName} ${part}`);
     }
   }
