@@ -206,9 +206,6 @@ export function Header({ showCart = true }: { showCart?: boolean }) {
               </CollapsibleContent>
             </Collapsible>
             
-            <Button variant="outline" size="sm" onClick={() => router.push('/admin')}>
-                Admin
-            </Button>
             <ThemeToggle />
             {showCart && <CartSheet />}
             {pathname !== '/catalog' && (
@@ -311,9 +308,7 @@ export function Header({ showCart = true }: { showCart?: boolean }) {
                 </div>
 
                 <div className="mt-auto p-4 border-t space-y-4">
-                  <Button variant="outline" size="sm" className="w-full" onClick={() => {router.push('/admin'); closeMobileMenu();}}>
-                      Admin
-                  </Button>
+                 
                 </div>
 
             </SheetContent>
