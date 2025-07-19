@@ -2,6 +2,7 @@
 "use client"
 
 import React, { useRef, useState, useMemo } from 'react';
+import { Analytics } from "@vercel/analytics/next";
 import Image from 'next/image';
 import Autoplay from "embla-carousel-autoplay"
 import { MainLayout } from '@/components/main-layout';
@@ -205,6 +206,7 @@ export default function CatalogPage() {
             </div>
           )}
       </div>
+      <Analytics />
     </MainLayout>
   );
 }

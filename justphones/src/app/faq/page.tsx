@@ -1,5 +1,6 @@
 'use client';
 
+import { Analytics } from "@vercel/analytics/next";
 import { MainLayout } from '@/components/main-layout';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useFaqs } from '@/hooks/use-faqs';
@@ -43,6 +44,7 @@ export default function FaqPage() {
           <p className="text-center text-muted-foreground">No hay preguntas frecuentes en este momento.</p>
         )}
       </div>
+      <Analytics />
     </MainLayout>
   );
 }

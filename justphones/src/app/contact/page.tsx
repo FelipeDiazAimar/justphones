@@ -1,5 +1,6 @@
 "use client"
 
+import { Analytics } from "@vercel/analytics/next";
 import { MainLayout } from '@/components/main-layout';
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
@@ -166,6 +167,7 @@ export default function ContactPage() {
                  </Card>
             </div>
         </div>
+        <Analytics />
     </MainLayout>
   );
 }

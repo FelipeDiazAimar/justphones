@@ -2,6 +2,7 @@
 "use client"
 
 import React, { useState, useMemo, useEffect, Suspense } from 'react';
+import { Analytics } from "@vercel/analytics/next";
 import { useSearchParams } from 'next/navigation';
 import { MainLayout } from '@/components/main-layout';
 import type { Product } from '@/lib/products';
@@ -233,6 +234,7 @@ function CasesCatalogPageContent() {
           </div>
         </div>
       </div>
+      <Analytics />
     </MainLayout>
   );
 }

@@ -2,6 +2,7 @@
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { Analytics } from "@vercel/analytics/next";
 import { notFound, useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -155,6 +156,7 @@ export default function ProductDetailPage() {
     const numValue = parseInt(value, 10);
     if (isNaN(numValue)) {
         return;
+      <Analytics />
     }
     if (numValue > selectedColor.stock) {
         setQuantity(selectedColor.stock);

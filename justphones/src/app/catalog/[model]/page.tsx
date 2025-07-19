@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { Analytics } from "@vercel/analytics/next";
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { MainLayout } from '@/components/main-layout';
@@ -232,6 +233,7 @@ export default function ModelCatalogPage() {
           </div>
         </div>
       </div>
+      <Analytics />
     </MainLayout>
   );
 }

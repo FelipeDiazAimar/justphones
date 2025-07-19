@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from 'react';
+import { Analytics } from "@vercel/analytics/next";
 import { useRouter } from 'next/navigation';
 import { Logo } from "@/components/icons/logo";
 import { Loader } from '@/components/loader';
@@ -170,6 +171,7 @@ export default function LandingPage() {
           <Loader />
         )}
       </div>
+      <Analytics />
     </div>
   );
 }
