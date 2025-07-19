@@ -1637,34 +1637,56 @@ export default function AdminProductsPage() {
                 </DialogDescription>
             </DialogHeader>
             <ScrollArea className="max-h-[70vh]">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Fecha</TableHead>
-                            <TableHead>Producto</TableHead>
-                            <TableHead>Modelo</TableHead>
-                            <TableHead>Color</TableHead>
-                            <TableHead className="text-center">Cantidad</TableHead>
-                            <TableHead className="text-right">Total</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {sales.length > 0 ? sales.map(sale => (
-                            <TableRow key={sale.id}>
-                                <TableCell>{new Date(sale.created_at).toLocaleString()}</TableCell>
-                                <TableCell>{unslugify(sale.product_name)}</TableCell>
-                                <TableCell>{sale.product_model}</TableCell>
-                                <TableCell>{sale.color_name}</TableCell>
-                                <TableCell className="text-center">{sale.quantity}</TableCell>
-                                <TableCell className="text-right">${sale.total_price}</TableCell>
-                            </TableRow>
-                        )) : (
+                <div className="hidden md:block">
+                  <Table>
+                      <TableHeader>
                           <TableRow>
-                              <TableCell colSpan={6} className="text-center h-24">No hay ventas registradas.</TableCell>
+                              <TableHead>Fecha</TableHead>
+                              <TableHead>Producto</TableHead>
+                              <TableHead>Modelo</TableHead>
+                              <TableHead>Color</TableHead>
+                              <TableHead className="text-center">Cantidad</TableHead>
+                              <TableHead className="text-right">Total</TableHead>
                           </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
+                      </TableHeader>
+                      <TableBody>
+                          {sales.length > 0 ? sales.map(sale => (
+                              <TableRow key={sale.id}>
+                                  <TableCell>{new Date(sale.created_at).toLocaleString()}</TableCell>
+                                  <TableCell>{unslugify(sale.product_name)}</TableCell>
+                                  <TableCell>{sale.product_model}</TableCell>
+                                  <TableCell>{sale.color_name}</TableCell>
+                                  <TableCell className="text-center">{sale.quantity}</TableCell>
+                                  <TableCell className="text-right">${sale.total_price}</TableCell>
+                              </TableRow>
+                          )) : (
+                            <TableRow>
+                                <TableCell colSpan={6} className="text-center h-24">No hay ventas registradas.</TableCell>
+                            </TableRow>
+                          )}
+                      </TableBody>
+                  </Table>
+                </div>
+                <div className="md:hidden space-y-3">
+                  {sales.length > 0 ? sales.map(sale => (
+                    <Card key={sale.id} className="p-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-bold">{unslugify(sale.product_name)}</p>
+                          <p className="text-sm text-muted-foreground">{sale.product_model}</p>
+                          <p className="text-sm text-muted-foreground">Color: {sale.color_name}</p>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{new Date(sale.created_at).toLocaleDateString()}</p>
+                      </div>
+                      <div className="flex justify-between items-end mt-2 pt-2 border-t">
+                        <p className="text-sm">Cantidad: <span className="font-medium">{sale.quantity}</span></p>
+                        <p className="text-lg font-bold text-primary">${sale.total_price}</p>
+                      </div>
+                    </Card>
+                  )) : (
+                    <p className="text-center text-muted-foreground py-8">No hay ventas registradas.</p>
+                  )}
+                </div>
             </ScrollArea>
             <DialogFooter>
                 <DialogClose asChild>
@@ -1682,34 +1704,56 @@ export default function AdminProductsPage() {
                 </DialogDescription>
             </DialogHeader>
             <ScrollArea className="max-h-[70vh]">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Fecha</TableHead>
-                            <TableHead>Producto</TableHead>
-                            <TableHead>Modelo</TableHead>
-                            <TableHead>Categoría</TableHead>
-                            <TableHead className="text-center">Stock Inicial</TableHead>
-                            <TableHead className="text-right">Precio</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {productHistory.length > 0 ? productHistory.map(entry => (
-                            <TableRow key={entry.id}>
-                                <TableCell>{new Date(entry.created_at).toLocaleString()}</TableCell>
-                                <TableCell>{unslugify(entry.product_name)}</TableCell>
-                                <TableCell>{entry.product_model}</TableCell>
-                                <TableCell>{entry.product_category}</TableCell>
-                                <TableCell className="text-center">{entry.initial_stock}</TableCell>
-                                <TableCell className="text-right">${entry.price}</TableCell>
-                            </TableRow>
-                        )) : (
+              <div className="hidden md:block">
+                  <Table>
+                      <TableHeader>
                           <TableRow>
-                              <TableCell colSpan={6} className="text-center h-24">No hay productos creados.</TableCell>
+                              <TableHead>Fecha</TableHead>
+                              <TableHead>Producto</TableHead>
+                              <TableHead>Modelo</TableHead>
+                              <TableHead>Categoría</TableHead>
+                              <TableHead className="text-center">Stock Inicial</TableHead>
+                              <TableHead className="text-right">Precio</TableHead>
                           </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
+                      </TableHeader>
+                      <TableBody>
+                          {productHistory.length > 0 ? productHistory.map(entry => (
+                              <TableRow key={entry.id}>
+                                  <TableCell>{new Date(entry.created_at).toLocaleString()}</TableCell>
+                                  <TableCell>{unslugify(entry.product_name)}</TableCell>
+                                  <TableCell>{entry.product_model}</TableCell>
+                                  <TableCell>{entry.product_category}</TableCell>
+                                  <TableCell className="text-center">{entry.initial_stock}</TableCell>
+                                  <TableCell className="text-right">${entry.price}</TableCell>
+                              </TableRow>
+                          )) : (
+                            <TableRow>
+                                <TableCell colSpan={6} className="text-center h-24">No hay productos creados.</TableCell>
+                            </TableRow>
+                          )}
+                      </TableBody>
+                  </Table>
+                </div>
+                <div className="md:hidden space-y-3">
+                  {productHistory.length > 0 ? productHistory.map(entry => (
+                    <Card key={entry.id} className="p-4">
+                       <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-bold">{unslugify(entry.product_name)}</p>
+                          <p className="text-sm text-muted-foreground">{entry.product_model}</p>
+                          <p className="text-sm text-muted-foreground">Categoría: {entry.product_category}</p>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{new Date(entry.created_at).toLocaleDateString()}</p>
+                      </div>
+                      <div className="flex justify-between items-end mt-2 pt-2 border-t">
+                        <p className="text-sm">Stock Inicial: <span className="font-medium">{entry.initial_stock}</span></p>
+                        <p className="text-lg font-bold text-primary">${entry.price}</p>
+                      </div>
+                    </Card>
+                  )) : (
+                    <p className="text-center text-muted-foreground py-8">No hay productos creados.</p>
+                  )}
+                </div>
             </ScrollArea>
             <DialogFooter>
                 <DialogClose asChild>
@@ -1833,39 +1877,56 @@ export default function AdminProductsPage() {
                         </h3>
                     </div>
                     <div className="border rounded-lg">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Producto</TableHead>
-                            <TableHead>Modelo</TableHead>
-                            <TableHead>Color</TableHead>
-                            <TableHead className="text-right">Costo</TableHead>
-                            <TableHead className="text-right">Precio</TableHead>
-                            <TableHead className="text-right">Cantidad</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {entries.map((entry) => (
-                            <TableRow key={entry.id}>
-                              <TableCell>{unslugify(entry.product_name)}</TableCell>
-                              <TableCell>{entry.product_model}</TableCell>
-                              <TableCell>{entry.color_name}</TableCell>
-                              <TableCell className="text-right">${entry.cost || 0}</TableCell>
-                              <TableCell className="text-right">${entry.price || 0}</TableCell>
-                              <TableCell className="text-right font-medium text-primary">
-                                +{entry.quantity_added}
-                              </TableCell>
+                      <div className="hidden md:block">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Producto</TableHead>
+                              <TableHead>Modelo</TableHead>
+                              <TableHead>Color</TableHead>
+                              <TableHead className="text-right">Costo</TableHead>
+                              <TableHead className="text-right">Precio</TableHead>
+                              <TableHead className="text-right">Cantidad</TableHead>
                             </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {entries.map((entry) => (
+                              <TableRow key={entry.id}>
+                                <TableCell>{unslugify(entry.product_name)}</TableCell>
+                                <TableCell>{entry.product_model}</TableCell>
+                                <TableCell>{entry.color_name}</TableCell>
+                                <TableCell className="text-right">${entry.cost || 0}</TableCell>
+                                <TableCell className="text-right">${entry.price || 0}</TableCell>
+                                <TableCell className="text-right font-medium text-primary">
+                                  +{entry.quantity_added}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                      <div className="md:hidden p-4 space-y-3">
+                          {entries.map((entry) => (
+                            <div key={entry.id} className="text-sm border-b pb-2 last:border-b-0">
+                              <p className="font-semibold">{unslugify(entry.product_name)} ({entry.color_name})</p>
+                              <p className="text-xs text-muted-foreground">{entry.product_model}</p>
+                              <div className="flex justify-between items-center mt-1">
+                                <div>
+                                  <p>Costo: ${entry.cost || 0}</p>
+                                  <p>Precio: ${entry.price || 0}</p>
+                                </div>
+                                <p className="font-bold text-lg text-primary">+{entry.quantity_added}</p>
+                              </div>
+                            </div>
                           ))}
-                        </TableBody>
-                      </Table>
+                      </div>
                       <div className="p-4 bg-muted/50 rounded-b-lg grid grid-cols-2 md:grid-cols-4 gap-4 text-sm font-medium">
                           <div className="text-center">
                             <p className="text-xs text-muted-foreground">Costo Total</p>
                             <p>${totalCost.toLocaleString()}</p>
                           </div>
                           <div className="text-center">
-                            <p className="text-xs text-muted-foreground">Ingreso Total</p>
+                            <p className="text-xs text-muted-foreground">Ingreso Potencial</p>
                             <p>${totalPrice.toLocaleString()}</p>
                           </div>
                           <div className="text-center">

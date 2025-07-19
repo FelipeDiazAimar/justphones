@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useMemo, useState, useEffect } from 'react';
@@ -105,6 +106,8 @@ export default function AdminFinancePage() {
   const [demandCurrentPage, setDemandCurrentPage] = useState(1);
   const [fulfilledDemandCurrentPage, setFulfilledDemandCurrentPage] = useState(1);
   const [allRequestsCurrentPage, setAllRequestsCurrentPage] = useState(1);
+  const [lowStockCurrentPage, setLowStockCurrentPage] = useState(1);
+
 
   const [rentabilidadPaymentMethod, setRentabilidadPaymentMethod] = useState<keyof typeof rentabilidadPaymentOptions>('list');
   const [salesChartView, setSalesChartView] = useState<'daily' | 'monthly' | 'yearly'>('daily');
@@ -378,8 +381,26 @@ export default function AdminFinancePage() {
         }
       });
     });
-    return lowStockItems.sort((a, b) => a.stock - b.stock).slice(0, 5);
+    return lowStockItems.sort((a, b) => a.stock - b.stock);
   }, [products]);
+
+  const paginatedLowStockProducts = useMemo(() => {
+    return lowStockProducts.slice(
+      (lowStockCurrentPage - 1) * ITEMS_PER_PAGE,
+      lowStockCurrentPage * ITEMS_PER_PAGE
+    );
+  }, [lowStockProducts, lowStockCurrentPage]);
+
+  const lowStockTotalPages = Math.ceil(lowStockProducts.length / ITEMS_PER_PAGE);
+
+  const handleLowStockPageChange = (page: number) => {
+    if (page < 1 || page > lowStockTotalPages) return;
+    setLowStockCurrentPage(page);
+    const lowStockSection = document.getElementById('low-stock-section');
+    if (lowStockSection) {
+        lowStockSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
 
   const groupedStockHistory = useMemo(() => {
     if (!stockHistory || stockHistory.length === 0) return [];
@@ -854,7 +875,7 @@ export default function AdminFinancePage() {
         </Card>
       </div>
 
-      <div className="grid gap-4 mt-6">
+      <div id="low-stock-section" className="grid gap-4 mt-6 scroll-mt-24">
         <Card>
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -865,7 +886,7 @@ export default function AdminFinancePage() {
             </CardHeader>
             <CardContent>
                 <div className="space-y-4">
-                    {lowStockProducts.length > 0 ? lowStockProducts.map((item, index) => (
+                    {paginatedLowStockProducts.length > 0 ? paginatedLowStockProducts.map((item, index) => (
                         <div key={`${item.productId}-${item.colorName}-${index}`} className="flex items-center">
                             <div
                                 className="h-4 w-4 rounded-full border mr-3"
@@ -887,6 +908,7 @@ export default function AdminFinancePage() {
                       <p className="text-sm text-muted-foreground text-center py-4">¡Todo en orden! No hay productos con bajo stock.</p>
                     )}
                 </div>
+                {renderPagination(lowStockTotalPages, lowStockCurrentPage, handleLowStockPageChange)}
             </CardContent>
         </Card>
       </div>
@@ -1385,4 +1407,3 @@ export default function AdminFinancePage() {
     </>
   );
 }
-
