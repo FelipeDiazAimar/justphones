@@ -156,6 +156,7 @@ export default function ProductDetailPage() {
     const numValue = parseInt(value, 10);
     if (isNaN(numValue)) {
         return;
+      <Analytics />
     }
     if (numValue > selectedColor.stock) {
         setQuantity(selectedColor.stock);
