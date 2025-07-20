@@ -49,16 +49,16 @@ export function ProductCard({ product }: ProductCardProps) {
             </div>
         )}
 
-        {hasDiscount && <Badge variant="destructive" className="absolute top-2 left-2 z-10">{product.discount}% OFF</Badge>}
+        {hasDiscount && <Badge variant="destructive" className="absolute z-10 scale-75 md:transform-none md:scale-100 transform -rotate-90 origin-top-left top-[72px] left-1 md:top-2 md:left-2">{product.discount}% OFF</Badge>}
         {product.is_new && <Badge className="absolute top-2 right-2 z-10">Nuevo</Badge>}
         
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent"></div>
         
         <div className={cn(
           "relative h-full flex flex-col items-center justify-end px-4 pt-4",
-           hasDiscount ? "pb-4" : "pb-11"
+           !hasDiscount ? "pb-11" : "pb-4"
         )}>
-          <h3 className="text-base font-medium leading-tight mb-1 text-balance">{productName}</h3>
+          <h3 className="text-base font-medium leading-tight mb-1 text-balance text-center">{productName}</h3>
           <div className="flex justify-center space-x-1.5">
               {product.colors.map((color, index) => (
               <span
@@ -71,10 +71,10 @@ export function ProductCard({ product }: ProductCardProps) {
           </div>
           <div className="flex flex-col items-center justify-center min-h-[40px]">
             {hasDiscount ? (
-              <>
+              <div className="flex flex-col items-center">
                 <p className="text-lg font-bold text-primary">${(product.price * (1 - (product.discount ?? 0) / 100)).toLocaleString()}</p>
                 <p className="text-sm text-muted-foreground line-through">${product.price.toLocaleString()}</p>
-              </>
+              </div>
             ) : (
                 <p className="text-lg font-bold text-primary">${product.price.toLocaleString()}</p>
             )}

@@ -156,7 +156,6 @@ export default function ProductDetailPage() {
     const numValue = parseInt(value, 10);
     if (isNaN(numValue)) {
         return;
-      <Analytics />
     }
     if (numValue > selectedColor.stock) {
         setQuantity(selectedColor.stock);
@@ -174,6 +173,7 @@ export default function ProductDetailPage() {
   const isSoldOut = selectedColor.stock === 0;
   
   const productName = unslugify(product.name);
+  const hasDiscount = product.discount && product.discount > 0;
 
   return (
     <MainLayout>
@@ -181,10 +181,20 @@ export default function ProductDetailPage() {
              <div className="block lg:hidden text-center mb-4">
                 <h1 className="text-4xl font-bold tracking-tight">{productName}</h1>
                 <p className="text-xl text-muted-foreground mt-1">{product.model}</p>
-                <p className="text-3xl font-light text-primary mt-2">${product.price}</p>
+                <div className="mt-2 flex flex-col items-center">
+                    {hasDiscount ? (
+                        <div className="flex flex-col items-center">
+                            <p className="text-3xl font-light text-primary">${(product.price * (1 - (product.discount ?? 0) / 100)).toLocaleString()}</p>
+                            <p className="text-lg text-muted-foreground line-through">${product.price.toLocaleString()}</p>
+                        </div>
+                    ) : (
+                        <p className="text-3xl font-light text-primary">${product.price.toLocaleString()}</p>
+                    )}
+                </div>
             </div>
             <div>
                 <div className="w-full relative mb-4">
+                    {hasDiscount && <Badge variant="destructive" className="absolute top-2 left-2 z-10">{product.discount}% OFF</Badge>}
                     <Carousel setApi={setApi} className="rounded-lg overflow-hidden">
                         <CarouselContent>
                             {product.colors.map((color, index) => (
@@ -240,7 +250,16 @@ export default function ProductDetailPage() {
                 <div className="hidden lg:block text-left mb-4">
                     <h1 className="text-4xl font-bold tracking-tight">{productName}</h1>
                     <p className="text-xl text-muted-foreground mt-1">{product.model}</p>
-                    <p className="text-3xl font-light text-primary mt-2">${product.price}</p>
+                     <div className="mt-2 flex flex-col items-start">
+                        {hasDiscount ? (
+                            <div className="flex flex-col items-start">
+                                <p className="text-3xl font-light text-primary">${(product.price * (1 - (product.discount ?? 0) / 100)).toLocaleString()}</p>
+                                <p className="text-lg text-muted-foreground line-through">${product.price.toLocaleString()}</p>
+                            </div>
+                        ) : (
+                            <p className="text-3xl font-light text-primary">${product.price.toLocaleString()}</p>
+                        )}
+                    </div>
                 </div>
 
                 <div className="w-full">

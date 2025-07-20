@@ -135,35 +135,50 @@ export function CartSheet() {
           <>
             <ScrollArea className="flex-1 my-4">
                 <div className="flex flex-col gap-6 px-6">
-                  {cartItems.map((item) => (
-                    <div key={item.id} className="flex items-center gap-4">
-                      <div className="relative h-20 w-20 overflow-hidden rounded-md">
-                        <Image
-                          src={item.color.image || item.product.coverImage}
-                          alt={item.product.name}
-                          fill
-                          className="object-cover"
-                        />
-                      </div>
-                      <div className="flex-1 text-sm">
-                        <h4 className="font-medium">{item.product.name}</h4>
-                        <p className="text-muted-foreground">Color: {item.color.name}</p>
-                        <p className="font-semibold mt-1">${(item.product.price * item.quantity).toLocaleString('es-AR')}</p>
-                        <div className="flex items-center gap-2 mt-2">
-                            <Button variant="outline" size="icon" className="h-6 w-6" onClick={() => updateItemQuantity(item.id, item.quantity - 1)}>
-                                <Minus className="h-3 w-3" />
-                            </Button>
-                            <span>{item.quantity}</span>
-                            <Button variant="outline" size="icon" className="h-6 w-6" onClick={() => updateItemQuantity(item.id, item.quantity + 1)}>
-                                <Plus className="h-3 w-3" />
-                            </Button>
+                  {cartItems.map((item) => {
+                    const hasDiscount = item.product.discount && item.product.discount > 0;
+                    const itemTotalPrice = item.product.price * item.quantity;
+                    const itemDiscountedPrice = hasDiscount ? itemTotalPrice * (1 - (item.product.discount ?? 0) / 100) : itemTotalPrice;
+
+                    return (
+                      <div key={item.id} className="flex items-center gap-4">
+                        <div className="relative h-20 w-20 overflow-hidden rounded-md">
+                          <Image
+                            src={item.color.image || item.product.coverImage}
+                            alt={item.product.name}
+                            fill
+                            className="object-cover"
+                          />
                         </div>
+                        <div className="flex-1 text-sm">
+                          <h4 className="font-medium">{item.product.name}</h4>
+                          <p className="text-muted-foreground">Color: {item.color.name}</p>
+                          <div className="flex items-baseline gap-2 mt-1">
+                            {hasDiscount ? (
+                                <>
+                                    <p className="font-semibold text-primary">${itemDiscountedPrice.toLocaleString('es-AR')}</p>
+                                    <p className="text-sm text-muted-foreground line-through">${itemTotalPrice.toLocaleString('es-AR')}</p>
+                                </>
+                            ) : (
+                                <p className="font-semibold">${itemTotalPrice.toLocaleString('es-AR')}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-2">
+                              <Button variant="outline" size="icon" className="h-6 w-6" onClick={() => updateItemQuantity(item.id, item.quantity - 1)}>
+                                  <Minus className="h-3 w-3" />
+                              </Button>
+                              <span>{item.quantity}</span>
+                              <Button variant="outline" size="icon" className="h-6 w-6" onClick={() => updateItemQuantity(item.id, item.quantity + 1)}>
+                                  <Plus className="h-3 w-3" />
+                              </Button>
+                          </div>
+                        </div>
+                        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive rounded-full" onClick={() => removeFromCart(item.id)}>
+                          <Trash className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive rounded-full" onClick={() => removeFromCart(item.id)}>
-                        <Trash className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
             </ScrollArea>
             <SheetFooter className="mt-auto border-t bg-background px-6 py-2">
@@ -193,7 +208,7 @@ export function CartSheet() {
                     <SelectContent>
                       <SelectItem value="Retiro (Freyre)">Retiro (Freyre)</SelectItem>
                       <SelectItem value="Coordinamos!">¡Coordinamos!</SelectItem>
-                      <SelectItem value="Envío a domicilio (Sin cargo en Freyre)">Envío a domicilio (Sin cargo)</SelectItem>
+                      <SelectItem value="Envío a domicilio (Sin cargo en Freyre)">Envío a domicilio (Sin cargo en Freyre)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

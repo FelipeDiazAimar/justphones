@@ -162,7 +162,12 @@ export function useCartState() {
   }, [cartItems]);
 
   const totalPrice = useMemo(() => {
-    return cartItems.reduce((total, item) => total + item.product.price * item.quantity, 0);
+    return cartItems.reduce((total, item) => {
+      const price = item.product.price;
+      const discount = item.product.discount ?? 0;
+      const itemFinalPrice = discount > 0 ? price * (1 - discount / 100) : price;
+      return total + itemFinalPrice * item.quantity;
+    }, 0);
   }, [cartItems]);
   
   return { cartItems, addToCart, removeFromCart, updateItemQuantity, clearCart, cartCount, totalPrice };
