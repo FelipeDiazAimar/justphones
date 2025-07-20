@@ -88,6 +88,7 @@ const productSchema = z.object({
   name: z.string().min(1, "El nombre es requerido."),
   cost: z.coerce.number().min(0, "El costo debe ser positivo"),
   price: z.coerce.number().min(0, "El precio debe ser positivo"),
+  discount: z.coerce.number().min(0, "El descuento no puede ser negativo.").default(0).optional(),
   coverImage: imageFieldSchema,
   category: z.enum(['case', 'accessory', 'auriculares'], {
     errorMap: () => ({ message: "Categoría debe ser: case, accessory o auriculares" })
@@ -299,6 +300,7 @@ export default function AdminProductsPage() {
       name: '',
       price: 0,
       cost: 0,
+      discount: 0,
       coverImage: '',
       category: 'case',
       model: '',
@@ -470,6 +472,7 @@ export default function AdminProductsPage() {
       name: '',
       price: 0,
       cost: 0,
+      discount: 0,
       coverImage: '',
       category: 'case',
       model: '',
@@ -486,6 +489,7 @@ export default function AdminProductsPage() {
   const handleEditProduct = (product: Product) => {
     reset({
       ...product,
+      discount: product.discount || 0,
       featured: product.featured ?? false,
       is_new: product.is_new ?? false,
     });
@@ -1322,7 +1326,7 @@ export default function AdminProductsPage() {
               {errors.name && <p className="md:col-span-3 md:col-start-2 text-red-500 text-sm">{errors.name.message}</p>}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 items-center gap-2">
                     <Label htmlFor="cost" className="md:text-right">Costo</Label>
                     <Input id="cost" type="number" step="1" {...register('cost')} />
@@ -1332,6 +1336,11 @@ export default function AdminProductsPage() {
                     <Label htmlFor="price" className="md:text-right">Precio</Label>
                     <Input id="price" type="number" step="1" {...register('price')} />
                     {errors.price && <p className="md:col-span-2 text-red-500 text-sm">{errors.price.message}</p>}
+                </div>
+                 <div className="grid grid-cols-1 md:grid-cols-2 items-center gap-2">
+                    <Label htmlFor="discount" className="md:text-right">Descuento (%)</Label>
+                    <Input id="discount" type="number" step="1" {...register('discount')} />
+                    {errors.discount && <p className="md:col-span-2 text-red-500 text-sm">{errors.discount.message}</p>}
                 </div>
             </div>
 

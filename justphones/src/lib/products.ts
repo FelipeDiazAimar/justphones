@@ -12,10 +12,12 @@ export type Product = {
   name: string;
   cost: number;
   price: number;
+  discount?: number;
   coverImage: string;
   colors: ProductColor[];
   category: 'case' | 'accessory' | 'auriculares';
   model: string;
   featured?: boolean;
   is_new?: boolean;
+  subCategory?: string;
 };
