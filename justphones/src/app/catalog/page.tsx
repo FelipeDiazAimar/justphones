@@ -1,9 +1,10 @@
 
 "use client"
 
-import React, { useRef, useState, useMemo } from 'react';
+import React, { useRef, useState, useMemo, Suspense } from 'react';
 import { Analytics } from "@vercel/analytics/next";
 import Image from 'next/image';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Autoplay from "embla-carousel-autoplay"
 import { MainLayout } from '@/components/main-layout';
 import type { Product } from '@/lib/products';
@@ -23,10 +24,14 @@ import { useCarouselImages } from '@/hooks/use-carousel-images';
 
 const ITEMS_PER_PAGE = 8;
 
-export default function CatalogPage() {
+function CatalogPageContent() {
   const { products, isLoading: isLoadingProducts } = useProducts();
   const { carouselImages, isLoading: isLoadingCarousel } = useCarouselImages();
-  const [currentPage, setCurrentPage] = useState(1);
+  
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const currentPage = Number(searchParams.get('page')) || 1;
+  
   const plugin = useRef(
     Autoplay({ delay: 5000, stopOnInteraction: true, stopOnMouseEnter: true })
   );
@@ -53,7 +58,9 @@ export default function CatalogPage() {
 
   const handlePageChange = (page: number) => {
     if (page < 1 || page > totalPages) return;
-    setCurrentPage(page);
+    const params = new URLSearchParams(searchParams);
+    params.set('page', String(page));
+    router.push(`?${params.toString()}`);
     const allProductsSection = document.getElementById('all-products-section');
     if (allProductsSection) {
       allProductsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -206,8 +213,35 @@ export default function CatalogPage() {
             </div>
           )}
       </div>
-      <Analytics />
     </MainLayout>
   );
 }
 
+export default function CatalogPage() {
+  return (
+    <Suspense fallback={
+      <MainLayout>
+        <Skeleton className="h-48 w-full mb-8" />
+        <Skeleton className="w-full aspect-[16/9] lg:aspect-[3/1] rounded-lg mb-12" />
+        <div className="mb-12">
+          <Skeleton className="h-9 w-1/4 mb-6" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="w-full aspect-[3/5]" />
+            ))}
+          </div>
+        </div>
+        <div>
+          <Skeleton className="h-9 w-1/3 mb-6" />
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} className="w-full aspect-[3/5]" />
+            ))}
+          </div>
+        </div>
+      </MainLayout>
+    }>
+      <CatalogPageContent />
+    </Suspense>
+  );
+}

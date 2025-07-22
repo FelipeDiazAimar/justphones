@@ -3,7 +3,7 @@
 
 import React, { useState, useMemo, useEffect, Suspense } from 'react';
 import { Analytics } from "@vercel/analytics/next";
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { MainLayout } from '@/components/main-layout';
 import type { Product } from '@/lib/products';
 import { ProductCard } from '@/components/product-card';
@@ -23,8 +23,11 @@ function CasesCatalogPageContent() {
   const { products, isLoading: isLoadingProducts } = useProducts();
   const { subcategories, isLoading: isLoadingSubcategories } = useSubcategories();
   const searchParams = useSearchParams();
+  const router = useRouter();
+
   const subCategoryParam = searchParams.get('subCategory');
   const searchQuery = searchParams.get('q');
+  const currentPage = Number(searchParams.get('page')) || 1;
 
   const [filters, setFilters] = useState({
     colors: [] as string[],
@@ -33,7 +36,6 @@ function CasesCatalogPageContent() {
     sortBy: 'name-asc',
     subCategories: [] as string[],
   });
-  const [currentPage, setCurrentPage] = useState(1);
   
   const isLoading = isLoadingProducts || isLoadingSubcategories;
 
@@ -51,12 +53,16 @@ function CasesCatalogPageContent() {
   }, [caseProducts, filters.priceRange]);
 
   useEffect(() => {
+    const params = new URLSearchParams(searchParams);
     if (subCategoryParam) {
       setFilters(f => ({ ...f, subCategories: [subCategoryParam] }));
     } else {
       setFilters(f => ({ ...f, subCategories: [] }));
     }
-  }, [subCategoryParam]);
+    params.set('page', '1');
+    router.replace(`?${params.toString()}`, {scroll: false});
+
+  }, [subCategoryParam, router]);
 
 
   const filteredProducts = useMemo(() => {
@@ -88,8 +94,10 @@ function CasesCatalogPageContent() {
   }, [filters, caseProducts, searchQuery]);
 
   React.useEffect(() => {
-    setCurrentPage(1);
-  }, [filters, searchQuery]);
+    const params = new URLSearchParams(searchParams);
+    params.set('page', '1');
+    router.replace(`?${params.toString()}`, {scroll: false});
+  }, [filters, searchQuery, router]);
 
   const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE);
   const paginatedProducts = useMemo(() => {
@@ -101,7 +109,9 @@ function CasesCatalogPageContent() {
 
   const handlePageChange = (page: number) => {
     if (page < 1 || page > totalPages) return;
-    setCurrentPage(page);
+    const params = new URLSearchParams(searchParams);
+    params.set('page', String(page));
+    router.push(`?${params.toString()}`);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
   
@@ -234,7 +244,6 @@ function CasesCatalogPageContent() {
           </div>
         </div>
       </div>
-      <Analytics />
     </MainLayout>
   );
 }

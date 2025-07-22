@@ -3,7 +3,7 @@
 
 import React, { useState, useMemo, useEffect, Suspense } from 'react';
 import { Analytics } from "@vercel/analytics/next";
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { MainLayout } from '@/components/main-layout';
 import type { Product } from '@/lib/products';
 import { ProductCard } from '@/components/product-card';
@@ -20,10 +20,11 @@ const ITEMS_PER_PAGE = 12;
 function SearchResultsPageContent() {
   const { products, isLoading } = useProducts();
   const searchParams = useSearchParams();
-  const query = searchParams.get('q');
-  
-  const [currentPage, setCurrentPage] = useState(1);
+  const router = useRouter();
 
+  const query = searchParams.get('q');
+  const currentPage = Number(searchParams.get('page')) || 1;
+  
   const filteredProducts = useMemo(() => {
     if (!query) return [];
     
@@ -36,8 +37,10 @@ function SearchResultsPageContent() {
   }, [query, products]);
 
   useEffect(() => {
-    setCurrentPage(1);
-  }, [query]);
+    const params = new URLSearchParams(searchParams);
+    params.set('page', '1');
+    router.replace(`?${params.toString()}`, {scroll: false});
+  }, [query, router]);
 
   const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE);
   const paginatedProducts = useMemo(() => {
@@ -49,7 +52,9 @@ function SearchResultsPageContent() {
 
   const handlePageChange = (page: number) => {
     if (page < 1 || page > totalPages) return;
-    setCurrentPage(page);
+    const params = new URLSearchParams(searchParams);
+    params.set('page', String(page));
+    router.push(`?${params.toString()}`);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
   
