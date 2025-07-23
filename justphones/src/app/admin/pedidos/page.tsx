@@ -6,7 +6,7 @@ import { useSales } from '@/hooks/use-sales';
 import { useProducts } from '@/hooks/use-products';
 import { useCustomerRequests } from '@/hooks/use-customer-requests';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { AlertTriangle, ArrowRight, ShoppingBasket, History, CheckCircle2, ChevronDown } from 'lucide-react';
+import { AlertTriangle, ArrowRight, ShoppingBasket, History, CheckCircle2, ChevronDown, Edit, Trash, Plus, Minus } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { unslugify } from '@/lib/utils';
 import Link from 'next/link';
@@ -14,18 +14,98 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { useToast } from '@/hooks/use-toast';
+import type { CustomerRequest } from '@/lib/customer-requests';
+
 
 const ITEMS_PER_PAGE = 5;
+
+const editRequestSchema = z.object({
+  id: z.string(),
+  product_id: z.string().min(1, "Debe seleccionar un producto."),
+  color_hex: z.string().min(1, "Debe seleccionar un color."),
+  quantity: z.coerce.number().min(1, "La cantidad debe ser al menos 1."),
+});
+
 
 export default function AdminPedidosPage() {
   const { sales, isLoading: isLoadingSales } = useSales();
   const { products, isLoading: isLoadingProducts } = useProducts();
-  const { customerRequests, isLoading: isLoadingRequests } = useCustomerRequests();
+  const { customerRequests, updateCustomerRequest, deleteCustomerRequest, isLoading: isLoadingRequests } = useCustomerRequests();
+  const { toast } = useToast();
   
   const [allRequestsCurrentPage, setAllRequestsCurrentPage] = useState(1);
   const [lowStockCurrentPage, setLowStockCurrentPage] = useState(1);
   const [demandCurrentPage, setDemandCurrentPage] = useState(1);
   const [fulfilledDemandCurrentPage, setFulfilledDemandCurrentPage] = useState(1);
+  const [isEditRequestDialogOpen, setIsEditRequestDialogOpen] = useState(false);
+  const [editingRequest, setEditingRequest] = useState<CustomerRequest | null>(null);
+
+  const {
+    control: controlEditRequest,
+    handleSubmit: handleSubmitEditRequest,
+    reset: resetEditRequest,
+    watch: watchEditRequest,
+    setValue: setEditRequestValue,
+    formState: { errors: errorsEditRequest },
+  } = useForm<z.infer<typeof editRequestSchema>>({
+    resolver: zodResolver(editRequestSchema),
+  });
+
+  const watchedEditProductId = watchEditRequest('product_id');
+  const selectedEditProduct = useMemo(() => {
+    return products.find(p => p.id === watchedEditProductId);
+  }, [products, watchedEditProductId]);
+
+  const handleEditRequest = (request: CustomerRequest) => {
+    setEditingRequest(request);
+    resetEditRequest({
+      id: request.id,
+      product_id: request.product_id,
+      color_hex: request.color_hex,
+      quantity: request.quantity,
+    });
+    setIsEditRequestDialogOpen(true);
+  };
+
+  const handleDeleteRequest = async (requestId: string) => {
+    const success = await deleteCustomerRequest(requestId);
+    if(success) toast({ title: "Pedido de cliente eliminado" });
+  };
+  
+  const onEditRequestSubmit = async (data: z.infer<typeof editRequestSchema>) => {
+    if (!editingRequest || !selectedEditProduct) return;
+    
+    const selectedColor = selectedEditProduct.colors.find(c => c.hex === data.color_hex);
+    if (!selectedColor) {
+      toast({ variant: 'destructive', title: 'Error', description: 'El color seleccionado no es válido para este producto.' });
+      return;
+    }
+    
+    const updateData = {
+      product_id: data.product_id,
+      product_name: selectedEditProduct.name,
+      product_model: selectedEditProduct.model,
+      color_name: selectedColor.name,
+      color_hex: selectedColor.hex,
+      quantity: data.quantity,
+    };
+
+    const success = await updateCustomerRequest(editingRequest.id, updateData);
+    if (success) {
+      toast({ title: 'Pedido de cliente actualizado'});
+      setIsEditRequestDialogOpen(false);
+      setEditingRequest(null);
+    }
+  };
 
   const isLoading = isLoadingSales || isLoadingProducts || isLoadingRequests;
 
@@ -221,6 +301,7 @@ export default function AdminPedidosPage() {
   };
   
   return (
+    <>
     <div className="space-y-6">
       <div id="low-stock-section" className="scroll-mt-24">
         <Card>
@@ -464,6 +545,7 @@ export default function AdminPedidosPage() {
                     <TableHead>Color</TableHead>
                     <TableHead className="text-center">Cantidad Pedida</TableHead>
                     <TableHead className="text-right">Fecha</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -481,10 +563,38 @@ export default function AdminPedidosPage() {
                       </TableCell>
                       <TableCell className="text-center">{request.quantity}</TableCell>
                       <TableCell className="text-right">{new Date(request.created_at).toLocaleDateString('es-ES')}</TableCell>
+                      <TableCell className="text-right">
+                          <div className="flex items-center justify-end space-x-2">
+                              <Button variant="ghost" size="icon" onClick={() => handleEditRequest(request)} className="rounded-full">
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive rounded-full">
+                                          <Trash className="h-4 w-4" />
+                                      </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                          <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                                          <AlertDialogDescription>
+                                              Esta acción no se puede deshacer. Esto eliminará permanentemente el pedido del cliente.
+                                          </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                          <AlertDialogAction onClick={() => handleDeleteRequest(request.id)} className="bg-destructive hover:bg-destructive/90">
+                                              Eliminar
+                                          </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                  </AlertDialogContent>
+                              </AlertDialog>
+                          </div>
+                      </TableCell>
                     </TableRow>
                   )) : (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center h-24">No hay pedidos de clientes registrados.</TableCell>
+                      <TableCell colSpan={5} className="text-center h-24">No hay pedidos de clientes registrados.</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
@@ -508,6 +618,32 @@ export default function AdminPedidosPage() {
                                 <p className="text-xs text-muted-foreground mt-1">{new Date(request.created_at).toLocaleDateString('es-ES')}</p>
                             </div>
                         </div>
+                        <div className="flex justify-end items-center gap-2 mt-2 pt-2 border-t">
+                             <Button variant="ghost" size="icon" onClick={() => handleEditRequest(request)} className="rounded-full">
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive rounded-full">
+                                          <Trash className="h-4 w-4" />
+                                      </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                          <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                                          <AlertDialogDescription>
+                                              Esta acción no se puede deshacer. Esto eliminará permanentemente el pedido del cliente.
+                                          </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                          <AlertDialogAction onClick={() => handleDeleteRequest(request.id)} className="bg-destructive hover:bg-destructive/90">
+                                              Eliminar
+                                          </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                  </AlertDialogContent>
+                              </AlertDialog>
+                        </div>
                     </Card>
                 )) : (
                     <p className="text-center h-24 flex items-center justify-center text-muted-foreground">No hay pedidos de clientes registrados.</p>
@@ -518,5 +654,79 @@ export default function AdminPedidosPage() {
         </Card>
       </div>
     </div>
+    <Dialog open={isEditRequestDialogOpen} onOpenChange={setIsEditRequestDialogOpen}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Editar Pedido de Cliente</DialogTitle>
+                <DialogDescription>
+                    Modifica los detalles del pedido registrado.
+                </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSubmitEditRequest(onEditRequestSubmit)} className="space-y-4 py-4">
+                <div className="space-y-2">
+                    <Label htmlFor="product_id">Producto</Label>
+                    <Controller
+                        name="product_id"
+                        control={controlEditRequest}
+                        render={({ field }) => (
+                            <Select onValueChange={(value) => {
+                                field.onChange(value);
+                                setEditRequestValue('color_hex', '');
+                            }} value={field.value}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Seleccionar producto" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {products.map(p => (
+                                        <SelectItem key={p.id} value={p.id}>{unslugify(p.name)} ({p.model})</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
+                    />
+                    {errorsEditRequest.product_id && <p className="text-red-500 text-sm">{errorsEditRequest.product_id.message}</p>}
+                </div>
+                {selectedEditProduct && (
+                    <div className="space-y-2">
+                        <Label htmlFor="color_hex">Color</Label>
+                        <Controller
+                            name="color_hex"
+                            control={controlEditRequest}
+                            render={({ field }) => (
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Seleccionar color" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {selectedEditProduct.colors.map(c => (
+                                            <SelectItem key={c.hex} value={c.hex}>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="h-4 w-4 rounded-full border" style={{backgroundColor: c.hex}}/>
+                                                    {c.name}
+                                                </div>
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
+                        />
+                        {errorsEditRequest.color_hex && <p className="text-red-500 text-sm">{errorsEditRequest.color_hex.message}</p>}
+                    </div>
+                )}
+                 <div className="space-y-2">
+                    <Label htmlFor="quantity">Cantidad</Label>
+                    <Input id="quantity" type="number" {...controlEditRequest.register('quantity')} />
+                    {errorsEditRequest.quantity && <p className="text-red-500 text-sm">{errorsEditRequest.quantity.message}</p>}
+                </div>
+                <DialogFooter>
+                    <DialogClose asChild>
+                        <Button type="button" variant="secondary">Cancelar</Button>
+                    </DialogClose>
+                    <Button type="submit">Guardar Cambios</Button>
+                </DialogFooter>
+            </form>
+        </DialogContent>
+    </Dialog>
+    </>
   );
 }

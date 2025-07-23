@@ -7,7 +7,7 @@ import { useProducts } from '@/hooks/use-products';
 import { useProductViews } from '@/hooks/use-product-views';
 import { useCustomerRequests } from '@/hooks/use-customer-requests';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { DollarSign, ShoppingCart, Package, TrendingUp, AlertTriangle, Eye, HelpCircle, ArrowDownUp, TrendingDown, ChevronsUpDown, Percent, BarChart, PackageSearch, Activity, Coins, Goal, History } from 'lucide-react';
+import { DollarSign, ShoppingCart, Package, TrendingUp, AlertTriangle, Eye, HelpCircle, ArrowDownUp, TrendingDown, ChevronsUpDown, Percent, BarChart, PackageSearch, Activity, Coins, Goal, History, PlusCircle, Trash, ChevronDown } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend, Tooltip as RechartsTooltip, XAxis, YAxis, CartesianGrid, BarChart as RechartsBarChart, Bar } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
 import { unslugify } from '@/lib/utils';
@@ -21,8 +21,13 @@ import type { Product } from '@/lib/products';
 import { useStockHistory } from '@/hooks/use-stock-history';
 import type { StockHistory } from '@/lib/stock-history';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { getWeek, getYear, format, parseISO, startOfToday, startOfWeek, startOfMonth, startOfYear, isAfter } from 'date-fns';
+import { getWeek, getYear, format, parseISO, startOfToday, startOfWeek, startOfMonth, startOfYear, isAfter, getDaysInMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { useFixedCosts } from '@/hooks/use-fixed-costs';
+import { useForm, useFormState } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { Label } from '@/components/ui/label';
 
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
@@ -34,6 +39,11 @@ const rentabilidadPaymentOptions = {
     cash: { label: 'Efectivo/Transferencia (20% OFF)', discount: 0.2 },
     debit: { label: 'Tarjeta de Débito (10% OFF)', discount: 0.1 },
 };
+
+const fixedCostSchema = z.object({
+    name: z.string().min(1, "El nombre es requerido."),
+    amount: z.coerce.number().min(0.01, "El monto debe ser mayor a 0."),
+});
 
 const EditablePriceCell = ({ product, field, value }: { product: Product; field: 'cost' | 'price'; value: number }) => {
     const { updateProduct } = useProducts();
@@ -94,6 +104,7 @@ export default function AdminFinancePage() {
   const { productViews, isLoading: isLoadingViews } = useProductViews();
   const { customerRequests, isLoading: isLoadingRequests } = useCustomerRequests();
   const { stockHistory, isLoading: isLoadingStockHistory } = useStockHistory();
+  const { fixedCosts, addFixedCost, deleteFixedCost, isLoading: isLoadingFixedCosts } = useFixedCosts();
   
   const [sortPopularityBy, setSortPopularityBy] = useState<'sales' | 'requests' | 'views'>('sales');
   
@@ -112,18 +123,39 @@ export default function AdminFinancePage() {
     direction: 'asc' | 'desc';
   }>({ column: 'profit', direction: 'desc' });
 
-  const isLoading = isLoadingSales || isLoadingProducts || isLoadingViews || isLoadingStockHistory || isLoadingRequests;
+  const { toast } = useToast();
+
+  const {
+      register: registerFixedCost,
+      handleSubmit: handleSubmitFixedCost,
+      reset: resetFixedCost,
+      formState: { errors: errorsFixedCost },
+  } = useForm<z.infer<typeof fixedCostSchema>>({
+      resolver: zodResolver(fixedCostSchema),
+  });
+
+  const onFixedCostSubmit = async (data: z.infer<typeof fixedCostSchema>) => {
+      const success = await addFixedCost(data);
+      if (success) {
+          toast({ title: "Costo Fijo Añadido" });
+          resetFixedCost({ name: '', amount: 0 });
+      }
+  };
+
+
+  const isLoading = isLoadingSales || isLoadingProducts || isLoadingViews || isLoadingStockHistory || isLoadingRequests || isLoadingFixedCosts;
 
   const stats = useMemo(() => {
     const productsMap = new Map(products.map(p => [p.id, p]));
+    const today = new Date();
     
     const filteredSales = sales.filter(sale => {
       const saleDate = parseISO(sale.created_at);
       switch(statsPeriod) {
         case 'daily': return isAfter(saleDate, startOfToday());
-        case 'weekly': return isAfter(saleDate, startOfWeek(new Date(), { weekStartsOn: 1 }));
-        case 'monthly': return isAfter(saleDate, startOfMonth(new Date()));
-        case 'yearly': return isAfter(saleDate, startOfYear(new Date()));
+        case 'weekly': return isAfter(saleDate, startOfWeek(today, { weekStartsOn: 1 }));
+        case 'monthly': return isAfter(saleDate, startOfMonth(today));
+        case 'yearly': return isAfter(saleDate, startOfYear(today));
         case 'all':
         default: return true;
       }
@@ -135,8 +167,28 @@ export default function AdminFinancePage() {
         const product = productsMap.get(sale.product_id);
         return acc + (product ? (product as any).cost * sale.quantity : 0);
     }, 0);
+    
+    const monthlyFixedCosts = fixedCosts.reduce((acc, cost) => acc + cost.amount, 0);
+    let applicableFixedCosts = 0;
+    const daysInMonth = getDaysInMonth(today);
 
-    const totalProfit = totalRevenue - totalCostOfGoodsSold;
+    switch(statsPeriod) {
+        case 'daily': 
+            applicableFixedCosts = monthlyFixedCosts / daysInMonth;
+            break;
+        case 'weekly':
+            applicableFixedCosts = (monthlyFixedCosts / daysInMonth) * 7;
+            break;
+        case 'monthly':
+        case 'yearly':
+        case 'all':
+        default:
+            applicableFixedCosts = monthlyFixedCosts;
+            break;
+    }
+
+    const totalCosts = totalCostOfGoodsSold + applicableFixedCosts;
+    const totalProfit = totalRevenue - totalCosts;
     
     const totalCapitalInStock = products.reduce((acc, product) => {
         const stock = (product as any).colors.reduce((sum: number, color: any) => sum + color.stock, 0);
@@ -153,12 +205,12 @@ export default function AdminFinancePage() {
     return {
       totalRevenue,
       totalProfit,
-      totalCostOfGoodsSold,
+      totalCosts,
       totalCapitalInStock,
       totalItemsSoldCount,
       conversionRate,
     };
-  }, [sales, products, customerRequests, statsPeriod]);
+  }, [sales, products, customerRequests, statsPeriod, fixedCosts]);
 
   const salesChartData = useMemo(() => {
     if (salesChartView === 'daily') {
@@ -576,16 +628,16 @@ export default function AdminFinancePage() {
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${stats.totalProfit.toLocaleString()}</div>
+            <div className="text-2xl font-bold">${stats.totalProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Costos Totales (Ventas)</CardTitle>
+            <CardTitle className="text-sm font-medium">Costos Totales</CardTitle>
             <TrendingDown className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${stats.totalCostOfGoodsSold.toLocaleString()}</div>
+            <div className="text-2xl font-bold">${stats.totalCosts.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
           </CardContent>
         </Card>
         <Card>
@@ -790,6 +842,65 @@ export default function AdminFinancePage() {
          </Card>
       </div>
 
+      <div id="fixed-costs-section" className="mt-6 scroll-mt-24">
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                    <DollarSign className="h-5 w-5 text-primary" />
+                    Gestión de Costos Fijos
+                </CardTitle>
+                <CardDescription>
+                    Añade costos operativos para un cálculo de ganancias más preciso.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <form onSubmit={handleSubmitFixedCost(onFixedCostSubmit)} className="flex flex-col sm:flex-row items-end gap-4 mb-6">
+                    <div className="flex-grow w-full space-y-2">
+                        <Label htmlFor="cost-name">Nombre del Costo</Label>
+                        <Input id="cost-name" {...registerFixedCost('name')} placeholder="Ej: Gasolina, Bolsas" />
+                        {errorsFixedCost.name && <p className="text-sm text-destructive">{errorsFixedCost.name.message}</p>}
+                    </div>
+                    <div className="w-full sm:w-auto space-y-2">
+                        <Label htmlFor="cost-amount">Monto</Label>
+                        <Input id="cost-amount" type="number" {...registerFixedCost('amount')} placeholder="1000" />
+                        {errorsFixedCost.amount && <p className="text-sm text-destructive">{errorsFixedCost.amount.message}</p>}
+                    </div>
+                    <Button type="submit" className="w-full sm:w-auto">
+                        <PlusCircle className="mr-2 h-4 w-4" /> Añadir
+                    </Button>
+                </form>
+                <div className="border rounded-lg">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Nombre</TableHead>
+                                <TableHead className="text-right">Monto</TableHead>
+                                <TableHead className="text-right w-[100px]">Acción</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {fixedCosts.length > 0 ? fixedCosts.map((cost) => (
+                                <TableRow key={cost.id}>
+                                    <TableCell className="font-medium">{cost.name}</TableCell>
+                                    <TableCell className="text-right">${cost.amount.toLocaleString()}</TableCell>
+                                    <TableCell className="text-right">
+                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive rounded-full" onClick={() => deleteFixedCost(cost.id)}>
+                                            <Trash className="h-4 w-4" />
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            )) : (
+                                <TableRow>
+                                    <TableCell colSpan={3} className="h-24 text-center">No hay costos fijos registrados.</TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
+            </CardContent>
+        </Card>
+      </div>
+
       <div id="rentabilidad-section" className="mt-6 scroll-mt-24">
         <Card>
             <CardHeader>
@@ -966,3 +1077,7 @@ export default function AdminFinancePage() {
     </>
   );
 }
+
+    
+
+    

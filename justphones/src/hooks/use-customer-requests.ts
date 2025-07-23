@@ -10,6 +10,8 @@ interface CustomerRequestsContextType {
   customerRequests: CustomerRequest[];
   isLoading: boolean;
   addCustomerRequest: (requestData: Omit<CustomerRequest, 'id' | 'created_at'>) => Promise<boolean>;
+  updateCustomerRequest: (requestId: string, requestData: Partial<Omit<CustomerRequest, 'id' | 'created_at'>>) => Promise<boolean>;
+  deleteCustomerRequest: (requestId: string) => Promise<boolean>;
 }
 
 const CustomerRequestsContext = createContext<CustomerRequestsContextType | undefined>(undefined);
@@ -64,9 +66,32 @@ export function CustomerRequestsProvider({ children }: { children: ReactNode }) 
     return true;
   };
   
+  const updateCustomerRequest = async (requestId: string, requestData: Partial<Omit<CustomerRequest, 'id' | 'created_at'>>) => {
+    const { error } = await supabase.from('customer_requests').update(requestData).eq('id', requestId);
+    if (error) {
+      console.error('Error updating customer request:', error.message);
+      toast({ variant: 'destructive', title: 'Error', description: `No se pudo actualizar el pedido: ${error.message}` });
+      return false;
+    }
+    await fetchCustomerRequests();
+    return true;
+  };
+
+  const deleteCustomerRequest = async (requestId: string) => {
+    const { error } = await supabase.from('customer_requests').delete().eq('id', requestId);
+    if (error) {
+      console.error('Error deleting customer request:', error.message);
+      toast({ variant: 'destructive', title: 'Error', description: `No se pudo eliminar el pedido: ${error.message}` });
+      return false;
+    }
+    await fetchCustomerRequests();
+    return true;
+  };
+
+  
   return React.createElement(
     CustomerRequestsContext.Provider,
-    { value: { customerRequests, isLoading, addCustomerRequest } },
+    { value: { customerRequests, isLoading, addCustomerRequest, updateCustomerRequest, deleteCustomerRequest } },
     children
   );
 }
