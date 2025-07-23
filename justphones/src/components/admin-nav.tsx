@@ -13,6 +13,7 @@ const navItems = [
   { href: '/admin/faqs', label: 'Preguntas Frecuentes' },
   { href: '/admin/carousel', label: 'Carrusel' },
   { href: '/admin/finance', label: 'Finanzas' },
+  { href: '/admin/pedidos', label: 'Pedidos' },
 ];
 
 export function AdminNav() {

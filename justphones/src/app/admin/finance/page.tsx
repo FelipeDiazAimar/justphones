@@ -7,23 +7,21 @@ import { useProducts } from '@/hooks/use-products';
 import { useProductViews } from '@/hooks/use-product-views';
 import { useCustomerRequests } from '@/hooks/use-customer-requests';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { DollarSign, ShoppingCart, Package, ArrowRight, TrendingUp, AlertTriangle, Eye, HelpCircle, ArrowDownUp, TrendingDown, ChevronsUpDown, Percent, BarChart, ChevronDown, PackageSearch, Activity, Coins, Goal, ShoppingBasket, History, CheckCircle2 } from 'lucide-react';
+import { DollarSign, ShoppingCart, Package, TrendingUp, AlertTriangle, Eye, HelpCircle, ArrowDownUp, TrendingDown, ChevronsUpDown, Percent, BarChart, PackageSearch, Activity, Coins, Goal, History } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend, Tooltip as RechartsTooltip, XAxis, YAxis, CartesianGrid, BarChart as RechartsBarChart, Bar } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
 import { unslugify } from '@/lib/utils';
-import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
-import { cn } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import type { Product } from '@/lib/products';
 import { useStockHistory } from '@/hooks/use-stock-history';
 import type { StockHistory } from '@/lib/stock-history';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { getWeek, getYear, format, startOfWeek, endOfWeek, parseISO, startOfToday, startOfYesterday, startOfMonth, startOfYear, isAfter } from 'date-fns';
+import { getWeek, getYear, format, parseISO, startOfToday, startOfWeek, startOfMonth, startOfYear, isAfter } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 
@@ -96,18 +94,12 @@ export default function AdminFinancePage() {
   const { productViews, isLoading: isLoadingViews } = useProductViews();
   const { customerRequests, isLoading: isLoadingRequests } = useCustomerRequests();
   const { stockHistory, isLoading: isLoadingStockHistory } = useStockHistory();
-  const { toast } = useToast();
   
   const [sortPopularityBy, setSortPopularityBy] = useState<'sales' | 'requests' | 'views'>('sales');
   
   const [popularityCurrentPage, setPopularityCurrentPage] = useState(1);
   const [rentabilidadCurrentPage, setRentabilidadCurrentPage] = useState(1);
   const [pedidosCurrentPage, setPedidosCurrentPage] = useState(1);
-  const [demandCurrentPage, setDemandCurrentPage] = useState(1);
-  const [fulfilledDemandCurrentPage, setFulfilledDemandCurrentPage] = useState(1);
-  const [allRequestsCurrentPage, setAllRequestsCurrentPage] = useState(1);
-  const [lowStockCurrentPage, setLowStockCurrentPage] = useState(1);
-
 
   const [rentabilidadPaymentMethod, setRentabilidadPaymentMethod] = useState<keyof typeof rentabilidadPaymentOptions>('list');
   const [salesChartView, setSalesChartView] = useState<'daily' | 'monthly' | 'yearly'>('daily');
@@ -365,43 +357,6 @@ export default function AdminFinancePage() {
     }
   };
 
-  const lowStockProducts = useMemo(() => {
-    const lowStockItems: any[] = [];
-    products.forEach(product => {
-      product.colors.forEach(color => {
-        if (color.stock <= 5 && color.stock > 0) {
-          lowStockItems.push({
-            productId: product.id,
-            productName: unslugify(product.name),
-            productModel: product.model,
-            colorName: color.name,
-            colorHex: color.hex,
-            stock: color.stock
-          });
-        }
-      });
-    });
-    return lowStockItems.sort((a, b) => a.stock - b.stock);
-  }, [products]);
-
-  const paginatedLowStockProducts = useMemo(() => {
-    return lowStockProducts.slice(
-      (lowStockCurrentPage - 1) * ITEMS_PER_PAGE,
-      lowStockCurrentPage * ITEMS_PER_PAGE
-    );
-  }, [lowStockProducts, lowStockCurrentPage]);
-
-  const lowStockTotalPages = Math.ceil(lowStockProducts.length / ITEMS_PER_PAGE);
-
-  const handleLowStockPageChange = (page: number) => {
-    if (page < 1 || page > lowStockTotalPages) return;
-    setLowStockCurrentPage(page);
-    const lowStockSection = document.getElementById('low-stock-section');
-    if (lowStockSection) {
-        lowStockSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  };
-
   const groupedStockHistory = useMemo(() => {
     if (!stockHistory || stockHistory.length === 0) return [];
   
@@ -465,7 +420,6 @@ export default function AdminFinancePage() {
   const profitChartData = useMemo(() => {
     const productsMap = new Map(products.map(p => [p.id, p]));
     const initialAccumulator = { profit: 0, cost: 0 };
-    type ChartDataPoint = { date: string; profit: number; cost: number };
   
     const processSales = (salesToProcess: typeof sales, dateFn: (sale: typeof sales[number]) => string) => {
         const groupedData = salesToProcess.reduce((acc, sale) => {
@@ -520,99 +474,6 @@ export default function AdminFinancePage() {
     }
     return [];
   }, [profitChartView, sales, products, groupedStockHistory]);
-
-  const unfulfilledDemand = useMemo(() => {
-    const requestedQuantities: Record<string, { data: any, requested: number }> = {};
-    customerRequests.forEach(req => {
-        const key = `${req.product_id}-${req.color_hex}`;
-        if (!requestedQuantities[key]) {
-            requestedQuantities[key] = {
-                data: req,
-                requested: 0,
-            };
-        }
-        requestedQuantities[key].requested += req.quantity;
-    });
-
-    const soldQuantities: Record<string, number> = {};
-    sales.forEach(sale => {
-        const key = `${sale.product_id}-${sale.color_hex}`;
-        if (!soldQuantities[key]) {
-            soldQuantities[key] = 0;
-        }
-        soldQuantities[key] += sale.quantity;
-    });
-
-    return Object.values(requestedQuantities)
-        .map(({ data, requested }) => {
-            const key = `${data.product_id}-${data.color_hex}`;
-            const sold = soldQuantities[key] || 0;
-            const pending = requested - sold;
-            if (pending > 0) {
-                return {
-                    id: key,
-                    ...data,
-                    requested,
-                    sold,
-                    pending,
-                };
-            }
-            return null;
-        })
-        .filter(item => item !== null)
-        .sort((a,b) => b!.pending - a!.pending);
-  }, [customerRequests, sales]);
-
-  const paginatedDemand = useMemo(() => {
-    return unfulfilledDemand.slice(
-      (demandCurrentPage - 1) * ITEMS_PER_PAGE,
-      demandCurrentPage * ITEMS_PER_PAGE
-    );
-  }, [unfulfilledDemand, demandCurrentPage]);
-
-  const demandTotalPages = Math.ceil(unfulfilledDemand.length / ITEMS_PER_PAGE);
-
-  const handleDemandPageChange = (page: number) => {
-    if (page < 1 || page > demandTotalPages) return;
-    setDemandCurrentPage(page);
-    const demandSection = document.getElementById('unfulfilled-demand-section');
-    if (demandSection) {
-      demandSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  };
-
-  const paginatedFulfilledDemand = useMemo(() => {
-    return sales.slice(
-      (fulfilledDemandCurrentPage - 1) * ITEMS_PER_PAGE,
-      fulfilledDemandCurrentPage * ITEMS_PER_PAGE
-    );
-  }, [sales, fulfilledDemandCurrentPage]);
-  
-  const fulfilledDemandTotalPages = Math.ceil(sales.length / ITEMS_PER_PAGE);
-
-  const handleFulfilledDemandPageChange = (page: number) => {
-    if (page < 1 || page > fulfilledDemandTotalPages) return;
-    setFulfilledDemandCurrentPage(page);
-    const section = document.getElementById('fulfilled-demand-section');
-    if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-  
-  const paginatedAllRequests = useMemo(() => {
-    const sortedRequests = [...customerRequests].sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    return sortedRequests.slice(
-      (allRequestsCurrentPage - 1) * ITEMS_PER_PAGE,
-      allRequestsCurrentPage * ITEMS_PER_PAGE
-    );
-  }, [customerRequests, allRequestsCurrentPage]);
-  
-  const allRequestsTotalPages = Math.ceil(customerRequests.length / ITEMS_PER_PAGE);
-  
-  const handleAllRequestsPageChange = (page: number) => {
-    if (page < 1 || page > allRequestsTotalPages) return;
-    setAllRequestsCurrentPage(page);
-    const section = document.getElementById('all-requests-section');
-    if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
 
 
   if (isLoading) {
@@ -875,302 +736,6 @@ export default function AdminFinancePage() {
         </Card>
       </div>
 
-      <div id="low-stock-section" className="grid gap-4 mt-6 scroll-mt-24">
-        <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    <AlertTriangle className="h-5 w-5 text-destructive" />
-                    Alerta de Stock
-                </CardTitle>
-                <CardDescription>Productos con 5 o menos unidades por color.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <div className="space-y-4">
-                    {paginatedLowStockProducts.length > 0 ? paginatedLowStockProducts.map((item, index) => (
-                        <div key={`${item.productId}-${item.colorName}-${index}`} className="flex items-center">
-                            <div
-                                className="h-4 w-4 rounded-full border mr-3"
-                                style={{ backgroundColor: item.colorHex }}
-                             />
-                            <div>
-                                <p className="text-sm font-medium leading-none">{item.productName} ({item.colorName})</p>
-                                <p className="text-sm text-muted-foreground">{item.productModel}</p>
-                            </div>
-                            <div className="ml-auto text-right">
-                                <p className="font-bold text-destructive">{item.stock}</p>
-                                <p className="text-xs text-muted-foreground">unidades</p>
-                            </div>
-                            <Link href={`/admin/products`} className="ml-4">
-                                <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                            </Link>
-                        </div>
-                    )) : (
-                      <p className="text-sm text-muted-foreground text-center py-4">¡Todo en orden! No hay productos con bajo stock.</p>
-                    )}
-                </div>
-                {renderPagination(lowStockTotalPages, lowStockCurrentPage, handleLowStockPageChange)}
-            </CardContent>
-        </Card>
-      </div>
-
-      <div id="unfulfilled-demand-section" className="grid gap-4 mt-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ShoppingBasket className="h-5 w-5 text-primary" />
-              Demanda No Satisfecha
-            </CardTitle>
-            <CardDescription>
-              Productos pedidos por clientes que aún no se han convertido en ventas.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {/* Desktop Table */}
-            <div className="hidden md:block border rounded-lg">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Producto</TableHead>
-                    <TableHead>Color</TableHead>
-                    <TableHead className="text-center">Pedido</TableHead>
-                    <TableHead className="text-center">Vendido</TableHead>
-                    <TableHead className="text-center">Pendiente</TableHead>
-                    <TableHead className="text-right">Acción</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedDemand.length > 0 ? paginatedDemand.map((item) => (
-                    <TableRow key={item!.id}>
-                      <TableCell>
-                        <p className="font-medium">{unslugify(item!.product_name)}</p>
-                        <p className="text-xs text-muted-foreground">{item!.product_model}</p>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: item!.color_hex }}/>
-                          {item!.color_name}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center">{item!.requested}</TableCell>
-                      <TableCell className="text-center">{item!.sold}</TableCell>
-                      <TableCell className="text-center font-bold text-destructive">{item!.pending}</TableCell>
-                      <TableCell className="text-right">
-                        <Button asChild variant="outline" size="sm">
-                          <Link href="/admin/products">Vender</Link>
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  )) : (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center h-24">
-                        ¡Felicidades! No hay pedidos pendientes.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-             {/* Mobile Cards */}
-            <div className="md:hidden space-y-4">
-                {paginatedDemand.length > 0 ? paginatedDemand.map((item) => (
-                    <Card key={item!.id}>
-                        <Collapsible>
-                            <CollapsibleTrigger className="w-full p-4 text-left">
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <p className="font-medium">{unslugify(item!.product_name)}</p>
-                                        <p className="text-xs text-muted-foreground">{item!.product_model}</p>
-                                        <div className="flex items-center gap-2 mt-2">
-                                            <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: item!.color_hex }}/>
-                                            <span className="text-sm">{item!.color_name}</span>
-                                        </div>
-                                    </div>
-                                    <ChevronDown className="h-5 w-5 transition-transform data-[state=open]:rotate-180" />
-                                </div>
-                            </CollapsibleTrigger>
-                            <CollapsibleContent className="px-4 pb-4">
-                                <div className="grid grid-cols-3 gap-2 text-center text-sm mt-2 pt-2 border-t">
-                                    <div>
-                                        <p className="text-xs text-muted-foreground">Pedido</p>
-                                        <p className="font-medium">{item!.requested}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-xs text-muted-foreground">Vendido</p>
-                                        <p className="font-medium">{item!.sold}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-xs text-muted-foreground">Pendiente</p>
-                                        <p className="font-bold text-destructive">{item!.pending}</p>
-                                    </div>
-                                </div>
-                                <Button asChild variant="outline" size="sm" className="w-full mt-4">
-                                    <Link href="/admin/products">Vender</Link>
-                                </Button>
-                            </CollapsibleContent>
-                        </Collapsible>
-                    </Card>
-                )) : (
-                    <p className="text-center h-24 flex items-center justify-center text-muted-foreground">¡Felicidades! No hay pedidos pendientes.</p>
-                )}
-            </div>
-            {renderPagination(demandTotalPages, demandCurrentPage, handleDemandPageChange)}
-          </CardContent>
-        </Card>
-      </div>
-      
-      <div id="fulfilled-demand-section" className="grid gap-4 mt-6 scroll-mt-24">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-green-500" />
-              Demanda Satisfecha (Ventas Concretadas)
-            </CardTitle>
-            <CardDescription>
-              Historial de todas las ventas completadas exitosamente.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-             {/* Desktop Table */}
-            <div className="hidden md:block border rounded-lg">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Producto</TableHead>
-                    <TableHead>Color</TableHead>
-                    <TableHead className="text-center">Cantidad</TableHead>
-                    <TableHead className="text-center">Total</TableHead>
-                    <TableHead className="text-right">Fecha</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedFulfilledDemand.length > 0 ? paginatedFulfilledDemand.map((sale) => (
-                    <TableRow key={sale.id}>
-                      <TableCell>
-                        <p className="font-medium">{unslugify(sale.product_name)}</p>
-                        <p className="text-xs text-muted-foreground">{sale.product_model}</p>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: sale.color_hex }} />
-                          {sale.color_name}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center">{sale.quantity}</TableCell>
-                      <TableCell className="text-center font-bold text-primary">${sale.total_price.toLocaleString()}</TableCell>
-                      <TableCell className="text-right">{new Date(sale.created_at).toLocaleDateString('es-ES')}</TableCell>
-                    </TableRow>
-                  )) : (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center h-24">No hay ventas registradas.</TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-            {/* Mobile Cards */}
-            <div className="md:hidden space-y-4">
-                {paginatedFulfilledDemand.length > 0 ? paginatedFulfilledDemand.map((sale) => (
-                    <Card key={sale.id} className="p-4">
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <p className="font-medium">{unslugify(sale.product_name)}</p>
-                                <p className="text-xs text-muted-foreground">{sale.product_model}</p>
-                                <div className="flex items-center gap-2 mt-2">
-                                    <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: sale.color_hex }} />
-                                    <span className="text-sm">{sale.color_name}</span>
-                                </div>
-                            </div>
-                            <div className="text-right flex-shrink-0 ml-4">
-                                <p className="font-bold text-primary">${sale.total_price.toLocaleString()}</p>
-                                <p className="text-xs text-muted-foreground">Cant: {sale.quantity}</p>
-                                <p className="text-xs text-muted-foreground mt-1">{new Date(sale.created_at).toLocaleDateString('es-ES')}</p>
-                            </div>
-                        </div>
-                    </Card>
-                )) : (
-                    <p className="text-center h-24 flex items-center justify-center text-muted-foreground">No hay ventas registradas.</p>
-                )}
-            </div>
-            {renderPagination(fulfilledDemandTotalPages, fulfilledDemandCurrentPage, handleFulfilledDemandPageChange)}
-          </CardContent>
-        </Card>
-      </div>
-      
-      <div id="all-requests-section" className="grid gap-4 mt-6 scroll-mt-24">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <History className="h-5 w-5 text-blue-500" />
-              Historial de Pedidos de Clientes
-            </CardTitle>
-            <CardDescription>
-              Todos los productos que los clientes han añadido al carrito, independientemente de si la venta se completó.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {/* Desktop Table */}
-            <div className="hidden md:block border rounded-lg">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Producto</TableHead>
-                    <TableHead>Color</TableHead>
-                    <TableHead className="text-center">Cantidad Pedida</TableHead>
-                    <TableHead className="text-right">Fecha</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedAllRequests.length > 0 ? paginatedAllRequests.map((request) => (
-                    <TableRow key={request.id}>
-                      <TableCell>
-                        <p className="font-medium">{unslugify(request.product_name)}</p>
-                        <p className="text-xs text-muted-foreground">{request.product_model}</p>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: request.color_hex }} />
-                          {request.color_name}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center">{request.quantity}</TableCell>
-                      <TableCell className="text-right">{new Date(request.created_at).toLocaleDateString('es-ES')}</TableCell>
-                    </TableRow>
-                  )) : (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center h-24">No hay pedidos de clientes registrados.</TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-            {/* Mobile Cards */}
-            <div className="md:hidden space-y-4">
-                {paginatedAllRequests.length > 0 ? paginatedAllRequests.map((request) => (
-                    <Card key={request.id} className="p-4">
-                        <div className="flex justify-between items-start">
-                             <div>
-                                <p className="font-medium">{unslugify(request.product_name)}</p>
-                                <p className="text-xs text-muted-foreground">{request.product_model}</p>
-                                <div className="flex items-center gap-2 mt-2">
-                                    <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: request.color_hex }} />
-                                    <span className="text-sm">{request.color_name}</span>
-                                </div>
-                            </div>
-                            <div className="text-right flex-shrink-0 ml-4">
-                                <p className="font-bold text-primary">Cant: {request.quantity}</p>
-                                <p className="text-xs text-muted-foreground mt-1">{new Date(request.created_at).toLocaleDateString('es-ES')}</p>
-                            </div>
-                        </div>
-                    </Card>
-                )) : (
-                    <p className="text-center h-24 flex items-center justify-center text-muted-foreground">No hay pedidos de clientes registrados.</p>
-                )}
-            </div>
-            {renderPagination(allRequestsTotalPages, allRequestsCurrentPage, handleAllRequestsPageChange)}
-          </CardContent>
-        </Card>
-      </div>
-
        <div id="popular-products-section" className="mt-6 scroll-mt-24">
          <Card>
           <CardHeader>
@@ -1194,9 +759,9 @@ export default function AdminFinancePage() {
                     <TableHeader>
                         <TableRow>
                             <TableHead>Producto</TableHead>
-                            <TableHead className={cn('text-center transition-colors', sortPopularityBy === 'views' && 'text-primary')}>Vistas</TableHead>
-                            <TableHead className={cn('text-center transition-colors', sortPopularityBy === 'requests' && 'text-primary')}>Pedidos</TableHead>
-                            <TableHead className={cn('text-center transition-colors', sortPopularityBy === 'sales' && 'text-primary')}>Ventas</TableHead>
+                            <TableHead className="text-center">Vistas</TableHead>
+                            <TableHead className="text-center">Pedidos</TableHead>
+                            <TableHead className="text-center">Ventas</TableHead>
                             <TableHead className="text-center">Stock</TableHead>
                             <TableHead className="text-center">Conversión (Venta/Pedido)</TableHead>
                         </TableRow>
@@ -1208,15 +773,9 @@ export default function AdminFinancePage() {
                                     <p className="font-medium">{product.name}</p>
                                     <p className="text-xs text-muted-foreground">{product.model}</p>
                                 </TableCell>
-                                <TableCell className={cn('text-center font-medium transition-colors', sortPopularityBy === 'views' && 'bg-primary/10 text-primary')}>
-                                  {product.views}
-                                </TableCell>
-                                <TableCell className={cn('text-center font-medium transition-colors', sortPopularityBy === 'requests' && 'bg-primary/10 text-primary')}>
-                                  {product.requests}
-                                </TableCell>
-                                <TableCell className={cn('text-center font-bold transition-colors', sortPopularityBy === 'sales' ? 'bg-primary/10 text-primary' : 'text-primary')}>
-                                  {product.sales}
-                                </TableCell>
+                                <TableCell className="text-center font-medium">{product.views}</TableCell>
+                                <TableCell className="text-center font-medium">{product.requests}</TableCell>
+                                <TableCell className="text-center font-bold text-primary">{product.sales}</TableCell>
                                 <TableCell className="text-center font-medium">{product.stock}</TableCell>
                                 <TableCell className="text-center font-medium">
                                     {product.requests > 0 ? `${((product.sales / product.requests) * 100).toFixed(0)}%` : '0%'}
