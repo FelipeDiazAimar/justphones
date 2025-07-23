@@ -62,6 +62,20 @@ export function useFixedCosts() {
     return true;
   };
   
+  const updateFixedCost = async (costId: string, costData: Partial<Omit<FixedCost, 'id' | 'created_at'>>) => {
+    const { error } = await supabase.from('fixed_costs').update(costData).eq('id', costId);
+    if (error) {
+        console.error('Error updating fixed cost:', error.message);
+        toast({ 
+            variant: 'destructive', 
+            title: 'Error', 
+            description: `No se pudo actualizar el costo fijo: ${error.message}` 
+        });
+        return false;
+    }
+    return true;
+  };
+  
   const deleteFixedCost = async (costId: string) => {
     const { error } = await supabase.from('fixed_costs').delete().eq('id', costId);
     if (error) {
@@ -77,5 +91,5 @@ export function useFixedCosts() {
     return true;
   };
 
-  return { fixedCosts, isLoading, addFixedCost, deleteFixedCost };
+  return { fixedCosts, isLoading, addFixedCost, updateFixedCost, deleteFixedCost };
 }
