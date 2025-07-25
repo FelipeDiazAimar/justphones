@@ -60,11 +60,11 @@ export function Footer() {
       <div className="absolute inset-0 z-0 opacity-40">
         <Aurora />
       </div>
-      <div className="container py-12 relative z-10">
+      <div className="container py-12 relative z-10 max-w-6xl mx-auto">
         <div className="mb-8">
           <h3 className="text-xl font-bold mb-8 text-center">Compra por Categoría</h3>
-          <div className="flex justify-center">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 text-center md:text-left">
+          <div className="w-full">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 text-center md:text-left justify-items-center">
               <div className="md:col-span-1">
                 <h4 className="font-semibold mb-4 text-base">
                   <Link href="/catalog/cases" className="hover:text-primary transition-colors">
