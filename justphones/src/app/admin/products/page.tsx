@@ -284,7 +284,6 @@ export default function AdminProductsPage() {
   const [imgSrc, setImgSrc] = useState('');
   const [isCropperOpen, setIsCropperOpen] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
-  const [originalFile, setOriginalFile] = useState<File | null>(null);
   const [activeCropField, setActiveCropField] = useState<{ type: 'cover' | 'color', index?: number } | null>(null);
 
 
@@ -741,6 +740,18 @@ export default function AdminProductsPage() {
       return;
     }
 
+    // Calcular precio final con todos los descuentos
+    const cashDiscount = 0.20; // 20%
+    const productDiscount = (productToUpdate.discount || 0) / 100;
+    
+    let finalPrice = productToUpdate.price;
+    // Aplicar descuento del producto si existe
+    if (productDiscount > 0) {
+      finalPrice = finalPrice * (1 - productDiscount);
+    }
+    // Aplicar el descuento de efectivo
+    finalPrice = finalPrice * (1 - cashDiscount);
+
     const saleData: Omit<Sale, 'id' | 'created_at'> = {
         product_id: productToUpdate.id,
         product_name: productToUpdate.name,
@@ -748,8 +759,8 @@ export default function AdminProductsPage() {
         color_name: colorToUpdate.name,
         color_hex: colorToUpdate.hex,
         quantity: data.quantity,
-        price_per_unit: productToUpdate.price,
-        total_price: productToUpdate.price * data.quantity,
+        price_per_unit: finalPrice,
+        total_price: finalPrice * data.quantity,
     };
     
     const saleAddSuccess = await addSale(saleData);
