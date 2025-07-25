@@ -48,7 +48,7 @@ import * as z from 'zod';
 import { Trash, Edit, PlusCircle, ShoppingBag, Search, PartyPopper, Star, UploadCloud, X, Tag, History, ChevronDown, Plus, Minus, PackagePlus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useProducts } from '@/hooks/use-products';
+import { useProductsR2 as useProducts } from '@/hooks/use-products-r2';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent } from '@/components/ui/card';
 import { useSubcategories } from '@/hooks/use-subcategories';
@@ -155,6 +155,11 @@ const ColorImageInput = ({ control, index, errors, onFileSelect, setPreviewDialo
     const [urlInputValue, setUrlInputValue] = React.useState('');
 
     React.useEffect(() => {
+        // Clean up previous blob URL
+        if (previewUrl && previewUrl.startsWith('blob:')) {
+            URL.revokeObjectURL(previewUrl);
+        }
+        
         if (value instanceof File) {
             setPreviewUrl(URL.createObjectURL(value));
             setUrlInputValue('');
@@ -165,6 +170,13 @@ const ColorImageInput = ({ control, index, errors, onFileSelect, setPreviewDialo
             setPreviewUrl(null);
             setUrlInputValue('');
         }
+        
+        // Cleanup function
+        return () => {
+            if (previewUrl && previewUrl.startsWith('blob:')) {
+                URL.revokeObjectURL(previewUrl);
+            }
+        };
     }, [value]);
     
     return (
@@ -225,7 +237,7 @@ const ColorImageInput = ({ control, index, errors, onFileSelect, setPreviewDialo
 
 export default function AdminProductsPage() {
   const supabase = createClient();
-  const { products, addProduct, updateProduct, deleteProduct, isLoading: isLoadingProducts, fetchProducts, getProductById } = useProducts();
+  const { products, addProduct, updateProduct, deleteProduct, isLoading: isLoadingProducts, fetchProducts, getProductById, uploadCoverImage, uploadColorImage } = useProducts();
   const { subcategories, isLoading: isLoadingSubcategories } = useSubcategories();
   const { models, allModels, isLoading: isLoadingModels } = useModels();
   const { sales, addSale, isLoading: isLoadingSales } = useSales();
@@ -339,6 +351,11 @@ export default function AdminProductsPage() {
   const watchedSaleProductId = watchSale('productId');
  
   useEffect(() => {
+    // Clean up previous blob URL
+    if (coverImagePreview && coverImagePreview.startsWith('blob:')) {
+        URL.revokeObjectURL(coverImagePreview);
+    }
+    
     if (watchedCoverImage instanceof File) {
         setCoverImagePreview(URL.createObjectURL(watchedCoverImage));
         setCoverImageUrlInput('');
@@ -349,6 +366,13 @@ export default function AdminProductsPage() {
         setCoverImagePreview(null);
         setCoverImageUrlInput('');
     }
+    
+    // Cleanup function to revoke blob URL when component unmounts
+    return () => {
+        if (coverImagePreview && coverImagePreview.startsWith('blob:')) {
+            URL.revokeObjectURL(coverImagePreview);
+        }
+    };
   }, [watchedCoverImage]);
 
 
@@ -458,7 +482,7 @@ export default function AdminProductsPage() {
         tempProducts.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         break;
       case 'date-asc':
-        tempProducts.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.at).getTime());
+        tempProducts.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
         break;
       default:
         break;
@@ -467,7 +491,15 @@ export default function AdminProductsPage() {
     return tempProducts;
   }, [products, filterCategory, filterModel, sortBy, searchQuery]);
 
+  const cleanupBlobUrls = () => {
+    // Clean up cover image blob URL
+    if (coverImagePreview && coverImagePreview.startsWith('blob:')) {
+      URL.revokeObjectURL(coverImagePreview);
+    }
+  };
+
   const handleAddNewProduct = () => {
+    cleanupBlobUrls();
     reset({
       name: '',
       price: 0,
@@ -546,8 +578,9 @@ export default function AdminProductsPage() {
 
 
   const onProductSubmit = async (formData: z.infer<typeof productFormSchema>) => {
-    console.log("Form submitted. Data:", formData);
-    const processImage = async (fileOrUrl: any, pathPrefix: string): Promise<string> => {
+    console.log("🔍 [PRODUCTS] Form submitted. Data:", formData);
+    
+    const processImage = async (fileOrUrl: any, imageType: 'cover' | 'color'): Promise<string> => {
         if (!fileOrUrl) return '';
 
         if (typeof fileOrUrl === 'string') {
@@ -560,13 +593,39 @@ export default function AdminProductsPage() {
 
         if (fileOrUrl instanceof File) {
             try {
-                const filePath = `${pathPrefix}/${Date.now()}_${fileOrUrl.name.replace(/\s/g, '_')}`;
-                const { error: uploadError } = await supabase.storage.from('product-images').upload(filePath, fileOrUrl);
-                if (uploadError) throw uploadError;
-                const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(filePath);
-                return urlData.publicUrl;
+                console.log(`📁 [PRODUCTS] Processing ${imageType} image:`, fileOrUrl.name);
+                
+                // Validate File object
+                if (!fileOrUrl.name || fileOrUrl.size === 0) {
+                    throw new Error(`Invalid file object for ${imageType} image`);
+                }
+                
+                // Create a fresh File object to avoid blob reference issues
+                const fileBuffer = await fileOrUrl.arrayBuffer();
+                const freshFile = new File([fileBuffer], fileOrUrl.name, {
+                    type: fileOrUrl.type || 'image/png',
+                    lastModified: fileOrUrl.lastModified || Date.now()
+                });
+                
+                console.log(`📁 [PRODUCTS] Created fresh file object:`, freshFile.name, freshFile.size, 'bytes');
+                
+                // Usar R2 en lugar de Supabase Storage
+                let uploadResult;
+                if (imageType === 'cover') {
+                  uploadResult = await uploadCoverImage(freshFile);
+                } else {
+                  uploadResult = await uploadColorImage(freshFile);
+                }
+                
+                if (!uploadResult.success) {
+                  throw new Error(uploadResult.error || `Error al subir imagen ${imageType}`);
+                }
+                
+                console.log(`✅ [PRODUCTS] ${imageType} image uploaded successfully:`, uploadResult.url);
+                return uploadResult.url || '';
             } catch (e: any) {
-                handleStorageError(e, 'Error al subir imagen');
+                console.error(`❌ [PRODUCTS] Error uploading ${imageType} image:`, e);
+                handleStorageError(e, `Error al subir imagen ${imageType}`);
                 throw e;
             }
         }
@@ -574,10 +633,15 @@ export default function AdminProductsPage() {
     };
 
     try {
-        const coverImageUrl = await processImage(formData.coverImage, 'public');
+        console.log('📁 [PRODUCTS] Processing cover image...');
+        const coverImageUrl = await processImage(formData.coverImage, 'cover');
 
+        console.log('🎨 [PRODUCTS] Processing color images...');
         const colorImageUrls = await Promise.all(
-            formData.colors.map(color => processImage(color.image, 'public/colors'))
+            formData.colors.map((color, index) => {
+                console.log(`🎨 [PRODUCTS] Processing color ${index + 1}:`, color.name);
+                return processImage(color.image, 'color');
+            })
         );
 
         const finalProductData = {
@@ -589,24 +653,27 @@ export default function AdminProductsPage() {
             })),
         };
 
+        console.log('💾 [PRODUCTS] Final product data:', finalProductData);
+
         let success;
         if (editingProduct) {
-            console.log("Updating existing product:", editingProduct.id);
+            console.log("🔄 [PRODUCTS] Updating existing product:", editingProduct.id);
             success = await updateProduct(editingProduct.id, finalProductData);
         } else {
-            console.log("Adding new product.");
+            console.log("➕ [PRODUCTS] Adding new product.");
             success = await addProduct(finalProductData);
         }
 
         if (success) {
             toast({
                 title: editingProduct ? "Producto actualizado" : "Producto creado",
-                description: `El producto ha sido ${editingProduct ? 'actualizado' : 'creado'} exitosamente.`,
+                description: `El producto ha sido ${editingProduct ? 'actualizado' : 'creado'} exitosamente con imágenes en Cloudflare R2.`,
             });
+            cleanupBlobUrls();
             setIsProductDialogOpen(false);
             setCoverImagePreview(null);
         } else {
-           console.log("Submit failed. Success was false.");
+           console.log("❌ [PRODUCTS] Submit failed. Success was false.");
            toast({
                 variant: 'destructive',
                 title: 'Error al Guardar',
@@ -614,7 +681,7 @@ export default function AdminProductsPage() {
             });
         }
     } catch (error) {
-        console.error("[Submit] An unexpected error occurred during product submission:", error);
+        console.error("❌ [PRODUCTS] An unexpected error occurred during product submission:", error);
     }
   };
 
@@ -1257,7 +1324,12 @@ export default function AdminProductsPage() {
         </div>
       </div>
       
-      <Dialog open={isProductDialogOpen} onOpenChange={setIsProductDialogOpen}>
+      <Dialog open={isProductDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          cleanupBlobUrls();
+        }
+        setIsProductDialogOpen(open);
+      }}>
         <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingProduct ? 'Editar Producto' : 'Crear Producto'}</DialogTitle>

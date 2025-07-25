@@ -41,7 +41,7 @@ import * as z from 'zod';
 import { Trash, Edit, PlusCircle, UploadCloud, X, Crop } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useCarouselImages } from '@/hooks/use-carousel-images';
+import { useCarouselImagesR2 as useCarouselImages } from '@/hooks/use-carousel-images-r2';
 import { createClient } from '@/lib/supabase/client';
 import ReactCrop, { type Crop as CropType, centerCrop, makeAspectCrop } from 'react-image-crop';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -102,7 +102,7 @@ function getCroppedImg(image: HTMLImageElement, crop: CropType, fileName: string
 
 export default function AdminCarouselPage() {
   const supabase = createClient();
-  const { carouselImages, addCarouselImage, updateCarouselImage, deleteCarouselImage, isLoading: isLoadingCarousel } = useCarouselImages();
+  const { carouselImages, addCarouselImage, updateCarouselImage, deleteCarouselImage, uploadCarouselImageFile, isLoading: isLoadingCarousel } = useCarouselImages();
   
   const [isImageDialogOpen, setIsImageDialogOpen] = useState(false);
   const [editingImage, setEditingImage] = useState<CarouselImage | null>(null);
@@ -222,49 +222,58 @@ export default function AdminCarouselPage() {
   };
 
   const onImageSubmit = async (data: z.infer<typeof carouselImageSchema>) => {
-    let success;
+    console.log('🔍 [ADMIN] onImageSubmit called with data:', data);
+    console.log('🔍 [ADMIN] image_url type:', typeof data.image_url);
+    console.log('🔍 [ADMIN] image_url instanceof File:', data.image_url instanceof File);
+    
+    let success = false;
     let finalImageUrl = '';
 
     if (data.image_url instanceof File) {
-      const file = data.image_url;
-      const filePath = `public/${Date.now()}_${file.name.replace(/\s/g, '_')}`;
+      console.log('📁 [ADMIN] Processing file upload...');
+      // Usar R2 en lugar de Supabase Storage
+      const uploadResult = await uploadCarouselImageFile(
+        data.image_url, 
+        data.alt_text, 
+        data.sort_order
+      );
       
-      const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('carousel-images')
-          .upload(filePath, file);
-
-      if (uploadError) {
-          handleStorageError(uploadError, 'Error al subir imagen');
-          return;
+      if (!uploadResult.success) {
+        // El error ya se muestra en el hook
+        return;
       }
-
-      const { data: urlData } = supabase.storage.from('carousel-images').getPublicUrl(filePath);
-      finalImageUrl = urlData.publicUrl;
+      
+      // uploadCarouselImageFile ya guardó todo, incluyendo en carousel_images
+      success = true;
 
     } else if (typeof data.image_url === 'string' && data.image_url.trim()) {
+        console.log('🔗 [ADMIN] Processing URL...');
         finalImageUrl = data.image_url;
         if (!finalImageUrl.startsWith('http')) {
             toast({ variant: 'destructive', title: 'URL Inválida', description: 'Por favor, ingresa una URL de imagen válida que comience con http.' });
             return;
         }
+        
+        // Para URLs, usar el método tradicional
+        const imageData = {
+          image_url: finalImageUrl,
+          alt_text: data.alt_text,
+          sort_order: data.sort_order,
+        };
+
+        if (editingImage) {
+          success = await updateCarouselImage(editingImage.id, imageData);
+          if (success) toast({ title: "Imagen actualizada", description: "La imagen del carrusel ha sido actualizada." });
+        } else {
+          success = await addCarouselImage(imageData);
+          if (success) toast({ title: "Imagen añadida", description: "La nueva imagen ha sido añadida al carrusel." });
+        }
     } else {
+        console.log('❌ [ADMIN] No valid image data');
         toast({ variant: 'destructive', title: 'Sin Imagen', description: 'Debes subir un archivo o proveer una URL.' });
         return;
     }
     
-    const imageData = {
-      image_url: finalImageUrl,
-      alt_text: data.alt_text,
-      sort_order: data.sort_order,
-    };
-
-    if (editingImage) {
-      success = await updateCarouselImage(editingImage.id, imageData);
-      if (success) toast({ title: "Imagen actualizada", description: "La imagen del carrusel ha sido actualizada." });
-    } else {
-      success = await addCarouselImage(imageData);
-      if (success) toast({ title: "Imagen añadida", description: "La nueva imagen ha sido añadida al carrusel." });
-    }
     if (success) {
       setIsImageDialogOpen(false);
       setImagePreview(null);

@@ -4,14 +4,54 @@ import { useState, useEffect, useCallback } from 'react';
 import type { CarouselImage } from '@/lib/carousel';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from './use-toast';
-import { uploadCarouselImage, deleteFromR2, extractPathFromR2Url, R2_BUCKETS } from '@/lib/r2-storage';
-import { uploadImageWithMetadata, deleteImageMetadata } from '@/lib/image-metadata';
 
-/**
- * Hook para manejar imágenes del carousel usando Cloudflare R2
- * ESTE ES EL HOOK PRINCIPAL - REEMPLAZA AL VIEJO
- */
-export function useCarouselImages() {
+// Función para subir usando la API de Cloudflare directamente
+async function uploadToCloudflareR2(
+  file: File,
+  bucket: string,
+  path: string
+): Promise<{ success: boolean; url?: string; error?: string }> {
+  try {
+    const accountId = 'ecf5a330cc03f3e606d227a0ec1822e1';
+    const token = 'u65L77j1s4GAoxnvkjgxEm7sNK0cFoA2RuHiOBwA';
+    
+    // Crear FormData para el upload
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/r2/buckets/${bucket}/objects/${path}`,
+      {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: file, // Enviar el archivo directamente
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      throw new Error(`Upload failed: ${response.status} ${errorData}`);
+    }
+
+    // Construir la URL pública
+    const publicUrl = `https://pub-${accountId}.r2.dev/${path}`;
+    
+    return {
+      success: true,
+      url: publicUrl,
+    };
+  } catch (error) {
+    console.error('Error uploading to R2:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error desconocido',
+    };
+  }
+}
+
+export function useCarouselImagesCloudflareAPI() {
   const supabase = createClient();
   const { toast } = useToast();
   const [carouselImages, setCarouselImages] = useState<CarouselImage[]>([]);
@@ -43,20 +83,15 @@ export function useCarouselImages() {
   }, [fetchCarouselImages]);
   
   const addCarouselImage = async (imageData: Omit<CarouselImage, 'id' | 'created_at'>) => {
-    console.log('🔄 addCarouselImage called with R2 hook:', imageData);
-    
     const { error } = await supabase.from('carousel_images').insert([imageData]);
     if (error) {
       console.error('Error adding carousel image:', error.message);
-      toast({ 
-        variant: 'destructive', 
-        title: 'Error', 
-        description: `No se pudo añadir la imagen: ${error.message}` 
-      });
+      const description = error.message.includes('violates row-level security policy')
+        ? 'Acción bloqueada por la seguridad de la base de datos. Por favor, revisa las políticas de RLS para la tabla "carousel_images".'
+        : `No se pudo añadir la imagen: ${error.message}`;
+      toast({ variant: 'destructive', title: 'Error', description });
       return false;
     }
-    
-    console.log('✅ Carousel image added successfully');
     await fetchCarouselImages();
     return true;
   };
@@ -65,11 +100,10 @@ export function useCarouselImages() {
     const { error } = await supabase.from('carousel_images').update(imageData).eq('id', imageId);
     if (error) {
       console.error('Error updating carousel image:', error.message);
-      toast({ 
-        variant: 'destructive', 
-        title: 'Error', 
-        description: `No se pudo actualizar la imagen: ${error.message}` 
-      });
+      const description = error.message.includes('violates row-level security policy')
+        ? 'Acción bloqueada por la seguridad de la base de datos. Por favor, revisa las políticas de RLS para la tabla "carousel_images".'
+        : `No se pudo actualizar la imagen: ${error.message}`;
+      toast({ variant: 'destructive', title: 'Error', description });
       return false;
     }
     await fetchCarouselImages();
@@ -77,41 +111,36 @@ export function useCarouselImages() {
   };
 
   const deleteCarouselImage = async (imageId: string) => {
+    // Eliminar de la base de datos (por ahora no eliminamos de R2)
     const { error } = await supabase.from('carousel_images').delete().eq('id', imageId);
     if (error) {
       console.error('Error deleting carousel image:', error.message);
-      toast({ 
-        variant: 'destructive', 
-        title: 'Error', 
-        description: `No se pudo eliminar la imagen: ${error.message}` 
-      });
+      const description = error.message.includes('violates row-level security policy')
+        ? 'Acción bloqueada por la seguridad de la base de datos. Por favor, revisa las políticas de RLS para la tabla "carousel_images".'
+        : `No se pudo eliminar la imagen: ${error.message}`;
+      toast({ variant: 'destructive', title: 'Error', description });
       return false;
     }
+
     await fetchCarouselImages();
     return true;
   };
 
   /**
-   * Función principal para subir archivo a R2 con metadata
-   * ESTA ES LA FUNCIÓN QUE DEBE USAR LA APP
+   * Función para subir archivo a R2 usando la API de Cloudflare
    */
   const uploadCarouselImageFile = async (file: File): Promise<{ success: boolean; url?: string; error?: string }> => {
-    console.log('🚀 uploadCarouselImageFile called with R2 hook');
-    console.log('📁 File:', file.name, file.size, 'bytes');
-    
     try {
-      const result = await uploadImageWithMetadata(
-        file,
-        uploadCarouselImage,
-        'carousel',
-        {
-          type: 'banner',
-          dimensions: '1200x400',
-        }
-      );
+      // Generar nombre único
+      const timestamp = Date.now();
+      const randomId = Math.random().toString(36).substring(2, 8);
+      const cleanName = file.name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9._-]/g, '');
+      const fileName = `${timestamp}_${randomId}_${cleanName}`;
+      const path = `carousel/public/${fileName}`;
+      
+      const result = await uploadToCloudflareR2(file, 'carousel-images', path);
 
       if (!result.success) {
-        console.error('❌ Upload failed:', result.error);
         toast({
           variant: 'destructive',
           title: 'Error al subir imagen',
@@ -120,7 +149,6 @@ export function useCarouselImages() {
         return { success: false, error: result.error };
       }
 
-      console.log('✅ R2 upload successful:', result.url);
       toast({
         title: 'Imagen subida',
         description: 'La imagen se subió correctamente a Cloudflare R2',
@@ -129,7 +157,7 @@ export function useCarouselImages() {
       return { success: true, url: result.url };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
-      console.error('❌ Error uploading carousel image:', error);
+      console.error('Error uploading carousel image:', error);
       toast({
         variant: 'destructive',
         title: 'Error al subir imagen',

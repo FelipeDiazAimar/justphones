@@ -20,7 +20,7 @@ import {
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
 import { useProducts } from '@/hooks/use-products';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useCarouselImages } from '@/hooks/use-carousel-images';
+import { useCarouselImagesR2 as useCarouselImages } from '@/hooks/use-carousel-images-r2';
 
 const ITEMS_PER_PAGE = 8;
 
