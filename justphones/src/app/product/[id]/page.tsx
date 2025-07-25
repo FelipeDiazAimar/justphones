@@ -174,7 +174,7 @@ export default function ProductDetailPage() {
   const isSoldOut = selectedColor.stock === 0;
   
   const productName = unslugify(product.name);
-  const hasDiscount = product.discount && product.discount > 0;
+  const hasDiscount = Boolean(product.discount && product.discount > 0);
 
   return (
     <MainLayout>
