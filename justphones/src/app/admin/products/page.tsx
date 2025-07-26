@@ -285,6 +285,7 @@ export default function AdminProductsPage() {
   const [isCropperOpen, setIsCropperOpen] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
   const [activeCropField, setActiveCropField] = useState<{ type: 'cover' | 'color', index?: number } | null>(null);
+  const [originalFile, setOriginalFile] = useState<File | null>(null);
 
 
   const { toast } = useToast();
