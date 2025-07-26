@@ -128,7 +128,7 @@ export default function AdminFinancePage() {
 
   const [rentabilidadPaymentMethod, setRentabilidadPaymentMethod] = useState<keyof typeof rentabilidadPaymentOptions>('list');
   const [salesChartView, setSalesChartView] = useState<'daily' | 'monthly' | 'yearly'>('daily');
-  const [profitChartView, setProfitChartView] = useState<'daily' | 'weekly' | 'monthly' | 'by_order'>('monthly');
+  const [profitChartView, setProfitChartView] = useState<'daily' | 'weekly' | 'monthly' | 'by_order'>('daily');
 
   const [statsPeriod, setStatsPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'yearly' | 'all'>('all');
 
@@ -880,7 +880,11 @@ export default function AdminFinancePage() {
                         <XAxis dataKey="date" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
                         <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${Number(value).toLocaleString()}`} />
                         <RechartsTooltip 
-                            formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name === 'profit' ? 'Ganancia' : 'Costo']}
+                            formatter={(value: number, name: string, props) => {
+                                const dataKey = props.dataKey;
+                                const label = dataKey === 'profit' ? 'Ganancia' : 'Costo';
+                                return [`$${value.toLocaleString()}`, label];
+                            }}
                             labelClassName="font-bold"
                             wrapperClassName="!border-border !bg-background !shadow-lg"
                         />
@@ -899,7 +903,7 @@ export default function AdminFinancePage() {
             <CardContent>
                 <ResponsiveContainer width="100%" height={350}>
                    <PieChart>
-                        <Pie data={salesByCategory} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={120} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                        <Pie data={salesByCategory} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={120} label={({ percent }) => `${(percent * 100).toFixed(0)}%`}>
                             {salesByCategory.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                             ))}
