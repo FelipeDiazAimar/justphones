@@ -36,26 +36,34 @@ export function ProductCard({ product }: ProductCardProps) {
 
         {isSoldOut && (
             <div className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-lg z-10 pointer-events-none overflow-hidden">
-                <div className="absolute w-[200%] h-8 bg-black transform -rotate-[55deg] flex items-center justify-center space-x-8 whitespace-nowrap">
-                    <span className="text-white font-bold text-xl tracking-widest">SOLD OUT</span>
-                    <span className="text-white font-bold text-xl tracking-widest">SOLD OUT</span>
-                    <span className="text-white font-bold text-xl tracking-widest">SOLD OUT</span>
-                    <span className="text-white font-bold text-xl tracking-widest">SOLD OUT</span>
-                    <span className="text-white font-bold text-xl tracking-widest">SOLD OUT</span>
-                    <span className="text-white font-bold text-xl tracking-widest">SOLD OUT</span>
+                <div className="absolute w-[300%] h-6 md:h-8 bg-black transform -rotate-[55deg] flex items-center justify-center space-x-8 whitespace-nowrap">
+                    <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
                 </div>
-                <div className="absolute w-[200%] h-8 bg-black transform rotate-[55deg] flex items-center justify-center space-x-8 whitespace-nowrap">
-                    <span className="text-white font-bold text-xl tracking-widest">SOLD OUT</span>
-                    <span className="text-white font-bold text-xl tracking-widest">SOLD OUT</span>
-                    <span className="text-white font-bold text-xl tracking-widest">SOLD OUT</span>
-                    <span className="text-white font-bold text-xl tracking-widest">SOLD OUT</span>
-                    <span className="text-white font-bold text-xl tracking-widest">SOLD OUT</span>
-                    <span className="text-white font-bold text-xl tracking-widest">SOLD OUT</span>
+                <div className="absolute w-[300%] h-6 md:h-8 bg-black transform rotate-[55deg] flex items-center justify-center space-x-8 whitespace-nowrap">
+                    <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
                 </div>
             </div>
         )}
 
-        {hasDiscount && <Badge variant="destructive" className="absolute z-10 scale-75 md:transform-none md:scale-100 transform -rotate-90 origin-top-left top-[72px] left-1 md:top-2 md:left-2">{product.discount}% OFF</Badge>}
+        {hasDiscount && <Badge variant="destructive" className="absolute z-10 scale-75 md:scale-100 transform -rotate-90 origin-top-left top-[68px] left-[10px] md:top-2 md:left-2">{product.discount}% OFF</Badge>}
         {product.is_new && <Badge className="absolute top-2 right-2 z-10">Nuevo</Badge>}
         
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent"></div>

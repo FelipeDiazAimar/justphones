@@ -7,7 +7,7 @@ import { useProducts } from '@/hooks/use-products';
 import { useProductViews } from '@/hooks/use-product-views';
 import { useCustomerRequests } from '@/hooks/use-customer-requests';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { DollarSign, ShoppingCart, Package, TrendingUp, AlertTriangle, Eye, HelpCircle, ArrowDownUp, TrendingDown, ChevronsUpDown, Percent, BarChart, PackageSearch, Activity, Coins, Goal, History, PlusCircle, Trash, ChevronDown, Edit, Wallet } from 'lucide-react';
+import { DollarSign, ShoppingCart, Package, TrendingUp, AlertTriangle, Eye, HelpCircle, ArrowDownUp, TrendingDown, ChevronsUpDown, Percent, BarChart, PackageSearch, Activity, Coins, Goal, History, PlusCircle, Trash, ChevronDown, Edit, Wallet, Banknote } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend, Tooltip as RechartsTooltip, XAxis, YAxis, CartesianGrid, BarChart as RechartsBarChart, Bar } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
 import { unslugify } from '@/lib/utils';
@@ -34,7 +34,9 @@ import type { FixedCost } from '@/lib/fixed-costs';
 import { useSalaryWithdrawals } from '@/hooks/use-salary-withdrawals';
 import type { SalaryWithdrawal } from '@/lib/salary-withdrawals';
 import { Textarea } from '@/components/ui/textarea';
-
+import { useMonetaryIncome } from '@/hooks/use-monetary-income';
+import type { MonetaryIncome } from '@/lib/monetary-income';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
@@ -57,6 +59,14 @@ const salaryWithdrawalSchema = z.object({
     amount: z.coerce.number().min(1, "El monto debe ser mayor a 1."),
     description: z.string().optional(),
 });
+
+const monetaryIncomeSchema = z.object({
+    id: z.string().optional(),
+    name: z.string().min(1, "El nombre es requerido."),
+    amount: z.coerce.number().min(1, "El monto debe ser mayor a 1."),
+    description: z.string().optional(),
+});
+
 
 const EditablePriceCell = ({ product, field, value }: { product: Product; field: 'cost' | 'price'; value: number }) => {
     const { updateProduct } = useProducts();
@@ -119,7 +129,8 @@ export default function AdminFinancePage() {
   const { stockHistory, isLoading: isLoadingStockHistory } = useStockHistory();
   const { fixedCosts, addFixedCost, updateFixedCost, deleteFixedCost, isLoading: isLoadingFixedCosts } = useFixedCosts();
   const { salaryWithdrawals, addSalaryWithdrawal, updateSalaryWithdrawal, deleteSalaryWithdrawal, isLoading: isLoadingSalaryWithdrawals } = useSalaryWithdrawals();
-  
+  const { monetaryIncome, addMonetaryIncome, updateMonetaryIncome, deleteMonetaryIncome, isLoading: isLoadingMonetaryIncome } = useMonetaryIncome();
+
   const [sortPopularityBy, setSortPopularityBy] = useState<'sales' | 'requests' | 'views'>('sales');
   
   const [popularityCurrentPage, setPopularityCurrentPage] = useState(1);
@@ -142,6 +153,10 @@ export default function AdminFinancePage() {
 
   const [isSalaryDialogOpen, setIsSalaryDialogOpen] = useState(false);
   const [editingSalary, setEditingSalary] = useState<SalaryWithdrawal | null>(null);
+
+  const [isIncomeDialogOpen, setIsIncomeDialogOpen] = useState(false);
+  const [editingIncome, setEditingIncome] = useState<MonetaryIncome | null>(null);
+  const [isIncomeHistoryDialogOpen, setIsIncomeHistoryDialogOpen] = useState(false);
 
   const { toast } = useToast();
 
@@ -181,6 +196,25 @@ export default function AdminFinancePage() {
       formState: { errors: errorsEditSalary },
   } = useForm<z.infer<typeof salaryWithdrawalSchema>>({
       resolver: zodResolver(salaryWithdrawalSchema),
+  });
+
+  const {
+    register: registerIncome,
+    handleSubmit: handleSubmitIncome,
+    reset: resetIncome,
+    formState: { errors: errorsIncome },
+  } = useForm<z.infer<typeof monetaryIncomeSchema>>({
+    resolver: zodResolver(monetaryIncomeSchema.omit({ id: true })),
+    defaultValues: { name: '', amount: 0, description: '' },
+  });
+
+  const {
+      register: registerEditIncome,
+      handleSubmit: handleSubmitEditIncome,
+      reset: resetEditIncome,
+      formState: { errors: errorsEditIncome },
+  } = useForm<z.infer<typeof monetaryIncomeSchema>>({
+      resolver: zodResolver(monetaryIncomeSchema),
   });
 
 
@@ -232,8 +266,32 @@ export default function AdminFinancePage() {
     }
   };
 
+  const onIncomeSubmit = async (data: z.infer<typeof monetaryIncomeSchema>) => {
+    const success = await addMonetaryIncome(data);
+    if (success) {
+        toast({ title: "Ingreso Monetario Registrado" });
+        resetIncome({ name: '', amount: 0, description: '' });
+    }
+  };
 
-  const isLoading = isLoadingSales || isLoadingProducts || isLoadingViews || isLoadingStockHistory || isLoadingRequests || isLoadingFixedCosts || isLoadingSalaryWithdrawals;
+  const handleEditIncome = (income: MonetaryIncome) => {
+    setEditingIncome(income);
+    resetEditIncome(income);
+    setIsIncomeDialogOpen(true);
+  };
+
+  const onEditIncomeSubmit = async (data: z.infer<typeof monetaryIncomeSchema>) => {
+    if (!editingIncome) return;
+    const success = await updateMonetaryIncome(editingIncome.id, { name: data.name, amount: data.amount, description: data.description });
+    if (success) {
+        toast({ title: "Ingreso Actualizado" });
+        setIsIncomeDialogOpen(false);
+        setEditingIncome(null);
+    }
+  };
+
+
+  const isLoading = isLoadingSales || isLoadingProducts || isLoadingViews || isLoadingStockHistory || isLoadingRequests || isLoadingFixedCosts || isLoadingSalaryWithdrawals || isLoadingMonetaryIncome;
 
   const stats = useMemo(() => {
     const productsMap = new Map(products.map(p => [p.id, p]));
@@ -278,38 +336,42 @@ export default function AdminFinancePage() {
         case 'all':
         default:
             // This is a rough estimation for 'all' time
-            const oldestSaleDate = sales.length > 0 ? parseISO(sales[sales.length - 1].created_at) : today;
-            const monthsDifference = (today.getFullYear() - oldestSaleDate.getFullYear()) * 12 + (today.getMonth() - oldestSaleDate.getMonth()) + 1;
-            applicableFixedCosts = monthlyFixedCosts * monthsDifference;
+            if (sales.length > 0) {
+              const oldestSaleDate = parseISO(sales[sales.length - 1].created_at);
+              const monthsDifference = (today.getFullYear() - oldestSaleDate.getFullYear()) * 12 + (today.getMonth() - oldestSaleDate.getMonth()) + 1;
+              applicableFixedCosts = monthlyFixedCosts * monthsDifference;
+            }
             break;
     }
 
     const totalCosts = totalCostOfGoodsSold + applicableFixedCosts;
 
     let totalSalaryWithdrawn = 0;
-    const monthlySalaryWithdrawals = salaryWithdrawals
-        .filter(w => isWithinInterval(parseISO(w.created_at), { start: startOfMonth(today), end: endOfMonth(today) }))
-        .reduce((sum, w) => sum + w.amount, 0);
+    if (salaryWithdrawals.length > 0) {
+        const monthlySalaryWithdrawals = salaryWithdrawals
+            .filter(w => isWithinInterval(parseISO(w.created_at), { start: startOfMonth(today), end: endOfMonth(today) }))
+            .reduce((sum, w) => sum + w.amount, 0);
 
-    switch (statsPeriod) {
-        case 'daily': 
-            totalSalaryWithdrawn = monthlySalaryWithdrawals / daysInMonth;
-            break;
-        case 'weekly':
-            totalSalaryWithdrawn = (monthlySalaryWithdrawals / daysInMonth) * 7;
-            break;
-        case 'monthly':
-            totalSalaryWithdrawn = monthlySalaryWithdrawals;
-            break;
-        case 'yearly':
-            totalSalaryWithdrawn = salaryWithdrawals
-                .filter(w => isAfter(parseISO(w.created_at), startOfYear(today)))
-                .reduce((sum, w) => sum + w.amount, 0);
-            break;
-        case 'all':
-        default:
-            totalSalaryWithdrawn = salaryWithdrawals.reduce((sum, w) => sum + w.amount, 0);
-            break;
+        switch (statsPeriod) {
+            case 'daily': 
+                totalSalaryWithdrawn = monthlySalaryWithdrawals / daysInMonth;
+                break;
+            case 'weekly':
+                totalSalaryWithdrawn = (monthlySalaryWithdrawals / daysInMonth) * 7;
+                break;
+            case 'monthly':
+                totalSalaryWithdrawn = monthlySalaryWithdrawals;
+                break;
+            case 'yearly':
+                totalSalaryWithdrawn = salaryWithdrawals
+                    .filter(w => isAfter(parseISO(w.created_at), startOfYear(today)))
+                    .reduce((sum, w) => sum + w.amount, 0);
+                break;
+            case 'all':
+            default:
+                totalSalaryWithdrawn = salaryWithdrawals.reduce((sum, w) => sum + w.amount, 0);
+                break;
+        }
     }
     
     const totalProfit = totalRevenue - totalCosts - totalSalaryWithdrawn;
@@ -318,6 +380,9 @@ export default function AdminFinancePage() {
         const stock = (product as any).colors.reduce((sum: number, color: any) => sum + color.stock, 0);
         return acc + ((product as any).cost * stock);
     }, 0);
+
+    const totalMonetaryIncome = monetaryIncome.reduce((acc, income) => acc + income.amount, 0);
+    const financialCapital = totalProfit + totalMonetaryIncome;
 
     const totalItemsSoldCount = sales.reduce((acc, sale) => acc + sale.quantity, 0);
     const totalItemsRequestedCount = customerRequests.reduce((acc, item) => acc + item.quantity, 0);
@@ -333,8 +398,9 @@ export default function AdminFinancePage() {
       totalCapitalInStock,
       totalItemsSoldCount,
       conversionRate,
+      financialCapital,
     };
-  }, [sales, products, customerRequests, statsPeriod, fixedCosts, salaryWithdrawals]);
+  }, [sales, products, customerRequests, statsPeriod, fixedCosts, salaryWithdrawals, monetaryIncome]);
 
   const salesChartData = useMemo(() => {
     if (salesChartView === 'daily') {
@@ -370,10 +436,10 @@ export default function AdminFinancePage() {
         return Object.values(monthlySales).sort((a, b) => {
         const aTyped = a as { date: string, total: number };
         const bTyped = b as { date: string, total: number };
-        const [aMonth, aYear] = aTyped.date.split(' ');
-        const [bMonth, bYear] = bTyped.date.split(' ');
         const months = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-        return (Number(aYear) * 100 + months.indexOf(aMonth)) - (Number(bYear) * 100 + months.indexOf(bMonth));
+        const [aMonthStr, aYearStr] = aTyped.date.split('. de ');
+        const [bMonthStr, bYearStr] = bTyped.date.split('. de ');
+        return (Number(aYearStr) * 100 + months.indexOf(aMonthStr)) - (Number(bYearStr) * 100 + months.indexOf(bMonthStr));
       });
     }
 
@@ -736,7 +802,7 @@ export default function AdminFinancePage() {
             </Select>
         </div>
       </div>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Ingresos Totales</CardTitle>
@@ -753,6 +819,16 @@ export default function AdminFinancePage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">${stats.totalProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+          </CardContent>
+        </Card>
+         <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Capital Financiero</CardTitle>
+            <Banknote className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">${stats.financialCapital.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+             <p className="text-xs text-muted-foreground">Ganancias + Ingresos</p>
           </CardContent>
         </Card>
         <Card>
@@ -1136,6 +1212,104 @@ export default function AdminFinancePage() {
         </div>
       </div>
 
+       <div id="monetary-income-section" className="mt-6 scroll-mt-24">
+        <Card>
+            <CardHeader>
+                <div className="flex justify-between items-center">
+                    <div>
+                        <CardTitle className="flex items-center gap-2">
+                            <Banknote className="h-5 w-5 text-green-500" />
+                            Gestión de Ingresos Monetarios
+                        </CardTitle>
+                        <CardDescription>
+                            Registra ingresos de capital externos al negocio.
+                        </CardDescription>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => setIsIncomeHistoryDialogOpen(true)}>
+                        <History className="mr-2 h-4 w-4" />
+                        Historial
+                    </Button>
+                </div>
+            </CardHeader>
+            <CardContent>
+                <form onSubmit={handleSubmitIncome(onIncomeSubmit)} className="flex flex-col sm:flex-row items-end gap-4 mb-6">
+                    <div className="flex-grow w-full space-y-2 sm:w-[40%]">
+                        <Label htmlFor="income-name">Nombre del Ingreso</Label>
+                        <Input id="income-name" {...registerIncome('name')} placeholder="Ej: Aporte de capital" />
+                        {errorsIncome.name && <p className="text-sm text-destructive">{errorsIncome.name.message}</p>}
+                    </div>
+                    <div className="w-full sm:w-[25%] space-y-2">
+                        <Label htmlFor="income-amount">Monto</Label>
+                        <Input id="income-amount" type="number" {...registerIncome('amount')} placeholder="50000" />
+                        {errorsIncome.amount && <p className="text-sm text-destructive">{errorsIncome.amount.message}</p>}
+                    </div>
+                    <div className="w-full sm:w-[35%] space-y-2">
+                        <Label htmlFor="income-description">Descripción (Opcional)</Label>
+                        <Input id="income-description" {...registerIncome('description')} placeholder="Detalles del ingreso" />
+                    </div>
+                    <Button type="submit" className="w-full sm:w-auto">
+                        <PlusCircle className="mr-2 h-4 w-4" /> Registrar
+                    </Button>
+                </form>
+                <div className="border rounded-lg">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Fecha</TableHead>
+                                <TableHead>Nombre</TableHead>
+                                <TableHead>Descripción</TableHead>
+                                <TableHead className="text-right">Monto</TableHead>
+                                <TableHead className="text-right w-[100px]">Acción</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {monetaryIncome.length > 0 ? monetaryIncome.slice(0, 5).map((income) => (
+                                <TableRow key={income.id}>
+                                    <TableCell>{new Date(income.created_at).toLocaleDateString()}</TableCell>
+                                    <TableCell className="font-medium">{income.name}</TableCell>
+                                    <TableCell className="text-muted-foreground">{income.description || 'Sin descripción'}</TableCell>
+                                    <TableCell className="text-right font-medium">${income.amount.toLocaleString()}</TableCell>
+                                    <TableCell className="text-right">
+                                        <div className="flex items-center justify-end">
+                                            <Button variant="ghost" size="icon" className="rounded-full" onClick={() => handleEditIncome(income)}>
+                                                <Edit className="h-4 w-4" />
+                                            </Button>
+                                            <AlertDialog>
+                                                <AlertDialogTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive rounded-full">
+                                                        <Trash className="h-4 w-4" />
+                                                    </Button>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent>
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                                                        <AlertDialogDescription>
+                                                            Esta acción no se puede deshacer. Esto eliminará permanentemente el ingreso.
+                                                        </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                        <AlertDialogAction onClick={() => deleteMonetaryIncome(income.id)} className="bg-destructive hover:bg-destructive/90">
+                                                            Eliminar
+                                                        </AlertDialogAction>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
+                                        </div>
+                                    </TableCell>
+                                </TableRow>
+                            )) : (
+                                <TableRow>
+                                    <TableCell colSpan={5} className="h-24 text-center">No hay ingresos registrados.</TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
+            </CardContent>
+        </Card>
+      </div>
+
 
       <div id="rentabilidad-section" className="mt-6 scroll-mt-24">
         <Card>
@@ -1310,24 +1484,87 @@ export default function AdminFinancePage() {
           </CardContent>
         </Card>
       </div>
-        <Dialog open={isEditCostDialogOpen} onOpenChange={setIsEditCostDialogOpen}>
+
+      {/* DIALOGS */}
+      <Dialog open={isEditCostDialogOpen} onOpenChange={setIsEditCostDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+                <DialogTitle>Editar Costo Fijo</DialogTitle>
+                <DialogDescription>
+                    Actualiza el nombre y el monto del costo fijo.
+                </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSubmitEditFixedCost(onEditFixedCostSubmit)} className="space-y-4 py-4">
+                <div className="space-y-2">
+                    <Label htmlFor="edit-cost-name">Nombre del Costo</Label>
+                    <Input id="edit-cost-name" {...registerEditFixedCost('name')} />
+                    {errorsEditFixedCost.name && <p className="text-sm text-destructive">{errorsEditFixedCost.name.message}</p>}
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="edit-cost-amount">Monto</Label>
+                    <Input id="edit-cost-amount" type="number" {...registerEditFixedCost('amount')} />
+                    {errorsEditFixedCost.amount && <p className="text-sm text-destructive">{errorsEditFixedCost.amount.message}</p>}
+                </div>
+                <DialogFooter>
+                    <DialogClose asChild>
+                        <Button type="button" variant="secondary">Cancelar</Button>
+                    </DialogClose>
+                    <Button type="submit">Guardar Cambios</Button>
+                </DialogFooter>
+            </form>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={isSalaryDialogOpen} onOpenChange={setIsSalaryDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+                <DialogTitle>Editar Extracción de Sueldo</DialogTitle>
+                <DialogDescription>
+                    Actualiza el monto y la descripción de la extracción.
+                </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSubmitEditSalary(onEditSalarySubmit)} className="space-y-4 py-4">
+                <div className="space-y-2">
+                    <Label htmlFor="edit-salary-amount">Monto</Label>
+                    <Input id="edit-salary-amount" type="number" {...registerEditSalary('amount')} />
+                    {errorsEditSalary.amount && <p className="text-sm text-destructive">{errorsEditSalary.amount.message}</p>}
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="edit-salary-description">Descripción</Label>
+                      <Textarea id="edit-salary-description" {...registerEditSalary('description')} />
+                      {errorsEditSalary.description && <p className="text-sm text-destructive">{errorsEditSalary.description.message}</p>}
+                </div>
+                <DialogFooter>
+                    <DialogClose asChild>
+                        <Button type="button" variant="secondary">Cancelar</Button>
+                    </DialogClose>
+                    <Button type="submit">Guardar Cambios</Button>
+                </DialogFooter>
+            </form>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={isIncomeDialogOpen} onOpenChange={setIsIncomeDialogOpen}>
           <DialogContent className="sm:max-w-md">
               <DialogHeader>
-                  <DialogTitle>Editar Costo Fijo</DialogTitle>
+                  <DialogTitle>Editar Ingreso Monetario</DialogTitle>
                   <DialogDescription>
-                      Actualiza el nombre y el monto del costo fijo.
+                      Actualiza los detalles del ingreso monetario.
                   </DialogDescription>
               </DialogHeader>
-              <form onSubmit={handleSubmitEditFixedCost(onEditFixedCostSubmit)} className="space-y-4 py-4">
+              <form onSubmit={handleSubmitEditIncome(onEditIncomeSubmit)} className="space-y-4 py-4">
                   <div className="space-y-2">
-                      <Label htmlFor="edit-cost-name">Nombre del Costo</Label>
-                      <Input id="edit-cost-name" {...registerEditFixedCost('name')} />
-                      {errorsEditFixedCost.name && <p className="text-sm text-destructive">{errorsEditFixedCost.name.message}</p>}
+                      <Label htmlFor="edit-income-name">Nombre</Label>
+                      <Input id="edit-income-name" {...registerEditIncome('name')} />
+                      {errorsEditIncome.name && <p className="text-sm text-destructive">{errorsEditIncome.name.message}</p>}
                   </div>
                   <div className="space-y-2">
-                      <Label htmlFor="edit-cost-amount">Monto</Label>
-                      <Input id="edit-cost-amount" type="number" {...registerEditFixedCost('amount')} />
-                      {errorsEditFixedCost.amount && <p className="text-sm text-destructive">{errorsEditFixedCost.amount.message}</p>}
+                      <Label htmlFor="edit-income-amount">Monto</Label>
+                      <Input id="edit-income-amount" type="number" {...registerEditIncome('amount')} />
+                      {errorsEditIncome.amount && <p className="text-sm text-destructive">{errorsEditIncome.amount.message}</p>}
+                  </div>
+                   <div className="space-y-2">
+                      <Label htmlFor="edit-income-description">Descripción</Label>
+                      <Textarea id="edit-income-description" {...registerEditIncome('description')} />
+                      {errorsEditIncome.description && <p className="text-sm text-destructive">{errorsEditIncome.description.message}</p>}
                   </div>
                   <DialogFooter>
                       <DialogClose asChild>
@@ -1337,33 +1574,46 @@ export default function AdminFinancePage() {
                   </DialogFooter>
               </form>
           </DialogContent>
-        </Dialog>
-        <Dialog open={isSalaryDialogOpen} onOpenChange={setIsSalaryDialogOpen}>
-          <DialogContent className="sm:max-w-md">
+      </Dialog>
+      <Dialog open={isIncomeHistoryDialogOpen} onOpenChange={setIsIncomeHistoryDialogOpen}>
+          <DialogContent className="max-w-4xl">
               <DialogHeader>
-                  <DialogTitle>Editar Extracción de Sueldo</DialogTitle>
+                  <DialogTitle>Historial de Ingresos Monetarios</DialogTitle>
                   <DialogDescription>
-                      Actualiza el monto y la descripción de la extracción.
+                      Aquí puedes ver todos los ingresos de capital registrados.
                   </DialogDescription>
               </DialogHeader>
-              <form onSubmit={handleSubmitEditSalary(onEditSalarySubmit)} className="space-y-4 py-4">
-                  <div className="space-y-2">
-                      <Label htmlFor="edit-salary-amount">Monto</Label>
-                      <Input id="edit-salary-amount" type="number" {...registerEditSalary('amount')} />
-                      {errorsEditSalary.amount && <p className="text-sm text-destructive">{errorsEditSalary.amount.message}</p>}
-                  </div>
-                  <div className="space-y-2">
-                      <Label htmlFor="edit-salary-description">Descripción</Label>
-                       <Textarea id="edit-salary-description" {...registerEditSalary('description')} />
-                       {errorsEditSalary.description && <p className="text-sm text-destructive">{errorsEditSalary.description.message}</p>}
-                  </div>
-                  <DialogFooter>
-                      <DialogClose asChild>
-                          <Button type="button" variant="secondary">Cancelar</Button>
-                      </DialogClose>
-                      <Button type="submit">Guardar Cambios</Button>
-                  </DialogFooter>
-              </form>
+              <ScrollArea className="max-h-[70vh] my-4">
+                  <Table>
+                      <TableHeader>
+                          <TableRow>
+                              <TableHead>Fecha</TableHead>
+                              <TableHead>Nombre</TableHead>
+                              <TableHead>Descripción</TableHead>
+                              <TableHead className="text-right">Monto</TableHead>
+                          </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                          {monetaryIncome.length > 0 ? monetaryIncome.map((income) => (
+                              <TableRow key={income.id}>
+                                  <TableCell>{new Date(income.created_at).toLocaleString()}</TableCell>
+                                  <TableCell className="font-medium">{income.name}</TableCell>
+                                  <TableCell className="text-muted-foreground">{income.description || 'N/A'}</TableCell>
+                                  <TableCell className="text-right font-semibold text-green-500">${income.amount.toLocaleString()}</TableCell>
+                              </TableRow>
+                          )) : (
+                              <TableRow>
+                                  <TableCell colSpan={4} className="h-24 text-center">No hay ingresos registrados.</TableCell>
+                              </TableRow>
+                          )}
+                      </TableBody>
+                  </Table>
+              </ScrollArea>
+              <DialogFooter>
+                  <DialogClose asChild>
+                      <Button type="button" variant="secondary">Cerrar</Button>
+                  </DialogClose>
+              </DialogFooter>
           </DialogContent>
       </Dialog>
     </>

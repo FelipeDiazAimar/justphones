@@ -3,7 +3,8 @@ import React from 'react';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { AdminNav } from '@/components/admin-nav';
-import { SalaryWithdrawalsProvider } from '../../hooks/use-salary-withdrawals';
+import { SalaryWithdrawalsProvider } from '@/hooks/use-salary-withdrawals';
+import { MonetaryIncomeProvider } from '@/hooks/use-monetary-income';
 
 export default function AdminLayout({
   children,
@@ -17,7 +18,9 @@ export default function AdminLayout({
         <h1 className="text-3xl font-bold mb-6 text-center md:text-left">Panel de Administración</h1>
         <AdminNav />
         <SalaryWithdrawalsProvider>
+          <MonetaryIncomeProvider>
             <div className="mt-6">{children}</div>
+          </MonetaryIncomeProvider>
         </SalaryWithdrawalsProvider>
       </main>
       <Footer />
