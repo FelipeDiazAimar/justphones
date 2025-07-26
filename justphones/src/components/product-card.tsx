@@ -37,14 +37,20 @@ export function ProductCard({ product }: ProductCardProps) {
         {isSoldOut && (
             <div className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-lg z-10 pointer-events-none overflow-hidden">
                 <div className="absolute w-[200%] h-8 bg-black transform -rotate-[55deg] flex items-center justify-center space-x-8 whitespace-nowrap">
-                    <span className="text-white font-bold text-xl tracking-widest">AGOTADO</span>
-                    <span className="text-white font-bold text-xl tracking-widest">AGOTADO</span>
-                    <span className="text-white font-bold text-xl tracking-widest">AGOTADO</span>
+                    <span className="text-white font-bold text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-xl tracking-widest">SOLD OUT</span>
                 </div>
                 <div className="absolute w-[200%] h-8 bg-black transform rotate-[55deg] flex items-center justify-center space-x-8 whitespace-nowrap">
-                    <span className="text-white font-bold text-xl tracking-widest">AGOTADO</span>
-                    <span className="text-white font-bold text-xl tracking-widest">AGOTADO</span>
-                    <span className="text-white font-bold text-xl tracking-widest">AGOTADO</span>
+                    <span className="text-white font-bold text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-xl tracking-widest">SOLD OUT</span>
+                    <span className="text-white font-bold text-xl tracking-widest">SOLD OUT</span>
                 </div>
             </div>
         )}
