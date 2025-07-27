@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useCart } from '@/hooks/use-cart';
@@ -16,7 +16,7 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Trash, Plus, Minus } from 'lucide-react';
+import { Trash, Plus, Minus, Tag, Check, Loader2 } from 'lucide-react';
 import { CartIcon } from './icons/cart';
 import { Badge } from './ui/badge';
 import {
@@ -26,6 +26,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Input } from './ui/input';
+import { useToast } from '@/hooks/use-toast';
+import { createClient } from '@/lib/supabase/client';
+import { DiscountCode } from '@/lib/discount-codes';
+import { Label } from './ui/label';
 
 const paymentOptions = {
   cash: { label: 'Efectivo (20% OFF)', discount: 0.2, type: 'discount' },
@@ -39,56 +44,101 @@ export function CartSheet() {
   const { cartItems, removeFromCart, updateItemQuantity, cartCount, totalPrice, clearCart } = useCart();
   const [deliveryMethod, setDeliveryMethod] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<keyof typeof paymentOptions | ''>('');
-  const phoneNumber = '5493564338599'; // User's number without '+'
+  const [discountCode, setDiscountCode] = useState('');
+  const [appliedDiscount, setAppliedDiscount] = useState<{ code: string; percentage: number, name: string; } | null>(null);
+  const [isApplyingCode, setIsApplyingCode] = useState(false);
+  const { toast } = useToast();
+  const supabase = createClient();
+  const phoneNumber = '5493564338599'; 
   
+  const handleApplyDiscountCode = async () => {
+    if (!discountCode.trim()) return;
+    setIsApplyingCode(true);
+
+    const { data, error } = await supabase.rpc('apply_discount_code', { p_code: discountCode.trim().toUpperCase() });
+
+    if (error || (data && !data.success)) {
+        toast({ variant: "destructive", title: "Error", description: data?.error || error?.message || 'Código inválido.' });
+        setAppliedDiscount(null);
+    } else if (data && data.success) {
+        setAppliedDiscount({ code: data.code, percentage: data.percentage, name: data.name });
+        toast({ title: "¡Éxito!", description: `Se aplicó un ${data.percentage}% de descuento.` });
+    }
+    setIsApplyingCode(false);
+  };
+  
+  const removeDiscount = () => {
+      setAppliedDiscount(null);
+      setDiscountCode('');
+      toast({ description: "Descuento eliminado."});
+  }
+
   const finalPriceDetails = useMemo(() => {
-    if (!paymentMethod || !totalPrice) {
-      return {
-        hasDiscount: false,
-        isInstallments: false,
-        finalTotal: totalPrice,
-        originalTotal: totalPrice,
-        details: ``,
-        whatsappDetails: `\n\n*Total: $${totalPrice.toLocaleString('es-AR')}*`
-      };
-    }
-
-    const selectedOption = paymentOptions[paymentMethod];
+    let originalPrice = cartItems.reduce((acc, item) => acc + item.product.price * item.quantity, 0);
+    let subtotal = originalPrice;
+    let totalDiscountAmount = 0;
+    let details = '';
+    let whatsappDetails = `\n\nPrecio Original: $${originalPrice.toLocaleString('es-AR')}`;
+    let discountDetailsBreakdown: { label: string, amount: number }[] = [];
     
-    if (selectedOption.type === 'discount') {
-      const discountedPrice = totalPrice * (1 - selectedOption.discount);
-      return {
-        hasDiscount: true,
-        isInstallments: false,
-        finalTotal: discountedPrice,
-        originalTotal: totalPrice,
-        details: ``,
-        whatsappDetails: `\n\nPrecio Original: $${totalPrice.toLocaleString('es-AR')}\n*Total con descuento: $${discountedPrice.toLocaleString('es-AR')}*`
-      };
+    // 1. Calcular descuentos por producto (promociones)
+    const productDiscounts = cartItems.reduce((acc, item) => {
+        if (item.product.discount && item.product.discount > 0) {
+            const discountAmount = item.product.price * (item.product.discount / 100) * item.quantity;
+            const promoLabel = `DESCUENTO POR PROMO (${item.product.discount}%):`;
+            whatsappDetails += `\n${promoLabel} -$${discountAmount.toLocaleString('es-AR')}`;
+            discountDetailsBreakdown.push({ label: promoLabel, amount: discountAmount });
+            return acc + discountAmount;
+        }
+        return acc;
+    }, 0);
+    
+    subtotal -= productDiscounts;
+
+    // 2. Aplicar descuento del código si existe
+    let couponDiscountAmount = 0;
+    if (appliedDiscount) {
+        couponDiscountAmount = subtotal * (appliedDiscount.percentage / 100);
+        const discountName = appliedDiscount.name || appliedDiscount.code;
+        const couponLabel = `DESCUENTO (${discountName}):`;
+        whatsappDetails += `\n${couponLabel} -$${couponDiscountAmount.toLocaleString('es-AR')}`;
+        discountDetailsBreakdown.push({ label: couponLabel, amount: couponDiscountAmount });
     }
 
-    if (selectedOption.type === 'installments') {
-      const installmentPrice = totalPrice / selectedOption.installments;
-      return {
-        hasDiscount: false,
-        isInstallments: true,
-        finalTotal: totalPrice,
-        originalTotal: totalPrice,
-        details: `${selectedOption.installments} cuotas de $${installmentPrice.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`,
-        whatsappDetails: `\n\n*Total: $${totalPrice.toLocaleString('es-AR')}* (${selectedOption.installments} cuotas sin interés de $${installmentPrice.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})})`
-      };
+    subtotal -= couponDiscountAmount;
+    
+    // 3. Aplicar descuento por método de pago
+    let paymentDiscountAmount = 0;
+    if (paymentMethod && paymentOptions[paymentMethod].type === 'discount') {
+        paymentDiscountAmount = subtotal * paymentOptions[paymentMethod].discount;
+        const paymentLabel = `DESCUENTO (${paymentOptions[paymentMethod].label}):`;
+        whatsappDetails += `\n${paymentLabel} -$${paymentDiscountAmount.toLocaleString('es-AR')}`;
+        discountDetailsBreakdown.push({ label: paymentLabel, amount: paymentDiscountAmount });
+    }
+    
+    subtotal -= paymentDiscountAmount;
+    totalDiscountAmount = productDiscounts + couponDiscountAmount + paymentDiscountAmount;
+
+    whatsappDetails += `\n*Total: $${subtotal.toLocaleString('es-AR')}*`;
+    
+    if (paymentMethod && paymentOptions[paymentMethod].type === 'installments') {
+        const installmentPrice = subtotal / paymentOptions[paymentMethod].installments;
+        details = `${paymentOptions[paymentMethod].installments} cuotas de $${installmentPrice.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        whatsappDetails += ` (${details})`;
     }
 
     return {
-        hasDiscount: false,
-        isInstallments: false,
-        finalTotal: totalPrice,
-        originalTotal: totalPrice,
-        details: ``,
-        whatsappDetails: `\n\n*Total: $${totalPrice.toLocaleString('es-AR')}*`
+      finalTotal: subtotal,
+      originalTotal: originalPrice,
+      hasDiscount: totalDiscountAmount > 0,
+      isInstallments: paymentMethod ? paymentOptions[paymentMethod].type === 'installments' : false,
+      details,
+      whatsappDetails,
+      discountAmount: totalDiscountAmount,
+      discountDetailsBreakdown
     };
 
-  }, [totalPrice, paymentMethod]);
+  }, [cartItems, paymentMethod, appliedDiscount]);
 
 
   const handleCheckout = () => {
@@ -99,7 +149,11 @@ export function CartSheet() {
     ).join('\n');
 
     const deliveryInfo = `\n\nMétodo de entrega: *${deliveryMethod}*`;
-    const paymentInfo = `\nMétodo de pago: *${paymentOptions[paymentMethod].label}*`;
+    let paymentInfo = `\nMétodo de pago: *${paymentOptions[paymentMethod].label}*`;
+
+    if (appliedDiscount) {
+      paymentInfo += `\nCódigo Utilizado: *${appliedDiscount.code}*`;
+    }
     
     const total = finalPriceDetails.whatsappDetails;
     
@@ -123,9 +177,17 @@ export function CartSheet() {
           <span className="sr-only">Abrir carrito</span>
         </Button>
       </SheetTrigger>
-      <SheetContent className="flex w-full flex-col pr-0 sm:max-w-lg">
-        <SheetHeader className="px-6">
-          <SheetTitle>Mi Carrito ({cartCount})</SheetTitle>
+      <SheetContent className="flex w-full flex-col sm:max-w-lg p-0">
+        <SheetHeader className="px-6 pt-6 pb-4">
+          <div className="flex justify-between items-center pr-4">
+            <SheetTitle>Mi Carrito ({cartCount})</SheetTitle>
+            {cartItems.length > 0 && (
+              <Button variant="outline" size="sm" onClick={clearCart}>
+                <Trash className="h-3 w-3 mr-1" />
+                Vaciar
+              </Button>
+            )}
+          </div>
           <SheetDescription>
             Revisa los productos en tu carrito. Cuando estés listo, finaliza el pedido.
           </SheetDescription>
@@ -133,8 +195,8 @@ export function CartSheet() {
         
         {cartItems.length > 0 ? (
           <>
-            <ScrollArea className="flex-1 my-4">
-                <div className="flex flex-col gap-6 px-6">
+            <ScrollArea className="flex-1 my-4 px-6">
+                <div className="flex flex-col gap-6">
                   {cartItems.map((item) => {
                     const hasDiscount = item.product.discount && item.product.discount > 0;
                     const itemTotalPrice = item.product.price * item.quantity;
@@ -181,17 +243,26 @@ export function CartSheet() {
                   })}
                 </div>
             </ScrollArea>
-            <SheetFooter className="mt-auto border-t bg-background px-6 py-2">
-              <div className="w-full flex flex-col items-center gap-2">
+            
+            <SheetFooter className="mt-auto border-t bg-background px-6 py-4">
+              <div className="w-full flex flex-col items-center gap-4">
                  <div className="w-full max-w-xs flex flex-col font-semibold">
                     {finalPriceDetails.hasDiscount && (
+                      <>
                         <div className="flex w-full justify-between text-sm text-muted-foreground">
-                            <span>Subtotal:</span>
+                            <span>Precio Original:</span>
                             <span className="line-through">${finalPriceDetails.originalTotal.toLocaleString('es-AR')}</span>
                         </div>
+                        {finalPriceDetails.discountDetailsBreakdown.map((discount, index) => (
+                           <div key={index} className="flex w-full justify-between text-sm text-green-600">
+                               <span>{discount.label}</span>
+                               <span>-${discount.amount.toLocaleString('es-AR')}</span>
+                           </div>
+                        ))}
+                      </>
                     )}
-                    <div className="flex w-full justify-between text-lg">
-                        <span>{finalPriceDetails.hasDiscount ? 'Total c/dto:' : 'Total:'}</span>
+                    <div className="flex w-full justify-between text-lg mt-1 pt-1 border-t">
+                        <span>Total:</span>
                         <span>${finalPriceDetails.finalTotal.toLocaleString('es-AR')}</span>
                     </div>
                     {finalPriceDetails.isInstallments && (
@@ -200,35 +271,54 @@ export function CartSheet() {
                         </div>
                     )}
                 </div>
-                <div className="w-full max-w-xs">
+                <div className="w-full max-w-xs space-y-2">
+                  <div className="space-y-1">
+                    {appliedDiscount ? (
+                        <div className="flex items-center gap-2">
+                            <Badge variant="secondary" className="border-green-500 text-green-700">
+                               <Tag className="mr-1 h-3 w-3" /> {appliedDiscount.code} (-{appliedDiscount.percentage}%)
+                            </Badge>
+                            <Button variant="outline" size="sm" onClick={removeDiscount}>Quitar</Button>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-2">
+                            <Input
+                                id="discount-code"
+                                value={discountCode}
+                                onChange={(e) => setDiscountCode(e.target.value)}
+                                placeholder="Código de Descuento"
+                                className="h-9"
+                            />
+                            <Button onClick={handleApplyDiscountCode} disabled={isApplyingCode} size="sm" className="h-9">
+                                {isApplyingCode ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Aplicar'}
+                            </Button>
+                        </div>
+                    )}
+                  </div>
                   <Select onValueChange={setDeliveryMethod} value={deliveryMethod}>
                     <SelectTrigger id="delivery-method" className="w-full">
                       <SelectValue placeholder="Método de entrega" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Retiro (Freyre)">Retiro (Freyre)</SelectItem>
+                      <SelectItem value="Retiro (San Francisco)">Retiro (San Francisco)</SelectItem>
                       <SelectItem value="Coordinamos!">¡Coordinamos!</SelectItem>
                       <SelectItem value="Envío a domicilio (Sin cargo en Freyre)">Envío a domicilio (Sin cargo en Freyre)</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="w-full max-w-xs">
-                    <Select onValueChange={(value) => setPaymentMethod(value as keyof typeof paymentOptions)} value={paymentMethod}>
-                        <SelectTrigger id="payment-method" className="w-full">
-                           <SelectValue placeholder="Método de pago" />
-                        </SelectTrigger>
-                        <SelectContent>
-                           {Object.entries(paymentOptions).map(([key, { label }]) => (
-                              <SelectItem key={key} value={key}>{label}</SelectItem>
-                           ))}
-                        </SelectContent>
-                    </Select>
+                  <Select onValueChange={(value) => setPaymentMethod(value as keyof typeof paymentOptions)} value={paymentMethod}>
+                      <SelectTrigger id="payment-method" className="w-full">
+                         <SelectValue placeholder="Método de pago" />
+                      </SelectTrigger>
+                      <SelectContent>
+                         {Object.entries(paymentOptions).map(([key, { label }]) => (
+                            <SelectItem key={key} value={key}>{label}</SelectItem>
+                         ))}
+                      </SelectContent>
+                  </Select>
                 </div>
                 <Button className="w-full max-w-xs" onClick={handleCheckout} disabled={!deliveryMethod || !paymentMethod}>
                   Finalizar Pedido por WhatsApp
-                </Button>
-                <Button variant="outline" className="w-full max-w-xs" onClick={clearCart}>
-                  Vaciar Carrito
                 </Button>
               </div>
             </SheetFooter>

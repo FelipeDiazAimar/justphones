@@ -162,6 +162,8 @@ export function useCartState() {
   }, [cartItems]);
 
   const totalPrice = useMemo(() => {
+    // This now calculates the price AFTER product-specific discounts.
+    // The cart sheet will calculate the original price separately.
     return cartItems.reduce((total, item) => {
       const price = item.product.price;
       const discount = item.product.discount ?? 0;
