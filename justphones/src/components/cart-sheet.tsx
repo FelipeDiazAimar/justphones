@@ -55,9 +55,7 @@ export function CartSheet() {
     if (!discountCode.trim()) return;
     setIsApplyingCode(true);
 
-    const { data: rpcResponse, error: rpcError } = await supabase.rpc('apply_and_increment_discount', { p_code: discountCode.trim().toUpperCase() });
-
-    const discountData = rpcResponse?.[0];
+    const { data: discountData, error: rpcError } = await supabase.rpc('apply_and_increment_discount', { p_code: discountCode.trim().toUpperCase() });
 
     if (rpcError || !discountData || !discountData.success) {
         const errorMessage = discountData?.error || rpcError?.message || 'Código de descuento inválido.';
@@ -65,7 +63,7 @@ export function CartSheet() {
         setAppliedDiscount(null);
     } else if (discountData.success) {
         setAppliedDiscount({ code: discountData.code, percentage: discountData.percentage, name: discountData.name });
-        toast({ title: "¡Éxito!", description: `Se aplicó un ${discountData.percentage}% de descuento.` });
+        toast({ title: "¡Éxito!", description: `Se aplicó un ${discountData.percentage}% de descuento. Uso registrado automáticamente.` });
     }
     setIsApplyingCode(false);
   };
