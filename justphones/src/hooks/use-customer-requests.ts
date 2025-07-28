@@ -9,7 +9,7 @@ import { useToast } from './use-toast';
 interface CustomerRequestsContextType {
   customerRequests: CustomerRequest[];
   isLoading: boolean;
-  addCustomerRequest: (requestData: Omit<CustomerRequest, 'id' | 'created_at'>) => Promise<boolean>;
+  addCustomerRequest: (requestData: Omit<CustomerRequest, 'id' | 'created_at'>[] | Omit<CustomerRequest, 'id' | 'created_at'>) => Promise<boolean>;
   updateCustomerRequest: (requestId: string, requestData: Partial<Omit<CustomerRequest, 'id' | 'created_at'>>) => Promise<boolean>;
   deleteCustomerRequest: (requestId: string) => Promise<boolean>;
 }
@@ -56,8 +56,11 @@ export function CustomerRequestsProvider({ children }: { children: ReactNode }) 
     fetchCustomerRequests();
   }, [fetchCustomerRequests]);
 
-  const addCustomerRequest = async (requestData: Omit<CustomerRequest, 'id' | 'created_at'>): Promise<boolean> => {
-    const { error } = await supabase.from('customer_requests').insert([requestData]);
+  const addCustomerRequest = async (requestData: Omit<CustomerRequest, 'id' | 'created_at'>[] | Omit<CustomerRequest, 'id' | 'created_at'>): Promise<boolean> => {
+    const dataToInsert = Array.isArray(requestData) ? requestData : [requestData];
+    if (dataToInsert.length === 0) return true;
+
+    const { error } = await supabase.from('customer_requests').insert(dataToInsert);
     if (error) {
       console.error('Error adding customer request:', error.message);
       return false;

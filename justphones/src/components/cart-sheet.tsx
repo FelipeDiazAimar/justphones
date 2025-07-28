@@ -41,7 +41,7 @@ const paymentOptions = {
 
 
 export function CartSheet() {
-  const { cartItems, removeFromCart, updateItemQuantity, cartCount, totalPrice, clearCart } = useCart();
+  const { cartItems, removeFromCart, updateItemQuantity, cartCount, clearCart, confirmCustomerRequests } = useCart();
   const [deliveryMethod, setDeliveryMethod] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<keyof typeof paymentOptions | ''>('');
   const [discountCode, setDiscountCode] = useState('');
@@ -55,14 +55,17 @@ export function CartSheet() {
     if (!discountCode.trim()) return;
     setIsApplyingCode(true);
 
-    const { data, error } = await supabase.rpc('apply_discount_code', { p_code: discountCode.trim().toUpperCase() });
+    const { data: rpcResponse, error: rpcError } = await supabase.rpc('apply_and_increment_discount', { p_code: discountCode.trim().toUpperCase() });
 
-    if (error || (data && !data.success)) {
-        toast({ variant: "destructive", title: "Error", description: data?.error || error?.message || 'Código inválido.' });
+    const discountData = rpcResponse?.[0];
+
+    if (rpcError || !discountData || !discountData.success) {
+        const errorMessage = discountData?.error || rpcError?.message || 'Código de descuento inválido.';
+        toast({ variant: "destructive", title: "Error", description: errorMessage });
         setAppliedDiscount(null);
-    } else if (data && data.success) {
-        setAppliedDiscount({ code: data.code, percentage: data.percentage, name: data.name });
-        toast({ title: "¡Éxito!", description: `Se aplicó un ${data.percentage}% de descuento.` });
+    } else if (discountData.success) {
+        setAppliedDiscount({ code: discountData.code, percentage: discountData.percentage, name: discountData.name });
+        toast({ title: "¡Éxito!", description: `Se aplicó un ${discountData.percentage}% de descuento.` });
     }
     setIsApplyingCode(false);
   };
@@ -141,8 +144,11 @@ export function CartSheet() {
   }, [cartItems, paymentMethod, appliedDiscount]);
 
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     if (cartItems.length === 0 || !deliveryMethod || !paymentMethod) return;
+
+    // Registrar el pedido del cliente en la base de datos
+    await confirmCustomerRequests(cartItems);
 
     const message = cartItems.map(item =>
       `- ${item.quantity}x ${item.product.name} (${item.product.model}) - Color: ${item.color.name}`
@@ -339,4 +345,3 @@ export function CartSheet() {
     </Sheet>
   );
 }
-

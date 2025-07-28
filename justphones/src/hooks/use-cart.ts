@@ -22,6 +22,7 @@ export interface CartContextType {
   clearCart: () => void;
   cartCount: number;
   totalPrice: number;
+  confirmCustomerRequests: (cartItems: CartItem[]) => Promise<void>;
 }
 
 export const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -70,7 +71,7 @@ export function useCartState() {
     }
   }, [cartItems]);
 
-  const addToCart = async (product: Product, color: ProductColor, quantityToAdd: number = 1) => {
+  const addToCart = (product: Product, color: ProductColor, quantityToAdd: number = 1) => {
     const itemId = `${product.id}-${color.hex}`;
     
     // Update current cart
@@ -105,15 +106,21 @@ export function useCartState() {
         title: "Producto añadido al carrito",
       });
     }
+  };
 
-    await addCustomerRequest({
-      product_id: product.id,
-      product_name: product.name,
-      product_model: product.model,
-      color_name: color.name,
-      color_hex: color.hex,
-      quantity: quantityToAdd,
-    });
+  const confirmCustomerRequests = async (currentCartItems: CartItem[]) => {
+    const requests = currentCartItems.map(item => ({
+      product_id: item.product.id,
+      product_name: item.product.name,
+      product_model: item.product.model,
+      color_name: item.color.name,
+      color_hex: item.color.hex,
+      quantity: item.quantity,
+    }));
+    
+    if(requests.length > 0) {
+      await addCustomerRequest(requests);
+    }
   };
 
   const removeFromCart = (itemId: string) => {
@@ -172,7 +179,7 @@ export function useCartState() {
     }, 0);
   }, [cartItems]);
   
-  return { cartItems, addToCart, removeFromCart, updateItemQuantity, clearCart, cartCount, totalPrice };
+  return { cartItems, addToCart, removeFromCart, updateItemQuantity, clearCart, cartCount, totalPrice, confirmCustomerRequests };
 }
 
 export function CartProvider({ children }: { children: ReactNode }) {

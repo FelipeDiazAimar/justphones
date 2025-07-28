@@ -112,18 +112,15 @@ export default function AdminPedidosPage() {
   const lowStockProducts = useMemo(() => {
     const lowStockItems: any[] = [];
     products.forEach(product => {
-      product.colors.forEach(color => {
-        if (color.stock <= 5 && color.stock > 0) {
-          lowStockItems.push({
-            productId: product.id,
-            productName: unslugify(product.name),
-            productModel: product.model,
-            colorName: color.name,
-            colorHex: color.hex,
-            stock: color.stock
-          });
+        const totalStock = product.colors.reduce((sum, color) => sum + color.stock, 0);
+        if (totalStock <= 5 && totalStock > 0) {
+            lowStockItems.push({
+                productId: product.id,
+                productName: unslugify(product.name),
+                productModel: product.model,
+                stock: totalStock
+            });
         }
-      });
     });
     return lowStockItems.sort((a, b) => a.stock - b.stock);
   }, [products]);
@@ -310,18 +307,14 @@ export default function AdminPedidosPage() {
                     <AlertTriangle className="h-5 w-5 text-destructive" />
                     Alerta de Stock
                 </CardTitle>
-                <CardDescription>Productos con 5 o menos unidades por color.</CardDescription>
+                <CardDescription>Productos con 5 o menos unidades en total.</CardDescription>
             </CardHeader>
             <CardContent>
                 <div className="space-y-4">
                     {paginatedLowStockProducts.length > 0 ? paginatedLowStockProducts.map((item, index) => (
-                        <div key={`${item.productId}-${item.colorName}-${index}`} className="flex items-center">
-                            <div
-                                className="h-4 w-4 rounded-full border mr-3"
-                                style={{ backgroundColor: item.colorHex }}
-                             />
+                        <div key={`${item.productId}-${index}`} className="flex items-center">
                             <div>
-                                <p className="text-sm font-medium leading-none">{item.productName} ({item.colorName})</p>
+                                <p className="text-sm font-medium leading-none">{item.productName}</p>
                                 <p className="text-sm text-muted-foreground">{item.productModel}</p>
                             </div>
                             <div className="ml-auto text-right">
