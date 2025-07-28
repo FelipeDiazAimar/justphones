@@ -382,7 +382,12 @@ export default function AdminFinancePage() {
     }, 0);
 
     const totalMonetaryIncome = monetaryIncome.reduce((acc, income) => acc + income.amount, 0);
-    const financialCapital = totalProfit + totalMonetaryIncome;
+    
+    const totalStockHistoryCost = stockHistory.reduce((acc, entry) => {
+        return acc + ((entry.cost || 0) * entry.quantity_added);
+    }, 0);
+
+    const financialCapital = totalProfit + totalMonetaryIncome - totalStockHistoryCost;
 
     const totalItemsSoldCount = sales.reduce((acc, sale) => acc + sale.quantity, 0);
     const totalItemsRequestedCount = customerRequests.reduce((acc, item) => acc + item.quantity, 0);
@@ -400,7 +405,7 @@ export default function AdminFinancePage() {
       conversionRate,
       financialCapital,
     };
-  }, [sales, products, customerRequests, statsPeriod, fixedCosts, salaryWithdrawals, monetaryIncome]);
+  }, [sales, products, customerRequests, statsPeriod, fixedCosts, salaryWithdrawals, monetaryIncome, stockHistory]);
 
   const salesChartData = useMemo(() => {
     if (salesChartView === 'daily') {
@@ -828,7 +833,7 @@ export default function AdminFinancePage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">${stats.financialCapital.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-             <p className="text-xs text-muted-foreground">Ganancias + Ingresos</p>
+             <p className="text-xs text-muted-foreground">Ganancias + Ingresos - Costos de Pedidos</p>
           </CardContent>
         </Card>
         <Card>
