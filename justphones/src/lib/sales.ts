@@ -10,4 +10,6 @@ export type Sale = {
   quantity: number;
   price_per_unit: number;
   total_price: number;
+  discount_code?: string;
+  discount_percentage?: number;
 };

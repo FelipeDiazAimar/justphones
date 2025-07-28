@@ -255,8 +255,8 @@ export function CartSheet() {
                         </div>
                         {finalPriceDetails.discountDetailsBreakdown.map((discount, index) => (
                            <div key={index} className="flex w-full justify-between text-sm text-green-600">
-                               <span>{discount.label}</span>
-                               <span>-${discount.amount.toLocaleString('es-AR')}</span>
+                               <span className="truncate pr-2">{discount.label}</span>
+                               <span className="whitespace-nowrap flex-shrink-0">-${discount.amount.toLocaleString('es-AR')}</span>
                            </div>
                         ))}
                       </>
@@ -339,3 +339,4 @@ export function CartSheet() {
     </Sheet>
   );
 }
+

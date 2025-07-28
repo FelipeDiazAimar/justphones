@@ -45,7 +45,7 @@ import type { Product, ProductColor } from '@/lib/products';
 import { useForm, useFieldArray, Controller, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Trash, Edit, PlusCircle, ShoppingBag, Search, PartyPopper, Star, UploadCloud, X, Tag, History, ChevronDown, Plus, Minus, PackagePlus } from 'lucide-react';
+import { Trash, Edit, PlusCircle, ShoppingBag, Search, PartyPopper, Star, UploadCloud, X, Tag, History, ChevronDown, Plus, Minus, PackagePlus, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useProductsR2 as useProducts } from '@/hooks/use-products-r2';
@@ -65,6 +65,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import ReactCrop, { type Crop, centerCrop, makeAspectCrop } from 'react-image-crop';
 import { Checkbox } from '@/components/ui/checkbox';
+import type { DiscountCodeValidationResult } from '@/lib/discount-codes';
 
 const PRODUCT_ASPECT = 3 / 5;
 
@@ -105,6 +106,7 @@ const saleSchema = z.object({
   productId: z.string().min(1, "Debe seleccionar un producto."),
   colorHex: z.string().min(1, "Debe seleccionar un color."),
   quantity: z.coerce.number().min(1, "La cantidad debe ser al menos 1."),
+  discount_code: z.string().optional(),
 });
 
 function getCroppedImg(image: HTMLImageElement, crop: Crop, fileName: string): Promise<File> {
@@ -316,9 +318,9 @@ export default function AdminProductsPage() {
       coverImage: '',
       category: 'case',
       model: '',
+      colors: [{ name: 'Negro', hex: '#000000', image: '', stock: 0 }],
       featured: false,
       is_new: false,
-      colors: [],
     },
   });
 
@@ -344,6 +346,7 @@ export default function AdminProductsPage() {
       productId: '',
       colorHex: '',
       quantity: 1,
+      discount_code: '',
     },
   });
 
@@ -686,7 +689,7 @@ export default function AdminProductsPage() {
   };
 
   const handleRegisterSale = () => {
-    resetSale({ productId: '', colorHex: '', quantity: 1 });
+    resetSale({ productId: '', colorHex: '', quantity: 1, discount_code: '' });
     setSaleFilters({ category: 'all', name: 'all', model: 'all' });
     setIsSaleDialogOpen(true);
   };
@@ -696,6 +699,7 @@ export default function AdminProductsPage() {
       productId: product.id,
       colorHex: '',
       quantity: 1,
+      discount_code: '',
     });
     setSaleFilters({
       category: product.category,
@@ -706,25 +710,65 @@ export default function AdminProductsPage() {
   };
 
   const onSaleSubmit = async (data: z.infer<typeof saleSchema>) => {
+    console.log('--- [DEBUG] INICIO onSaleSubmit ---');
+    console.log('[DEBUG] Datos del formulario de venta:', data);
+
     const productToUpdate = products.find(p => p.id === data.productId);
     if (!productToUpdate) {
+        console.error('[DEBUG] Producto no encontrado. ID:', data.productId);
         toast({ variant: 'destructive', title: 'Error', description: 'Producto no encontrado.' });
         return;
     }
 
     const colorToUpdate = productToUpdate.colors.find(c => c.hex === data.colorHex);
     if (!colorToUpdate) {
+        console.error('[DEBUG] Color no encontrado. HEX:', data.colorHex);
         toast({ variant: 'destructive', title: 'Error', description: 'Color no encontrado.' });
         return;
     }
 
     if (data.quantity > colorToUpdate.stock) {
+        console.error('[DEBUG] Stock insuficiente.');
         toast({
             variant: 'destructive',
             title: 'Error de stock',
             description: `No puedes vender ${data.quantity} unidades. Stock disponible: ${colorToUpdate.stock}.`
         });
         return;
+    }
+
+    let finalPrice = productToUpdate.price;
+    let discountPercentage = productToUpdate.discount || 0;
+    
+    // Apply promo discount
+    if (productToUpdate.discount && productToUpdate.discount > 0) {
+      finalPrice = finalPrice * (1 - (productToUpdate.discount / 100));
+      console.log(`[DEBUG] Precio después de descuento por promo (${productToUpdate.discount}%): $${finalPrice}`);
+    }
+    
+    // Apply discount code
+    if (data.discount_code) {
+        console.log(`[DEBUG] Aplicando código de descuento: ${data.discount_code}`);
+        const { data: rpcResponse, error: rpcError } = await supabase.rpc('apply_and_increment_discount', { p_code: data.discount_code.trim().toUpperCase() });
+        
+        console.log('[DEBUG] Respuesta RPC:', rpcResponse);
+        console.log('[DEBUG] Error RPC:', rpcError);
+
+        const discountData = rpcResponse?.[0] as DiscountCodeValidationResult;
+
+        if (rpcError || !discountData || !discountData.success) {
+            const errorMessage = discountData?.error || rpcError?.message || 'Código de descuento inválido.';
+            console.error('[DEBUG] Error al aplicar cupón:', errorMessage);
+            toast({ variant: "destructive", title: "Error de Cupón", description: errorMessage });
+            return;
+        }
+        
+        console.log('[DEBUG] Cupón aplicado exitosamente:', discountData);
+        finalPrice = finalPrice * (1 - (discountData.percentage / 100));
+        discountPercentage += discountData.percentage;
+        
+        toast({ title: `Cupón '${discountData.name}' aplicado!`, description: `Se aplicó un ${discountData.percentage}% de descuento.`});
+        console.log(`[DEBUG] Precio final después del cupón: $${finalPrice}`);
     }
 
     const updatedColors = productToUpdate.colors.map(c => {
@@ -737,21 +781,10 @@ export default function AdminProductsPage() {
     const stockUpdateSuccess = await updateProduct(productToUpdate.id, { colors: updatedColors });
     
     if(!stockUpdateSuccess) {
+      console.error('[DEBUG] Falló la actualización de stock.');
       toast({ variant: 'destructive', title: 'Error', description: 'No se pudo actualizar el stock del producto.' });
       return;
     }
-
-    // Calcular precio final con todos los descuentos
-    const cashDiscount = 0.20; // 20%
-    const productDiscount = (productToUpdate.discount || 0) / 100;
-    
-    let finalPrice = productToUpdate.price;
-    // Aplicar descuento del producto si existe
-    if (productDiscount > 0) {
-      finalPrice = finalPrice * (1 - productDiscount);
-    }
-    // Aplicar el descuento de efectivo
-    finalPrice = finalPrice * (1 - cashDiscount);
 
     const saleData: Omit<Sale, 'id' | 'created_at'> = {
         product_id: productToUpdate.id,
@@ -762,11 +795,15 @@ export default function AdminProductsPage() {
         quantity: data.quantity,
         price_per_unit: finalPrice,
         total_price: finalPrice * data.quantity,
+        discount_code: data.discount_code || undefined,
+        discount_percentage: discountPercentage,
     };
-    
+
+    console.log('[DEBUG] Guardando datos de la venta:', saleData);
     const saleAddSuccess = await addSale(saleData);
 
     if(saleAddSuccess) {
+      console.log('[DEBUG] Venta registrada exitosamente.');
       toast({
         className: "border-primary/20 shadow-lg shadow-primary/10",
         title: "¡Venta Exitosa!",
@@ -783,8 +820,10 @@ export default function AdminProductsPage() {
       });
       setIsSaleDialogOpen(false);
     } else {
+         console.error('[DEBUG] Falló el registro de la venta en el historial.');
          toast({ variant: 'destructive', title: 'Error de Registro', description: 'La venta actualizó el stock pero no pudo ser guardada en el historial' });
     }
+    console.log('--- [DEBUG] FIN onSaleSubmit ---');
   };
 
   const handleToggleFeatured = async (product: Product) => {
@@ -1580,145 +1619,155 @@ export default function AdminProductsPage() {
                       Filtra para encontrar el producto y luego registra la venta para actualizar el stock.
                   </DialogDescription>
               </DialogHeader>
-              <form onSubmit={handleSubmitSale(onSaleSubmit)} className="grid gap-4 py-4">
-                  <div className="space-y-2">
-                      <Label htmlFor="sale-category">Categoría</Label>
-                      <Select
-                          value={saleFilters.category}
-                          onValueChange={(value) => {
-                              setSaleFilters({ category: value, name: 'all', model: 'all' });
-                              setSaleValue('productId', '');
-                          }}
-                      >
-                          <SelectTrigger id="sale-category">
-                              <SelectValue placeholder="Seleccionar categoría" />
-                          </SelectTrigger>
-                          <SelectContent>
-                              <SelectItem value="all">Todas las categorías</SelectItem>
-                              {saleCategoryOptions.map(cat => (
-                                  <SelectItem key={cat} value={cat}>{unslugify(cat)}</SelectItem>
-                              ))}
-                          </SelectContent>
-                      </Select>
-                  </div>
+              <ScrollArea className="max-h-[60vh] -mx-6 px-6">
+                <form onSubmit={handleSubmitSale(onSaleSubmit)} className="space-y-4 py-4 px-1">
+                    <div className="space-y-2">
+                        <Label htmlFor="sale-category">Categoría</Label>
+                        <Select
+                            value={saleFilters.category}
+                            onValueChange={(value) => {
+                                setSaleFilters({ category: value, name: 'all', model: 'all' });
+                                setSaleValue('productId', '');
+                            }}
+                        >
+                            <SelectTrigger id="sale-category">
+                                <SelectValue placeholder="Seleccionar categoría" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">Todas las categorías</SelectItem>
+                                {saleCategoryOptions.map(cat => (
+                                    <SelectItem key={cat} value={cat}>{unslugify(cat)}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
 
-                  <div className="space-y-2">
-                      <Label htmlFor="sale-name">Nombre</Label>
-                      <Select
-                          value={saleFilters.name}
-                          onValueChange={(value) => {
-                              setSaleFilters(f => ({ ...f, name: value, model: 'all' }));
-                              setSaleValue('productId', '');
-                          }}
-                          disabled={saleFilters.category === 'all'}
-                      >
-                          <SelectTrigger id="sale-name">
-                              <SelectValue placeholder="Seleccionar nombre" />
-                          </SelectTrigger>
-                          <SelectContent>
-                              <SelectItem value="all">Todos los nombres</SelectItem>
-                              {saleNameOptions.map(name => (
-                                  <SelectItem key={name} value={name}>{unslugify(name)}</SelectItem>
-                              ))}
-                          </SelectContent>
-                      </Select>
-                  </div>
-                  
-                  <div className="space-y-2">
-                      <Label htmlFor="sale-model">Modelo</Label>
-                      <Select
-                          value={saleFilters.model}
-                          onValueChange={(value) => {
-                              setSaleFilters(f => ({ ...f, model: value }));
-                              setSaleValue('productId', '');
-                          }}
-                          disabled={saleFilters.name === 'all'}
-                      >
-                          <SelectTrigger id="sale-model">
-                              <SelectValue placeholder="Seleccionar modelo" />
-                          </SelectTrigger>
-                          <SelectContent>
-                              <SelectItem value="all">Todos los modelos</SelectItem>
-                              {saleModelOptions.map(model => (
-                                  <SelectItem key={model} value={model}>{model}</SelectItem>
-                              ))}
-                          </SelectContent>
-                      </Select>
-                  </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="sale-name">Nombre</Label>
+                        <Select
+                            value={saleFilters.name}
+                            onValueChange={(value) => {
+                                setSaleFilters(f => ({ ...f, name: value, model: 'all' }));
+                                setSaleValue('productId', '');
+                            }}
+                            disabled={saleFilters.category === 'all'}
+                        >
+                            <SelectTrigger id="sale-name">
+                                <SelectValue placeholder="Seleccionar nombre" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">Todos los nombres</SelectItem>
+                                {saleNameOptions.map(name => (
+                                    <SelectItem key={name} value={name}>{unslugify(name)}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    
+                    <div className="space-y-2">
+                        <Label htmlFor="sale-model">Modelo</Label>
+                        <Select
+                            value={saleFilters.model}
+                            onValueChange={(value) => {
+                                setSaleFilters(f => ({ ...f, model: value }));
+                                setSaleValue('productId', '');
+                            }}
+                            disabled={saleFilters.name === 'all'}
+                        >
+                            <SelectTrigger id="sale-model">
+                                <SelectValue placeholder="Seleccionar modelo" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">Todos los modelos</SelectItem>
+                                {saleModelOptions.map(model => (
+                                    <SelectItem key={model} value={model}>{model}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
 
-                  <hr className="my-2" />
-                  
-                  <div className="space-y-2">
-                      <Label htmlFor="productId">Seleccionar Producto Final</Label>
-                      <Controller
-                          name="productId"
-                          control={controlSale}
-                          render={({ field }) => (
-                              <Select onValueChange={field.onChange} value={field.value} disabled={saleDialogProducts.length === 0}>
-                                  <SelectTrigger id="productId">
-                                      <SelectValue placeholder="Seleccionar producto de la lista" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                      {saleDialogProducts.map(p => (
-                                          <SelectItem key={p.id} value={p.id}>{`${unslugify(p.name)} (${p.model})`}</SelectItem>
-                                      ))}
-                                  </SelectContent>
-                              </Select>
-                          )}
-                      />
-                      {saleDialogProducts.length === 0 && saleFilters.category !== 'all' && (
-                          <p className="text-sm text-muted-foreground">No hay productos con los filtros seleccionados.</p>
-                      )}
-                      {errorsSale.productId && <p className="text-red-500 text-sm">{errorsSale.productId.message}</p>}
-                  </div>
+                    <hr className="my-2" />
+                    
+                    <div className="space-y-2">
+                        <Label htmlFor="productId">Seleccionar Producto Final</Label>
+                        <Controller
+                            name="productId"
+                            control={controlSale}
+                            render={({ field }) => (
+                                <Select onValueChange={field.onChange} value={field.value} disabled={saleDialogProducts.length === 0}>
+                                    <SelectTrigger id="productId">
+                                        <SelectValue placeholder="Seleccionar producto de la lista" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {saleDialogProducts.map(p => (
+                                            <SelectItem key={p.id} value={p.id}>{`${unslugify(p.name)} (${p.model})`}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
+                        />
+                        {saleDialogProducts.length === 0 && saleFilters.category !== 'all' && (
+                            <p className="text-sm text-muted-foreground">No hay productos con los filtros seleccionados.</p>
+                        )}
+                        {errorsSale.productId && <p className="text-red-500 text-sm">{errorsSale.productId.message}</p>}
+                    </div>
 
-                  {saleProduct && (
-                      <div className="space-y-2">
-                          <Label htmlFor="colorHex">Color</Label>
-                          <Controller
-                              name="colorHex"
-                              control={controlSale}
-                              render={({ field }) => (
-                                  <Select onValueChange={field.onChange} value={field.value}>
-                                      <SelectTrigger id="colorHex">
-                                          <SelectValue placeholder="Seleccionar color" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                          {saleProduct.colors.map(c => (
-                                              <SelectItem key={c.hex} value={c.hex} disabled={c.stock === 0}>
-                                                <div className="flex items-center gap-2">
-                                                    <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: c.hex }} />
-                                                    <span>{c.name} (Stock: {c.stock})</span>
-                                                </div>
-                                              </SelectItem>
-                                          ))}
-                                      </SelectContent>
-                                  </Select>
-                              )}
-                          />
-                          {errorsSale.colorHex && <p className="text-red-500 text-sm">{errorsSale.colorHex.message}</p>}
-                      </div>
-                  )}
-              
-                  <div className="space-y-2">
-                      <Label htmlFor="quantity">Cantidad</Label>
-                      <Input 
-                          id="quantity" 
-                          type="number" 
-                          min="1"
-                          {...registerSale('quantity')} 
-                          disabled={!watchSale('colorHex')}
-                      />
-                      {errorsSale.quantity && <p className="text-red-500 text-sm">{errorsSale.quantity.message}</p>}
-                  </div>
-                  
-                  <DialogFooter>
-                      <DialogClose asChild>
-                          <Button type="button" variant="secondary">Cancelar</Button>
-                      </DialogClose>
-                      <Button type="submit" disabled={!saleProduct || !watchSale('colorHex')}>Confirmar Venta</Button>
-                  </DialogFooter>
-              </form>
+                    {saleProduct && (
+                        <div className="space-y-2">
+                            <Label htmlFor="colorHex">Color</Label>
+                            <Controller
+                                name="colorHex"
+                                control={controlSale}
+                                render={({ field }) => (
+                                    <Select onValueChange={field.onChange} value={field.value}>
+                                        <SelectTrigger id="colorHex">
+                                            <SelectValue placeholder="Seleccionar color" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {saleProduct.colors.map(c => (
+                                                <SelectItem key={c.hex} value={c.hex} disabled={c.stock === 0}>
+                                                  <div className="flex items-center gap-2">
+                                                      <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: c.hex }} />
+                                                      <span>{c.name} (Stock: {c.stock})</span>
+                                                  </div>
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                )}
+                            />
+                            {errorsSale.colorHex && <p className="text-red-500 text-sm">{errorsSale.colorHex.message}</p>}
+                        </div>
+                    )}
+                
+                    <div className="space-y-2">
+                        <Label htmlFor="quantity">Cantidad</Label>
+                        <Input 
+                            id="quantity" 
+                            type="number" 
+                            min="1"
+                            {...registerSale('quantity')} 
+                            disabled={!watchSale('colorHex')}
+                        />
+                        {errorsSale.quantity && <p className="text-red-500 text-sm">{errorsSale.quantity.message}</p>}
+                    </div>
+                    
+                    <div className="space-y-2">
+                        <Label htmlFor="discount_code">Código de Descuento (Opcional)</Label>
+                        <Input 
+                            id="discount_code"
+                            {...registerSale('discount_code')}
+                            placeholder="Ej: VERANO2025"
+                        />
+                    </div>
+                </form>
+              </ScrollArea>
+               <DialogFooter>
+                    <DialogClose asChild>
+                        <Button type="button" variant="secondary">Cancelar</Button>
+                    </DialogClose>
+                    <Button onClick={handleSubmitSale(onSaleSubmit)} type="button" disabled={!saleProduct || !watchSale('colorHex')}>Confirmar Venta</Button>
+                </DialogFooter>
           </DialogContent>
       </Dialog>
       <Dialog open={isSalesHistoryDialogOpen} onOpenChange={setIsSalesHistoryDialogOpen}>
@@ -2084,3 +2133,7 @@ export default function AdminProductsPage() {
     </>
   );
 }
+
+
+
+
