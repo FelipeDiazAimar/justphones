@@ -69,6 +69,13 @@ import type { DiscountCodeValidationResult } from '@/lib/discount-codes';
 
 const PRODUCT_ASPECT = 3 / 5;
 
+// Opciones de método de pago para ventas
+const paymentMethodOptions = {
+  cash: { label: 'Efectivo', discount: 0.2 },
+  transfer: { label: 'Transferencia', discount: 0.2 },
+  card: { label: 'Tarjeta (Lista)', discount: 0 },
+};
+
 const imageFieldSchema = z.any().optional().refine(val => 
     val === undefined ||
     val === '' ||
@@ -746,6 +753,12 @@ export default function AdminProductsPage() {
       console.log(`[DEBUG] Precio después de descuento por promo (${productToUpdate.discount}%): $${finalPrice}`);
     }
     
+    // Apply cash payment discount (always 20% OFF for cash/transfer)
+    const cashDiscount = 0.2; // 20% descuento fijo para efectivo
+    finalPrice = finalPrice * (1 - cashDiscount);
+    discountPercentage += cashDiscount * 100;
+    console.log(`[DEBUG] Precio después de descuento de efectivo (20%): $${finalPrice}`);
+    
     // Apply discount code
     if (data.discount_code) {
         console.log(`[DEBUG] Aplicando código de descuento: ${data.discount_code}`);
@@ -764,10 +777,12 @@ export default function AdminProductsPage() {
         }
         
         console.log('[DEBUG] Cupón aplicado exitosamente:', discountData);
-        finalPrice = finalPrice * (1 - (discountData.percentage / 100));
-        discountPercentage += discountData.percentage;
+        if (discountData.percentage) {
+          finalPrice = finalPrice * (1 - (discountData.percentage / 100));
+          discountPercentage += discountData.percentage;
+        }
         
-        toast({ title: `Cupón '${discountData.name}' aplicado!`, description: `Se aplicó un ${discountData.percentage}% de descuento.`});
+        toast({ title: `Cupón '${discountData.name}' aplicado!`, description: `Se aplicó un ${discountData.percentage || 0}% de descuento.`});
         console.log(`[DEBUG] Precio final después del cupón: $${finalPrice}`);
     }
 
