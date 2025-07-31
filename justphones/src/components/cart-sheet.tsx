@@ -5,6 +5,7 @@ import { useState, useMemo, useCallback } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useCart } from '@/hooks/use-cart';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import {
   Sheet,
@@ -42,11 +43,13 @@ const paymentOptions = {
 
 export function CartSheet() {
   const { cartItems, removeFromCart, updateItemQuantity, cartCount, clearCart, confirmCustomerRequests } = useCart();
+  const isMobile = useIsMobile();
   const [deliveryMethod, setDeliveryMethod] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<keyof typeof paymentOptions | ''>('');
   const [discountCode, setDiscountCode] = useState('');
   const [appliedDiscount, setAppliedDiscount] = useState<{ code: string; percentage: number, name: string; } | null>(null);
   const [isApplyingCode, setIsApplyingCode] = useState(false);
+  const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);
   const { toast } = useToast();
   const supabase = createClient();
   const phoneNumber = '5493564338599'; 
@@ -143,29 +146,104 @@ export function CartSheet() {
 
 
   const handleCheckout = async () => {
-    if (cartItems.length === 0 || !deliveryMethod || !paymentMethod) return;
+    console.log('🛒 Iniciando checkout...', {
+      isMobile,
+      cartItemsLength: cartItems.length,
+      deliveryMethod,
+      paymentMethod,
+      userAgent: navigator.userAgent
+    });
 
-    // Registrar el pedido del cliente en la base de datos
-    await confirmCustomerRequests(cartItems);
-
-    const message = cartItems.map(item =>
-      `- ${item.quantity}x ${item.product.name} (${item.product.model}) - Color: ${item.color.name}`
-    ).join('\n');
-
-    const deliveryInfo = `\n\nMétodo de entrega: *${deliveryMethod}*`;
-    let paymentInfo = `\nMétodo de pago: *${paymentOptions[paymentMethod].label}*`;
-
-    if (appliedDiscount) {
-      paymentInfo += `\nCódigo Utilizado: *${appliedDiscount.code}*`;
+    if (cartItems.length === 0 || !deliveryMethod || !paymentMethod) {
+      console.log('❌ Checkout cancelado - Validación fallida:', {
+        cartItemsLength: cartItems.length,
+        deliveryMethod,
+        paymentMethod
+      });
+      return;
     }
-    
-    const total = finalPriceDetails.whatsappDetails;
-    
-    const finalMessage = `¡Hola! Quisiera hacer el siguiente pedido:\n\n${message}${deliveryInfo}${paymentInfo}${total}`;
-    
-    const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(finalMessage)}`;
 
-    window.open(whatsappUrl, '_blank');
+    if (isProcessingCheckout) {
+      console.log('⏳ Checkout ya en proceso, ignorando click adicional');
+      return;
+    }
+
+    setIsProcessingCheckout(true);
+
+    try {
+      console.log('💾 Registrando pedido en base de datos...');
+      // Registrar el pedido del cliente en la base de datos
+      await confirmCustomerRequests(cartItems);
+      console.log('✅ Pedido registrado exitosamente');
+
+      const message = cartItems.map(item =>
+        `- ${item.quantity}x ${item.product.name} (${item.product.model}) - Color: ${item.color.name}`
+      ).join('\n');
+
+      const deliveryInfo = `\n\nMétodo de entrega: *${deliveryMethod}*`;
+      let paymentInfo = `\nMétodo de pago: *${paymentOptions[paymentMethod].label}*`;
+
+      if (appliedDiscount) {
+        paymentInfo += `\nCódigo Utilizado: *${appliedDiscount.code}*`;
+      }
+      
+      const total = finalPriceDetails.whatsappDetails;
+      
+      const finalMessage = `¡Hola! Quisiera hacer el siguiente pedido:\n\n${message}${deliveryInfo}${paymentInfo}${total}`;
+      
+      const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(finalMessage)}`;
+
+      console.log('📱 Abriendo WhatsApp...', {
+        whatsappUrl,
+        isMobile,
+        messageLength: finalMessage.length
+      });
+
+      if (isMobile) {
+        console.log('📱 Detectado dispositivo móvil - usando location.href');
+        
+        // Crear un elemento <a> temporal para mejor compatibilidad en móviles
+        const link = document.createElement('a');
+        link.href = whatsappUrl;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        
+        // Intentar hacer click programáticamente
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        // Fallback adicional para iOS
+        setTimeout(() => {
+          console.log('📱 Aplicando fallback para iOS/Android');
+          window.location.href = whatsappUrl;
+        }, 100);
+        
+      } else {
+        console.log('💻 Detectado dispositivo desktop - usando window.open');
+        const newWindow = window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+        if (!newWindow || newWindow.closed) {
+          console.log('⚠️ Popup bloqueado, intentando con location.href como fallback');
+          window.location.href = whatsappUrl;
+        }
+      }
+
+      console.log('✅ WhatsApp abierto exitosamente');
+      
+      // Resetear el estado después de un pequeño delay
+      setTimeout(() => {
+        setIsProcessingCheckout(false);
+      }, 2000);
+      
+    } catch (error) {
+      console.error('❌ Error durante el checkout:', error);
+      setIsProcessingCheckout(false);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Hubo un problema al procesar tu pedido. Inténtalo de nuevo."
+      });
+    }
   };
 
   return (
@@ -321,8 +399,28 @@ export function CartSheet() {
                       </SelectContent>
                   </Select>
                 </div>
-                <Button className="w-full max-w-xs" onClick={handleCheckout} disabled={!deliveryMethod || !paymentMethod}>
-                  Finalizar Pedido por WhatsApp
+                <Button 
+                  className="w-full max-w-xs min-h-[44px] touch-manipulation" 
+                  onClick={() => {
+                    console.log('🔘 Botón de WhatsApp clickeado', {
+                      isMobile,
+                      deliveryMethod,
+                      paymentMethod,
+                      isProcessingCheckout,
+                      timestamp: new Date().toISOString()
+                    });
+                    handleCheckout();
+                  }} 
+                  disabled={!deliveryMethod || !paymentMethod || isProcessingCheckout}
+                >
+                  {isProcessingCheckout ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Procesando...
+                    </>
+                  ) : (
+                    'Finalizar Pedido por WhatsApp'
+                  )}
                 </Button>
               </div>
             </SheetFooter>
