@@ -347,8 +347,8 @@ export default function AdminFinancePage() {
     // Inicio del período: día 3 del mes seleccionado
     const periodStart = new Date(year, month - 1, 3); // month - 1 porque los meses en Date son 0-indexed
     
-    // Fin del período: día 2 del mes siguiente
-    const periodEnd = new Date(year, month, 2); // Día 2 del mes siguiente
+    // Fin del período: día 2 del mes siguiente (incluyendo todo el día 2)
+    const periodEnd = new Date(year, month, 2, 23, 59, 59, 999); // Día 2 del mes siguiente hasta las 23:59:59
     
     return date >= periodStart && date <= periodEnd;
   };
@@ -1064,7 +1064,7 @@ export default function AdminFinancePage() {
                 
                 // Período del mes: del día 3 del mes al día 2 del siguiente
                 const periodStart = new Date(year, monthNum - 1, 3);
-                const periodEnd = new Date(year, monthNum, 2);
+                const periodEnd = new Date(year, monthNum, 2, 23, 59, 59, 999);
                 
                 const monthSales = sales.filter(sale => {
                   const saleDate = parseISO(sale.created_at);
