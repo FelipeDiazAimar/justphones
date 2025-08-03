@@ -47,5 +47,33 @@ export function useSales() {
     return true;
   };
 
-  return { sales, isLoading, addSale, fetchSales };
+  const updateSale = async (saleId: string, saleData: Partial<Omit<Sale, 'id' | 'created_at'>>) => {
+    const { error } = await supabase.from('sales').update(saleData).eq('id', saleId);
+    if (error) {
+      console.error('Error updating sale:', error.message);
+      const description = error.message.includes('violates row-level security policy')
+        ? 'Acción bloqueada por la seguridad de la base de datos. Por favor, revisa las políticas de RLS para la tabla "sales".'
+        : `No se pudo actualizar la venta: ${error.message}`;
+      toast({ variant: 'destructive', title: 'Error', description });
+      return false;
+    }
+    await fetchSales();
+    return true;
+  };
+
+  const deleteSale = async (saleId: string) => {
+    const { error } = await supabase.from('sales').delete().eq('id', saleId);
+    if (error) {
+      console.error('Error deleting sale:', error.message);
+      const description = error.message.includes('violates row-level security policy')
+        ? 'Acción bloqueada por la seguridad de la base de datos. Por favor, revisa las políticas de RLS para la tabla "sales".'
+        : `No se pudo eliminar la venta: ${error.message}`;
+      toast({ variant: 'destructive', title: 'Error', description });
+      return false;
+    }
+    await fetchSales();
+    return true;
+  };
+
+  return { sales, isLoading, addSale, updateSale, deleteSale, fetchSales };
 }

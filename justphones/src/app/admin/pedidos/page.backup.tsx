@@ -25,7 +25,6 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import type { CustomerRequest } from '@/lib/customer-requests';
-import { createClient } from '@/lib/supabase/client';
 
 
 const ITEMS_PER_PAGE = 5;
@@ -53,7 +52,6 @@ const saleSchema = z.object({
 
 
 export default function AdminPedidosPage() {
-  const supabase = createClient();
   const { sales, addSale, updateSale, deleteSale, isLoading: isLoadingSales } = useSales();
   const { products, isLoading: isLoadingProducts } = useProducts();
   const { customerRequests, updateCustomerRequest, deleteCustomerRequest, isLoading: isLoadingRequests } = useCustomerRequests();
@@ -69,22 +67,6 @@ export default function AdminPedidosPage() {
   // Estados para la gestión de ventas
   const [isSaleDialogOpen, setIsSaleDialogOpen] = useState(false);
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
-  
-  // Estados para filtros de venta
-  const [saleFilters, setSaleFilters] = useState({
-    category: 'all',
-    name: 'all',
-    model: 'all',
-  });
-
-  // Estados para validación de código de descuento
-  const [appliedDiscount, setAppliedDiscount] = useState<{
-    code: string;
-    name: string;
-    percentage: number;
-    isApplied: boolean;
-  } | null>(null);
-  const [isValidatingDiscount, setIsValidatingDiscount] = useState(false);
 
   const {
     control: controlEditRequest,
@@ -145,46 +127,6 @@ export default function AdminPedidosPage() {
   const selectedEditSaleProduct = useMemo(() => {
     return products.find(p => p.id === watchedEditSaleProductId);
   }, [products, watchedEditSaleProductId]);
-
-  // Opciones para filtros de venta
-  const saleNameOptions = useMemo(() => {
-    if (saleFilters.category === 'all') {
-        return [];
-    }
-    const names = products
-        .filter(p => p.category === saleFilters.category)
-        .map(p => p.name);
-    return [...new Set(names)].sort();
-  }, [products, saleFilters.category]);
-
-  const saleModelOptions = useMemo(() => {
-    if (saleFilters.category === 'all' || saleFilters.name === 'all') {
-        return [];
-    }
-    
-    const availableModelsForName = products
-        .filter(p => p.category === saleFilters.category && p.name === saleFilters.name)
-        .map(p => p.model);
-
-    return [...new Set(availableModelsForName)].sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
-  }, [products, saleFilters]);
-
-  const saleDialogProducts = useMemo(() => {
-      if (saleFilters.category === 'all') {
-          return [];
-      }
-      let tempProducts = products.filter(p => p.category === saleFilters.category);
-
-      if (saleFilters.name !== 'all') {
-          tempProducts = tempProducts.filter(p => p.name === saleFilters.name);
-      }
-      if (saleFilters.model !== 'all') {
-          tempProducts = tempProducts.filter(p => p.model === saleFilters.model);
-      }
-      return tempProducts
-          .slice()
-          .sort((a, b) => a.name.localeCompare(b.name));
-  }, [products, saleFilters]);
 
   const handleEditRequest = (request: CustomerRequest) => {
     setEditingRequest(request);
@@ -284,62 +226,6 @@ export default function AdminPedidosPage() {
     }
   };
 
-  const handleValidateDiscountCode = async () => {
-    const discountCode = watchSale('discount_code')?.trim();
-    
-    if (!discountCode) {
-      toast({
-        variant: 'destructive',
-        title: 'Código requerido',
-        description: 'Por favor ingresa un código de descuento.'
-      });
-      return;
-    }
-
-    setIsValidatingDiscount(true);
-    
-    try {
-      const { data: discountData, error: rpcError } = await supabase.rpc('apply_and_increment_discount', { 
-        p_code: discountCode.trim().toUpperCase() 
-      });
-      
-      if (rpcError || !discountData || !discountData.success) {
-        toast({
-          variant: "destructive",
-          title: "Código inválido",
-          description: discountData?.message || "El código ingresado no es válido o ha expirado."
-        });
-        setAppliedDiscount(null);
-      } else {
-        setAppliedDiscount({
-          code: discountData.code,
-          name: discountData.name,
-          percentage: discountData.percentage,
-          isApplied: true
-        });
-        toast({
-          title: "¡Código aplicado!",
-          description: `Descuento "${discountData.name}" del ${discountData.percentage}% aplicado correctamente.`
-        });
-      }
-    } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error de validación",
-        description: "Ocurrió un error al validar el código."
-      });
-      setAppliedDiscount(null);
-    } finally {
-      setIsValidatingDiscount(false);
-    }
-  };
-
-  const handleRemoveDiscountCode = () => {
-    setAppliedDiscount(null);
-    setSaleValue('discount_code', '');
-    toast({ description: "Descuento eliminado." });
-  };
-
   const handleAddNewSale = () => {
     resetSale({
       product_id: '',
@@ -353,35 +239,26 @@ export default function AdminPedidosPage() {
       discount_code: '',
       discount_percentage: 0,
     });
-    setSaleFilters({ category: 'all', name: 'all', model: 'all' });
-    setAppliedDiscount(null);
     setEditingSale(null);
     setIsSaleDialogOpen(true);
   };
 
-  // Calcular precio total basado en descuento (20% base + descuento extra) - solo para nuevas ventas
+  // Calcular precio total automáticamente
   useEffect(() => {
-    const pricePerUnit = watchSale('price_per_unit');
     const quantity = watchSale('quantity');
-    const extraDiscount = watchSale('discount_percentage') || 0;
-    
-    if (pricePerUnit && quantity) {
-      const baseTotal = pricePerUnit * quantity;
-      const totalDiscountPercentage = 20 + Number(extraDiscount); // 20% base + extra
-      const finalPrice = baseTotal * (1 - totalDiscountPercentage / 100);
-      setSaleValue('total_price', Math.round(finalPrice * 100) / 100);
+    const pricePerUnit = watchSale('price_per_unit');
+    if (quantity && pricePerUnit) {
+      setSaleValue('total_price', quantity * pricePerUnit);
     }
-  }, [watchSale('price_per_unit'), watchSale('quantity'), watchSale('discount_percentage'), setSaleValue]);
+  }, [watchSale('quantity'), watchSale('price_per_unit'), setSaleValue]);
 
-  // Para edición: no recalcular automáticamente, mantener valores editados por el usuario
-
-  // Resetear color cuando cambia el producto
   useEffect(() => {
-    const watchedSaleProductId = watchSale('product_id');
-    if (watchedSaleProductId) {
-        setSaleValue('color_hex', '');
+    const quantity = watchEditSale('quantity');
+    const pricePerUnit = watchEditSale('price_per_unit');
+    if (quantity && pricePerUnit) {
+      setEditSaleValue('total_price', quantity * pricePerUnit);
     }
-  }, [watchSale('product_id'), setSaleValue]);
+  }, [watchEditSale('quantity'), watchEditSale('price_per_unit'), setEditSaleValue]);
 
   const isLoading = isLoadingSales || isLoadingProducts || isLoadingRequests;
 
@@ -1067,68 +944,6 @@ export default function AdminPedidosPage() {
                 </DialogDescription>
             </DialogHeader>
             <form onSubmit={editingSale ? handleSubmitEditSale(onEditSaleSubmit) : handleSubmitSale(onSaleSubmit)} className="space-y-4 py-4">
-                {!editingSale && (
-                    <>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="sale-category">Categoría</Label>
-                                <Select 
-                                    value={saleFilters.category} 
-                                    onValueChange={(value) => setSaleFilters(prev => ({ ...prev, category: value, name: 'all', model: 'all' }))}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Seleccionar categoría" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">Todas las categorías</SelectItem>
-                                        <SelectItem value="case">Fundas</SelectItem>
-                                        <SelectItem value="accessory">Accesorios</SelectItem>
-                                        <SelectItem value="auriculares">Auriculares</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label htmlFor="sale-name">Nombre</Label>
-                                <Select 
-                                    value={saleFilters.name} 
-                                    onValueChange={(value) => setSaleFilters(prev => ({ ...prev, name: value, model: 'all' }))}
-                                    disabled={saleFilters.category === 'all'}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Seleccionar nombre" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">Todos los nombres</SelectItem>
-                                        {saleNameOptions.map(name => (
-                                            <SelectItem key={name} value={name}>{unslugify(name)}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label htmlFor="sale-model">Modelo</Label>
-                                <Select 
-                                    value={saleFilters.model} 
-                                    onValueChange={(value) => setSaleFilters(prev => ({ ...prev, model: value }))}
-                                    disabled={saleFilters.category === 'all' || saleFilters.name === 'all'}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Seleccionar modelo" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">Todos los modelos</SelectItem>
-                                        {saleModelOptions.map(model => (
-                                            <SelectItem key={model} value={model}>{model}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
-                    </>
-                )}
-
                 <div className="space-y-2">
                     <Label htmlFor="sale-product">Producto</Label>
                     <Controller
@@ -1136,7 +951,6 @@ export default function AdminPedidosPage() {
                         control={editingSale ? controlEditSale : controlSale}
                         render={({ field }) => (
                             <Select 
-                                disabled={!!editingSale}
                                 onValueChange={(value) => {
                                     field.onChange(value);
                                     const product = products.find(p => p.id === value);
@@ -1144,12 +958,14 @@ export default function AdminPedidosPage() {
                                         if (editingSale) {
                                             setEditSaleValue('product_name', product.name);
                                             setEditSaleValue('product_model', product.model);
+                                            setEditSaleValue('original_price', product.price);
                                             setEditSaleValue('price_per_unit', product.price);
                                             setEditSaleValue('color_hex', '');
                                             setEditSaleValue('color_name', '');
                                         } else {
                                             setSaleValue('product_name', product.name);
                                             setSaleValue('product_model', product.model);
+                                            setSaleValue('original_price', product.price);
                                             setSaleValue('price_per_unit', product.price);
                                             setSaleValue('color_hex', '');
                                             setSaleValue('color_name', '');
@@ -1159,14 +975,10 @@ export default function AdminPedidosPage() {
                                 value={field.value}
                             >
                                 <SelectTrigger>
-                                    <SelectValue placeholder={!!editingSale ? "No editable al modificar venta" : "Seleccionar producto"} />
+                                    <SelectValue placeholder="Seleccionar producto" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {!editingSale ? saleDialogProducts.map(p => (
-                                        <SelectItem key={p.id} value={p.id}>
-                                            {unslugify(p.name)} - {p.model}
-                                        </SelectItem>
-                                    )) : products.map(p => (
+                                    {products.map(p => (
                                         <SelectItem key={p.id} value={p.id}>
                                             {unslugify(p.name)} - {p.model}
                                         </SelectItem>
@@ -1190,7 +1002,6 @@ export default function AdminPedidosPage() {
                             control={editingSale ? controlEditSale : controlSale}
                             render={({ field }) => (
                                 <Select 
-                                    disabled={!!editingSale}
                                     onValueChange={(value) => {
                                         field.onChange(value);
                                         const product = editingSale ? selectedEditSaleProduct : selectedSaleProduct;
@@ -1206,7 +1017,7 @@ export default function AdminPedidosPage() {
                                     value={field.value}
                                 >
                                     <SelectTrigger>
-                                        <SelectValue placeholder={!!editingSale ? "No editable al modificar venta" : "Seleccionar color"} />
+                                        <SelectValue placeholder="Seleccionar color" />
                                     </SelectTrigger>
                                     <SelectContent>
                                         {(editingSale ? selectedEditSaleProduct : selectedSaleProduct)?.colors.map(c => (
@@ -1228,8 +1039,42 @@ export default function AdminPedidosPage() {
                         )}
                     </div>
                 )}
+                                            const product = editingSale ? selectedEditSaleProduct : selectedSaleProduct;
+                                            const color = product?.colors.find(c => c.hex === value);
+                                            if (color) {
+                                                if (editingSale) {
+                                                    setEditSaleValue('color_name', color.name);
+                                                } else {
+                                                    setSaleValue('color_name', color.name);
+                                                }
+                                            }
+                                        }} 
+                                        value={field.value}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Seleccionar color" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {(editingSale ? selectedEditSaleProduct : selectedSaleProduct)?.colors.map(c => (
+                                                <SelectItem key={c.hex} value={c.hex}>
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="h-4 w-4 rounded-full border" style={{backgroundColor: c.hex}}/>
+                                                        {c.name} (Stock: {c.stock})
+                                                    </div>
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                )}
+                            />
+                            {(editingSale ? errorsEditSale.color_hex : errorsSale.color_hex) && (
+                                <p className="text-red-500 text-sm">
+                                    {(editingSale ? errorsEditSale.color_hex : errorsSale.color_hex)?.message}
+                                </p>
+                            )}
+                        </div>
+                    )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                         <Label htmlFor="sale-quantity">Cantidad</Label>
                         <Input 
@@ -1239,10 +1084,27 @@ export default function AdminPedidosPage() {
                             {...(editingSale ? controlEditSale : controlSale).register('quantity')} 
                         />
                         {(editingSale ? errorsEditSale.quantity : errorsSale.quantity) && (
-                            <p className="text-sm text-destructive">
+                            <p className="text-red-500 text-sm">
                                 {(editingSale ? errorsEditSale.quantity : errorsSale.quantity)?.message}
                             </p>
                         )}
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="sale-price-per-unit">Precio por Unidad</Label>
+                        <Input 
+                            id="sale-price-per-unit" 
+                            type="number" 
+                            step="0.01"
+                            min="0.01"
+                            {...(editingSale ? controlEditSale : controlSale).register('price_per_unit')} 
+                        />
+                        {(editingSale ? errorsEditSale.price_per_unit : errorsSale.price_per_unit) && (
+                            <p className="text-red-500 text-sm">
+                                {(editingSale ? errorsEditSale.price_per_unit : errorsSale.price_per_unit)?.message}
+                            </p>
+                        )}
+                        <p className="text-xs text-muted-foreground">Este es el precio final cobrado al cliente (ya incluye descuentos si los hay)</p>
                     </div>
 
                     <div className="space-y-2">
@@ -1251,58 +1113,36 @@ export default function AdminPedidosPage() {
                             id="sale-total-price" 
                             type="number" 
                             step="0.01"
-                            min="0.01"
-                            readOnly={!editingSale}
-                            className={!editingSale ? "bg-muted" : ""}
+                            readOnly
+                            className="bg-muted"
                             {...(editingSale ? controlEditSale : controlSale).register('total_price')} 
                         />
-                        <p className="text-xs text-muted-foreground">
-                            {!!editingSale ? "Editable: precio final que paga el cliente" : "Se calcula automáticamente (precio por unidad × cantidad con descuentos aplicados)"}
-                        </p>
+                        <p className="text-xs text-muted-foreground">Se calcula automáticamente</p>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="sale-discount-percentage">Descuento (%)</Label>
+                        <Input 
+                            id="sale-discount-percentage" 
+                            type="number" 
+                            min="0"
+                            max="100"
+                            step="0.1"
+                            {...(editingSale ? controlEditSale : controlSale).register('discount_percentage')} 
+                        />
+                        <p className="text-xs text-muted-foreground">Porcentaje total de descuento aplicado en esta venta (solo informativo)</p>
                     </div>
                 </div>
 
-                {!editingSale && (
-                    <div className="space-y-2">
-                        <Label htmlFor="sale-discount-code">Código de Descuento (Opcional)</Label>
-                        <div className="flex gap-2">
-                            <Input 
-                                id="sale-discount-code" 
-                                {...controlSale.register('discount_code')} 
-                                placeholder="Ej: PROMO20, CLIENTE50"
-                                disabled={!!appliedDiscount}
-                            />
-                            {!appliedDiscount ? (
-                                <Button 
-                                    type="button" 
-                                    onClick={handleValidateDiscountCode}
-                                    disabled={isValidatingDiscount}
-                                    variant="outline"
-                                >
-                                    {isValidatingDiscount ? 'Validando...' : 'Validar'}
-                                </Button>
-                            ) : (
-                                <Button 
-                                    type="button" 
-                                    onClick={handleRemoveDiscountCode}
-                                    variant="destructive"
-                                >
-                                    Remover
-                                </Button>
-                            )}
-                        </div>
-                        {appliedDiscount && (
-                            <div className="p-2 bg-green-50 border border-green-200 rounded">
-                                <p className="text-sm font-medium text-green-800">
-                                    ✓ Descuento "{appliedDiscount.name}" aplicado ({appliedDiscount.percentage}%)
-                                </p>
-                            </div>
-                        )}
-                        <p className="text-xs text-muted-foreground">
-                            Ingresa un código promocional para aplicar descuentos adicionales
-                        </p>
-                    </div>
-                )}
+                <div className="space-y-2">
+                    <Label htmlFor="sale-discount-code">Código de Descuento (Opcional)</Label>
+                    <Input 
+                        id="sale-discount-code" 
+                        {...(editingSale ? controlEditSale : controlSale).register('discount_code')} 
+                        placeholder="Ej: PROMO20"
+                    />
+                    <p className="text-xs text-muted-foreground">Código promocional usado para aplicar el descuento (solo informativo)</p>
+                </div>
 
                 <DialogFooter>
                     <DialogClose asChild>
