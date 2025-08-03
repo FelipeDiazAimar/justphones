@@ -45,7 +45,7 @@ import type { Product, ProductColor } from '@/lib/products';
 import { useForm, useFieldArray, Controller, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Trash, Edit, PlusCircle, ShoppingBag, Search, PartyPopper, Star, UploadCloud, X, Tag, History, ChevronDown, Plus, Minus, PackagePlus, Loader2 } from 'lucide-react';
+import { Trash, Edit, PlusCircle, ShoppingBag, Search, PartyPopper, Star, UploadCloud, X, Tag, History, ChevronDown, Plus, Minus, PackagePlus, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useProductsR2 as useProducts } from '@/hooks/use-products-r2';
@@ -278,6 +278,15 @@ export default function AdminProductsPage() {
     name: 'all',
     model: 'all',
   });
+
+  // Estados para validación de código de descuento
+  const [appliedDiscount, setAppliedDiscount] = useState<{
+    code: string;
+    name: string;
+    percentage: number;
+    isApplied: boolean;
+  } | null>(null);
+  const [isValidatingDiscount, setIsValidatingDiscount] = useState(false);
   
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
   const [coverImageUrlInput, setCoverImageUrlInput] = useState('');
@@ -698,6 +707,7 @@ export default function AdminProductsPage() {
   const handleRegisterSale = () => {
     resetSale({ productId: '', colorHex: '', quantity: 1, discount_code: '' });
     setSaleFilters({ category: 'all', name: 'all', model: 'all' });
+    setAppliedDiscount(null);
     setIsSaleDialogOpen(true);
   };
 
@@ -708,12 +718,77 @@ export default function AdminProductsPage() {
       quantity: 1,
       discount_code: '',
     });
+    setAppliedDiscount(null);
     setSaleFilters({
       category: product.category,
       name: product.name,
       model: product.model,
     });
     setIsSaleDialogOpen(true);
+  };
+
+  const handleValidateDiscountCode = async () => {
+    const discountCode = watchSale('discount_code')?.trim();
+    
+    if (!discountCode) {
+      toast({
+        variant: 'destructive',
+        title: 'Código requerido',
+        description: 'Por favor ingresa un código de descuento.'
+      });
+      return;
+    }
+
+    setIsValidatingDiscount(true);
+    
+    try {
+      // Usar la misma función que el carrito para validar (pero sin aplicar aún)
+      const { data: discountData, error: rpcError } = await supabase.rpc('apply_and_increment_discount', { 
+        p_code: discountCode.trim().toUpperCase() 
+      });
+      
+      console.log('[DEBUG] Validación de cupón (usando apply_and_increment):', discountData);
+      console.log('[DEBUG] Error validación:', rpcError);
+
+      if (rpcError || !discountData || !discountData.success) {
+        const errorMessage = discountData?.error || rpcError?.message || 'Código de descuento inválido.';
+        toast({ 
+          variant: "destructive", 
+          title: "Código Inválido", 
+          description: errorMessage 
+        });
+        setAppliedDiscount(null);
+      } else {
+        setAppliedDiscount({
+          code: discountData.code || discountCode.toUpperCase(),
+          name: discountData.name || '',
+          percentage: discountData.percentage || 0,
+          isApplied: true
+        });
+        
+        toast({ 
+          title: "¡Código válido!", 
+          description: `Se aplicó un ${discountData.percentage}% de descuento. Uso registrado automáticamente.`,
+          className: "border-green-500/20 shadow-lg shadow-green-500/10"
+        });
+      }
+    } catch (error: any) {
+      console.error('[DEBUG] Error validando cupón:', error);
+      toast({
+        variant: "destructive",
+        title: "Error de validación",
+        description: "Ocurrió un error al validar el código."
+      });
+      setAppliedDiscount(null);
+    } finally {
+      setIsValidatingDiscount(false);
+    }
+  };
+
+  const handleRemoveDiscountCode = () => {
+    setAppliedDiscount(null);
+    setSaleValue('discount_code', '');
+    toast({ description: "Descuento eliminado." });
   };
 
   const onSaleSubmit = async (data: z.infer<typeof saleSchema>) => {
@@ -760,29 +835,16 @@ export default function AdminProductsPage() {
     console.log(`[DEBUG] Precio después de descuento de efectivo (20%): $${finalPrice}`);
     
     // Apply discount code
-    if (data.discount_code) {
-        console.log(`[DEBUG] Aplicando código de descuento: ${data.discount_code}`);
-        const { data: rpcResponse, error: rpcError } = await supabase.rpc('apply_and_increment_discount', { p_code: data.discount_code.trim().toUpperCase() });
+    if (appliedDiscount && appliedDiscount.isApplied) {
+        console.log(`[DEBUG] Usando código de descuento ya aplicado: ${appliedDiscount.code}`);
         
-        console.log('[DEBUG] Respuesta RPC:', rpcResponse);
-        console.log('[DEBUG] Error RPC:', rpcError);
-
-        const discountData = rpcResponse?.[0] as DiscountCodeValidationResult;
-
-        if (rpcError || !discountData || !discountData.success) {
-            const errorMessage = discountData?.error || rpcError?.message || 'Código de descuento inválido.';
-            console.error('[DEBUG] Error al aplicar cupón:', errorMessage);
-            toast({ variant: "destructive", title: "Error de Cupón", description: errorMessage });
-            return;
+        // El código ya fue aplicado e incrementado durante la validación
+        console.log('[DEBUG] Cupón ya aplicado durante la validación');
+        if (appliedDiscount.percentage) {
+          finalPrice = finalPrice * (1 - (appliedDiscount.percentage / 100));
+          discountPercentage += appliedDiscount.percentage;
         }
         
-        console.log('[DEBUG] Cupón aplicado exitosamente:', discountData);
-        if (discountData.percentage) {
-          finalPrice = finalPrice * (1 - (discountData.percentage / 100));
-          discountPercentage += discountData.percentage;
-        }
-        
-        toast({ title: `Cupón '${discountData.name}' aplicado!`, description: `Se aplicó un ${discountData.percentage || 0}% de descuento.`});
         console.log(`[DEBUG] Precio final después del cupón: $${finalPrice}`);
     }
 
@@ -810,7 +872,7 @@ export default function AdminProductsPage() {
         quantity: data.quantity,
         price_per_unit: finalPrice,
         total_price: finalPrice * data.quantity,
-        discount_code: data.discount_code || undefined,
+        discount_code: appliedDiscount?.code || undefined,
         discount_percentage: discountPercentage,
     };
 
@@ -833,6 +895,7 @@ export default function AdminProductsPage() {
           </div>
         ),
       });
+      setAppliedDiscount(null);
       setIsSaleDialogOpen(false);
     } else {
          console.error('[DEBUG] Falló el registro de la venta en el historial.');
@@ -1769,11 +1832,50 @@ export default function AdminProductsPage() {
                     
                     <div className="space-y-2">
                         <Label htmlFor="discount_code">Código de Descuento (Opcional)</Label>
-                        <Input 
-                            id="discount_code"
-                            {...registerSale('discount_code')}
-                            placeholder="Ej: VERANO2025"
-                        />
+                        {!appliedDiscount ? (
+                            <div className="flex gap-2">
+                                <Input 
+                                    id="discount_code"
+                                    {...registerSale('discount_code')}
+                                    placeholder="Ej: VERANO2025"
+                                    className="flex-1"
+                                />
+                                <Button 
+                                    type="button"
+                                    variant="outline"
+                                    onClick={handleValidateDiscountCode}
+                                    disabled={isValidatingDiscount || !watchSale('discount_code')?.trim()}
+                                    className="px-3"
+                                >
+                                    {isValidatingDiscount ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                        'Aplicar'
+                                    )}
+                                </Button>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-md">
+                                <CheckCircle className="h-4 w-4 text-green-600" />
+                                <div className="flex-1">
+                                    <p className="text-sm font-medium text-green-900">
+                                        {appliedDiscount.name}
+                                    </p>
+                                    <p className="text-xs text-green-700">
+                                        {appliedDiscount.percentage}% de descuento aplicado
+                                    </p>
+                                </div>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={handleRemoveDiscountCode}
+                                    className="h-8 w-8 p-0 text-green-700 hover:text-green-900"
+                                >
+                                    <X className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        )}
                     </div>
                 </form>
               </ScrollArea>
