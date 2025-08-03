@@ -339,412 +339,28 @@ export default function AdminFinancePage() {
     }));
   };
 
-  // Función helper para filtrar por mes específico
+  // Función helper para filtrar por mes específico (del día 2 del mes al día 1 del siguiente)
   const isInSelectedMonth = (dateString: string) => {
     const date = parseISO(dateString);
     const [year, month] = selectedMonth.split('-').map(Number);
-    return date.getFullYear() === year && date.getMonth() + 1 === month;
+    
+    // Inicio del período: día 2 del mes seleccionado
+    const periodStart = new Date(year, month - 1, 2); // month - 1 porque los meses en Date son 0-indexed
+    
+    // Fin del período: día 1 del mes siguiente
+    const periodEnd = new Date(year, month, 1); // Día 1 del mes siguiente
+    
+    return date >= periodStart && date <= periodEnd;
   };
 
-  // Función helper para filtrar desde julio 2025 en adelante
+  // Función helper para filtrar desde julio 2025 en adelante (comenzando el día 2)
   const isFromJulyOnwards = (dateString: string) => {
     const date = parseISO(dateString);
-    const julyStart = new Date(2025, 6, 1); // Julio 2025
+    const julyStart = new Date(2025, 6, 2); // 2 de julio 2025 (mes 6 porque enero es 0)
     return date >= julyStart;
   };
 
   const isLoading = isLoadingSales || isLoadingProducts || isLoadingViews || isLoadingStockHistory || isLoadingRequests || isLoadingFixedCosts || isLoadingSalaryWithdrawals || isLoadingMonetaryIncome;
-
-  // 🔍 FUNCIÓN DE VERIFICACIÓN FINANCIERA DETALLADA
-  const verifyFinancialCalculations = (period: string) => {
-    const today = new Date();
-    const productsMap = new Map(products.map(p => [p.id, p]));
-    
-    console.log(`\n🔍 VERIFICACIÓN FINANCIERA - PERÍODO: ${period.toUpperCase()}`);
-    console.log('='.repeat(60));
-    
-    // 1. FILTRAR VENTAS POR PERÍODO
-    const filteredSales = sales.filter(sale => {
-      const saleDate = parseISO(sale.created_at);
-      switch(period) {
-        case 'daily': return isAfter(saleDate, startOfToday());
-        case 'weekly': return isAfter(saleDate, startOfWeek(today, { weekStartsOn: 1 }));
-        case 'monthly': return isAfter(saleDate, startOfMonth(today));
-        case 'yearly': return isAfter(saleDate, startOfYear(today));
-        case 'all':
-        default: return true;
-      }
-    });
-    
-    console.log(`\n📊 VENTAS FILTRADAS (${filteredSales.length} ventas):`);
-    filteredSales.forEach((sale, index) => {
-      console.log(`${index + 1}. ${sale.quantity} × $${sale.total_price.toLocaleString()} (Fecha: ${format(parseISO(sale.created_at), 'dd/MM/yyyy')})`);
-    });
-    
-    // 2. CALCULAR INGRESOS TOTALES
-    const totalRevenue = filteredSales.reduce((acc, sale) => acc + sale.total_price, 0);
-    console.log(`\n💰 INGRESOS TOTALES:`);
-    console.log(`Fórmula: SUMA(cantidad × precio_unitario)`);
-    console.log(`Resultado: $${totalRevenue.toLocaleString()}`);
-    
-    // 3. CALCULAR COSTOS FIJOS
-    const monthlyFixedCosts = fixedCosts.reduce((acc, cost) => acc + cost.amount, 0);
-    const daysInMonth = getDaysInMonth(today);
-    let applicableFixedCosts = 0;
-    
-    switch(period) {
-      case 'daily': 
-        applicableFixedCosts = monthlyFixedCosts / daysInMonth;
-        break;
-      case 'weekly':
-        applicableFixedCosts = (monthlyFixedCosts / daysInMonth) * 7;
-        break;
-      case 'monthly':
-        applicableFixedCosts = monthlyFixedCosts;
-        break;
-      case 'yearly': 
-        applicableFixedCosts = monthlyFixedCosts * (getMonth(today) + 1);
-        break;
-      case 'all':
-      default:
-        if (sales.length > 0) {
-          const oldestSaleDate = parseISO(sales[sales.length - 1].created_at);
-          const monthsDifference = (today.getFullYear() - oldestSaleDate.getFullYear()) * 12 + (today.getMonth() - oldestSaleDate.getMonth()) + 1;
-          applicableFixedCosts = monthlyFixedCosts * monthsDifference;
-        }
-        break;
-    }
-    
-    console.log(`\n🏢 COSTOS FIJOS:`);
-    console.log(`Costos fijos mensuales: $${monthlyFixedCosts.toLocaleString()}`);
-    console.log(`Días en el mes: ${daysInMonth}`);
-    console.log(`Período: ${period}`);
-    console.log(`Costos fijos aplicables: $${applicableFixedCosts.toFixed(2)}`);
-    
-    // 🚨 VERIFICAR ERRORES DE CÁLCULO
-    if (period === 'daily' && applicableFixedCosts > 1000) {
-      console.log(`🚨 ERROR DETECTADO: Costos fijos diarios demasiado altos: $${applicableFixedCosts.toFixed(2)}`);
-      console.log(`✅ VALOR CORRECTO DEBERÍA SER: $${(monthlyFixedCosts / daysInMonth).toFixed(2)}`);
-    }
-    if (period === 'weekly' && applicableFixedCosts > 10000) {
-      console.log(`🚨 ERROR DETECTADO: Costos fijos semanales demasiado altos: $${applicableFixedCosts.toFixed(2)}`);
-      console.log(`✅ VALOR CORRECTO DEBERÍA SER: $${((monthlyFixedCosts / daysInMonth) * 7).toFixed(2)}`);
-    }
-    // 4. CALCULAR SUELDOS EXTRAÍDOS
-    let totalSalaryWithdrawn = 0;
-    const monthlySalaryWithdrawals = salaryWithdrawals.length > 0
-      ? salaryWithdrawals
-          .filter(w => isWithinInterval(parseISO(w.created_at), { start: startOfMonth(today), end: endOfMonth(today) }))
-          .reduce((sum, w) => sum + w.amount, 0)
-      : 0;
-    
-    if (salaryWithdrawals.length > 0) {
-      switch (period) {
-        case 'daily': 
-          totalSalaryWithdrawn = monthlySalaryWithdrawals / daysInMonth;
-          break;
-        case 'weekly':
-          totalSalaryWithdrawn = (monthlySalaryWithdrawals / daysInMonth) * 7;
-          break;
-        case 'monthly':
-          totalSalaryWithdrawn = monthlySalaryWithdrawals;
-          break;
-        case 'yearly':
-          totalSalaryWithdrawn = salaryWithdrawals
-            .filter(w => isAfter(parseISO(w.created_at), startOfYear(today)))
-            .reduce((sum, w) => sum + w.amount, 0);
-          break;
-        case 'all':
-        default:
-          totalSalaryWithdrawn = salaryWithdrawals.reduce((sum, w) => sum + w.amount, 0);
-          break;
-      }
-    }
-    
-    console.log(`\n💼 SUELDOS EXTRAÍDOS:`);
-    console.log(`Total sueldos del período: $${totalSalaryWithdrawn.toFixed(2)}`);
-    
-    // 🚨 VERIFICAR ERRORES DE CÁLCULO EN SUELDOS
-    if (period === 'daily' && totalSalaryWithdrawn > 10000) {
-      console.log(`🚨 ERROR DETECTADO: Sueldos diarios demasiado altos: $${totalSalaryWithdrawn.toFixed(2)}`);
-      const correctDaily = monthlySalaryWithdrawals / daysInMonth;
-      console.log(`✅ VALOR CORRECTO DEBERÍA SER: $${correctDaily.toFixed(2)}`);
-    }
-    if (period === 'weekly' && totalSalaryWithdrawn > 50000) {
-      console.log(`🚨 ERROR DETECTADO: Sueldos semanales demasiado altos: $${totalSalaryWithdrawn.toFixed(2)}`);
-      const correctWeekly = (monthlySalaryWithdrawals / daysInMonth) * 7;
-      console.log(`✅ VALOR CORRECTO DEBERÍA SER: $${correctWeekly.toFixed(2)}`);
-    }
-    // 5. CALCULAR COSTOS DE PEDIDOS
-    const filteredStockHistory = stockHistory.filter(entry => {
-      const entryDate = parseISO(entry.created_at);
-      switch(period) {
-        case 'daily': return isAfter(entryDate, startOfToday()) || isSameDay(entryDate, new Date());
-        case 'weekly': return isAfter(entryDate, startOfWeek(today, { weekStartsOn: 1 })) || isWithinInterval(entryDate, { start: startOfWeek(today, { weekStartsOn: 1 }), end: endOfWeek(today, { weekStartsOn: 1 }) });
-        case 'monthly': return isAfter(entryDate, startOfMonth(today)) || isWithinInterval(entryDate, { start: startOfMonth(today), end: endOfMonth(today) });
-        case 'yearly': return isAfter(entryDate, startOfYear(today)) || isWithinInterval(entryDate, { start: startOfYear(today), end: endOfYear(today) });
-        case 'all':
-        default: return true;
-      }
-    });
-    
-    let totalStockHistoryCost = filteredStockHistory.reduce((acc, entry) => {
-      return acc + ((entry.cost || 0) * entry.quantity_added);
-    }, 0);
-    
-    // Si es período diario y no hay pedidos específicos del día, prorratear los costos del mes
-    if (period === 'daily' && filteredStockHistory.length === 0) {
-      const monthlyStockHistory = stockHistory.filter(entry => {
-        const entryDate = parseISO(entry.created_at);
-        return isWithinInterval(entryDate, { start: startOfMonth(today), end: endOfMonth(today) });
-      });
-      
-      const monthlyStockCost = monthlyStockHistory.reduce((acc, entry) => {
-        return acc + ((entry.cost || 0) * entry.quantity_added);
-      }, 0);
-      
-      totalStockHistoryCost = monthlyStockCost / daysInMonth;
-      console.log(`\n📦 COSTOS DE PEDIDOS:`);
-      console.log(`Pedidos filtrados del día: ${filteredStockHistory.length}`);
-      console.log(`Costos mensuales prorrateados: $${monthlyStockCost.toFixed(2)} / ${daysInMonth} días = $${totalStockHistoryCost.toFixed(2)}`);
-      console.log(`Total costos de pedidos (diario): $${totalStockHistoryCost.toLocaleString()}`);
-    } 
-    // Para período semanal, SIEMPRE prorratear los costos del mes
-    else if (period === 'weekly') {
-      const monthlyStockHistory = stockHistory.filter(entry => {
-        const entryDate = parseISO(entry.created_at);
-        return isWithinInterval(entryDate, { start: startOfMonth(today), end: endOfMonth(today) });
-      });
-      
-      const monthlyStockCost = monthlyStockHistory.reduce((acc, entry) => {
-        return acc + ((entry.cost || 0) * entry.quantity_added);
-      }, 0);
-      
-      totalStockHistoryCost = (monthlyStockCost / 30) * 7;
-      console.log(`\n📦 COSTOS DE PEDIDOS:`);
-      console.log(`Pedidos filtrados de la semana: ${filteredStockHistory.length}`);
-      console.log(`Costos mensuales prorrateados: $${monthlyStockCost.toFixed(2)} / 30 * 7 = $${totalStockHistoryCost.toFixed(2)}`);
-      console.log(`Total costos de pedidos (semanal): $${totalStockHistoryCost.toLocaleString()}`);
-    } else {
-      console.log(`\n📦 COSTOS DE PEDIDOS:`);
-      console.log(`Pedidos filtrados: ${filteredStockHistory.length}`);
-      console.log(`Total costos de pedidos: $${totalStockHistoryCost.toLocaleString()}`);
-    }
-    
-    // 6. CALCULAR COSTOS TOTALES
-    const totalCosts = applicableFixedCosts + totalSalaryWithdrawn + totalStockHistoryCost;
-    console.log(`\n💸 COSTOS TOTALES:`);
-    console.log(`Fórmula: costos_fijos + sueldos_extraídos + costos_de_pedidos`);
-    console.log(`$${applicableFixedCosts.toFixed(2)} + $${totalSalaryWithdrawn.toFixed(2)} + $${totalStockHistoryCost.toFixed(2)} = $${totalCosts.toFixed(2)}`);
-    
-    // 🚨 DETECTAR ERRORES MASIVOS EN COSTOS TOTALES
-    if (totalCosts > 1000000) {
-      console.log(`🚨 ERROR CRÍTICO: Costos totales excesivamente altos: $${totalCosts.toFixed(2)}`);
-      console.log(`🔍 ANÁLISIS:`);
-      console.log(`  - Costos fijos: $${applicableFixedCosts.toFixed(2)} ${applicableFixedCosts > 100000 ? '🚨 ANORMAL' : '✅'}`);
-      console.log(`  - Sueldos: $${totalSalaryWithdrawn.toFixed(2)} ${totalSalaryWithdrawn > 100000 ? '🚨 ANORMAL' : '✅'}`);
-      console.log(`  - Pedidos: $${totalStockHistoryCost.toFixed(2)} ${totalStockHistoryCost > 1000000 ? '🚨 ANORMAL' : '✅'}`);
-    }
-    // 7. CALCULAR GANANCIA
-    const totalProfit = totalRevenue - totalCosts;
-    console.log(`\n📈 GANANCIA TOTAL:`);
-    console.log(`Fórmula: ingresos_totales - costos_totales`);
-    console.log(`$${totalRevenue.toLocaleString()} - $${totalCosts.toLocaleString()} = $${totalProfit.toLocaleString()}`);
-    
-    if (totalProfit < 0) {
-      console.log(`⚠️ ADVERTENCIA: Ganancia negativa detectada: $${totalProfit.toLocaleString()}`);
-    }
-    
-    // 8. CALCULAR INGRESOS MONETARIOS (CORRECCIÓN APLICADA)
-    let totalMonetaryIncome = 0;
-    if (period === 'all') {
-        totalMonetaryIncome = monetaryIncome.reduce((acc, income) => acc + income.amount, 0);
-        console.log(`\n💰 INGRESOS MONETARIOS:`);
-        console.log(`Total ingresos monetarios: $${totalMonetaryIncome.toLocaleString()}`);
-        console.log(`✅ CORRECTO: Ingresos monetarios solo se suman en el período 'all'`);
-    } else if (period === 'daily') {
-        // Para período diario, dividir los ingresos monetarios totales entre los días del mes
-        const totalMonetaryIncomeMonth = monetaryIncome.reduce((acc, income) => acc + income.amount, 0);
-        totalMonetaryIncome = totalMonetaryIncomeMonth / daysInMonth;
-        console.log(`\n💰 INGRESOS MONETARIOS:`);
-        console.log(`Ingresos monetarios diarios (total/30 días): $${totalMonetaryIncome.toFixed(2)}`);
-        console.log(`✅ CORRECTO: Ingresos monetarios prorrateados para período diario`);
-    } else if (period === 'weekly') {
-        // Para período semanal, prorratear los ingresos monetarios (total / 30 * 7)
-        const totalMonetaryIncomeMonth = monetaryIncome.reduce((acc, income) => acc + income.amount, 0);
-        totalMonetaryIncome = (totalMonetaryIncomeMonth / 30) * 7;
-        console.log(`\n💰 INGRESOS MONETARIOS:`);
-        console.log(`Ingresos monetarios semanales prorrateados: $${totalMonetaryIncomeMonth.toFixed(2)} / 30 * 7 = $${totalMonetaryIncome.toFixed(2)}`);
-        console.log(`✅ CORRECTO: Ingresos monetarios prorrateados para período semanal`);
-    } else if (period === 'monthly') {
-        // Para período mensual, mostrar los ingresos monetarios totales
-        totalMonetaryIncome = monetaryIncome.reduce((acc, income) => acc + income.amount, 0);
-        console.log(`\n💰 INGRESOS MONETARIOS:`);
-        console.log(`Total ingresos monetarios: $${totalMonetaryIncome.toLocaleString()}`);
-        console.log(`✅ CORRECTO: Ingresos monetarios se incluyen en el período mensual`);
-    } else {
-        totalMonetaryIncome = 0;
-        console.log(`\n💰 INGRESOS MONETARIOS:`);
-        console.log(`Ingresos monetarios para período '${period}': $0`);
-        console.log(`✅ CORRECTO: Ingresos monetarios NO se suman en períodos específicos para evitar duplicación`);
-    }
-    
-    // 9. CALCULAR CAPITAL DISPONIBLE
-    const financialCapital = totalProfit + totalMonetaryIncome;
-    console.log(`\n🏦 CAPITAL DISPONIBLE:`);
-    console.log(`Fórmula: ingresos_monetarios + ganancia_total`);
-    console.log(`$${totalMonetaryIncome.toLocaleString()} + $${totalProfit.toLocaleString()} = $${financialCapital.toLocaleString()}`);
-    
-    // 10. RESUMEN FINAL CON VALIDACIÓN
-    console.log(`\n📋 RESUMEN FINAL - ${period.toUpperCase()}:`);
-    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`Ingresos Totales: $${totalRevenue.toFixed(2)}`);
-    console.log(`Costos Totales: $${totalCosts.toFixed(2)}`);
-    console.log(`Ganancia: $${totalProfit.toFixed(2)}`);
-    console.log(`Ingresos Monetarios: $${totalMonetaryIncome.toFixed(2)}`);
-    console.log(`Capital Disponible: $${financialCapital.toFixed(2)}`);
-    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
-    
-    // 🔍 VALIDACIÓN FINAL DE RESULTADOS (DINÁMICO)
-    console.log(`\n🔍 VALIDACIÓN DE CÁLCULOS:`);
-    
-    // Validar coherencia interna de los cálculos (sin valores fijos)
-    const calculatedProfit = totalRevenue - totalCosts;
-    if (Math.abs(totalProfit - calculatedProfit) > 0.01) {
-      console.log(`❌ ERROR: Inconsistencia en cálculo de ganancia. Calculado: $${calculatedProfit.toFixed(2)}, Reportado: $${totalProfit.toFixed(2)}`);
-    } else {
-      console.log(`✅ CORRECTO: Cálculo de ganancia es consistente: $${totalProfit.toFixed(2)}`);
-    }
-    
-    // Validar coherencia del capital disponible
-    const expectedCapital = totalProfit + totalMonetaryIncome;
-    const actualCapital = period === 'all' ? totalProfit + totalMonetaryIncome : totalProfit;
-    if (Math.abs(actualCapital - expectedCapital) > 0.01) {
-      console.log(`❌ ERROR: Capital disponible inconsistente. Esperado: $${expectedCapital.toFixed(2)}, Actual: $${actualCapital.toFixed(2)}`);
-    } else {
-      console.log(`✅ CORRECTO: Capital disponible es consistente: $${actualCapital.toFixed(2)}`);
-    }
-    
-    // Validar que los costos totales sean la suma correcta
-    const calculatedTotalCosts = applicableFixedCosts + totalSalaryWithdrawn + totalStockHistoryCost;
-    if (Math.abs(totalCosts - calculatedTotalCosts) > 0.01) {
-      console.log(`❌ ERROR: Costos totales inconsistentes. Calculado: $${calculatedTotalCosts.toFixed(2)}, Reportado: $${totalCosts.toFixed(2)}`);
-    } else {
-      console.log(`✅ CORRECTO: Costos totales son consistentes: $${totalCosts.toFixed(2)}`);
-    }
-    
-    // Validar que los ingresos monetarios solo aparezcan en 'all' o prorrateados en 'daily' y 'weekly' o completos en 'monthly'
-    if (period !== 'all' && period !== 'daily' && period !== 'weekly' && period !== 'monthly' && totalMonetaryIncome > 0) {
-      console.log(`❌ ERROR: Ingresos monetarios aparecen en período '${period}' cuando solo deberían estar en 'all', 'monthly' o prorrateados en 'daily' y 'weekly'`);
-    } else if (period === 'daily') {
-      console.log(`✅ CORRECTO: Ingresos monetarios prorrateados = $${totalMonetaryIncome.toFixed(2)} en período 'daily'`);
-    } else if (period === 'weekly') {
-      console.log(`✅ CORRECTO: Ingresos monetarios prorrateados = $${totalMonetaryIncome.toFixed(2)} en período 'weekly'`);
-    } else if (period === 'monthly') {
-      console.log(`✅ CORRECTO: Ingresos monetarios = $${totalMonetaryIncome.toFixed(2)} en período 'monthly'`);
-    } else if (period !== 'all') {
-      console.log(`✅ CORRECTO: Ingresos monetarios = $0 en período '${period}'`);
-    } else {
-      console.log(`✅ CORRECTO: Ingresos monetarios = $${totalMonetaryIncome.toFixed(2)} solo en período 'all'`);
-    }
-    return {
-      totalRevenue,
-      totalCosts,
-      totalProfit,
-      totalMonetaryIncome,
-      financialCapital,
-      applicableFixedCosts,
-      totalSalaryWithdrawn,
-      totalStockHistoryCost,
-      filteredSalesCount: filteredSales.length
-    };
-  };
-
-  // 🎯 EJECUTAR VERIFICACIÓN AUTOMÁTICA DINÁMICA
-  // Este sistema de verificación es completamente reutilizable y no depende de valores fijos.
-  // Valida la coherencia interna de los cálculos independientemente de los datos específicos.
-  useEffect(() => {
-    if (!isLoading && sales.length > 0) {
-      console.log('\n🚀 INICIANDO VERIFICACIÓN AUTOMÁTICA DE CÁLCULOS FINANCIEROS');
-      console.log('='.repeat(70));
-      
-      const periods = ['daily', 'weekly', 'monthly', 'yearly', 'all'];
-      const results: any[] = [];
-      
-      periods.forEach(period => {
-        const result = verifyFinancialCalculations(period);
-        results.push({ period, ...result });
-      });
-      
-      // 🎯 REPORTE FINAL DE INCONSISTENCIAS
-      console.log('\n🎯 REPORTE FINAL DE INCONSISTENCIAS DETECTADAS:');
-      console.log('='.repeat(70));
-      
-      // 🎯 VERIFICACIÓN DINÁMICA DE ERRORES (SIN VALORES FIJOS)
-      let hasErrors = false;
-      
-      results.forEach(result => {
-        // Verificar coherencia interna de cálculos
-        const expectedProfit = result.totalRevenue - result.totalCosts;
-        if (Math.abs(result.totalProfit - expectedProfit) > 0.01) {
-          console.log(`❌ INCOHERENCIA EN ${result.period.toUpperCase()}: Ganancia calculada $${expectedProfit.toFixed(2)} vs reportada $${result.totalProfit.toFixed(2)}`);
-          hasErrors = true;
-        }
-        
-        // Verificar coherencia del capital disponible
-        const expectedCapital = result.period === 'all' 
-          ? result.totalProfit + result.totalMonetaryIncome 
-          : result.totalProfit;
-        if (Math.abs(result.financialCapital - expectedCapital) > 0.01) {
-          console.log(`❌ CAPITAL INCONSISTENTE EN ${result.period.toUpperCase()}: Esperado $${expectedCapital.toFixed(2)} vs actual $${result.financialCapital.toFixed(2)}`);
-          hasErrors = true;
-        }
-        
-        // Verificar coherencia de costos totales
-        const expectedTotalCosts = result.applicableFixedCosts + result.totalSalaryWithdrawn + result.totalStockHistoryCost;
-        if (Math.abs(result.totalCosts - expectedTotalCosts) > 0.01) {
-          console.log(`❌ COSTOS INCONSISTENTES EN ${result.period.toUpperCase()}: Esperado $${expectedTotalCosts.toFixed(2)} vs actual $${result.totalCosts.toFixed(2)}`);
-          hasErrors = true;
-        }
-        
-        // Detectar valores anormalmente altos (umbrales dinámicos)
-        if (result.period === 'daily' && result.totalCosts > result.totalRevenue * 10) {
-          console.log(`❌ COSTOS DIARIOS DESPROPORCIONADOS: $${result.totalCosts.toFixed(2)} vs ingresos $${result.totalRevenue.toFixed(2)}`);
-          hasErrors = true;
-        }
-        if (result.period === 'weekly' && result.totalCosts > result.totalRevenue * 5) {
-          console.log(`❌ COSTOS SEMANALES DESPROPORCIONADOS: $${result.totalCosts.toFixed(2)} vs ingresos $${result.totalRevenue.toFixed(2)}`);
-          hasErrors = true;
-        }
-        
-        // Validar que los ingresos monetarios solo aparezcan en 'all' o prorrateados en 'daily' y 'weekly' o completos en 'monthly'
-        if (result.period !== 'all' && result.period !== 'daily' && result.period !== 'weekly' && result.period !== 'monthly' && result.totalMonetaryIncome > 0) {
-          console.log(`❌ INGRESOS MONETARIOS DUPLICADOS: $${result.totalMonetaryIncome.toFixed(2)} en período '${result.period}'`);
-          hasErrors = true;
-        } else if (result.period === 'daily') {
-          console.log(`✅ CORRECTO: Ingresos monetarios prorrateados = $${result.totalMonetaryIncome.toFixed(2)} en período 'daily'`);
-        } else if (result.period === 'weekly') {
-          console.log(`✅ CORRECTO: Ingresos monetarios prorrateados = $${result.totalMonetaryIncome.toFixed(2)} en período 'weekly'`);
-        } else if (result.period === 'monthly') {
-          console.log(`✅ CORRECTO: Ingresos monetarios = $${result.totalMonetaryIncome.toFixed(2)} en período 'monthly'`);
-        } else if (result.period !== 'all') {
-          console.log(`✅ CORRECTO: Ingresos monetarios = $0 en período '${result.period}'`);
-        } else {
-          console.log(`✅ CORRECTO: Ingresos monetarios = $${result.totalMonetaryIncome.toFixed(2)} solo en período 'all'`);
-        }
-      });
-      
-      if (!hasErrors) {
-        console.log('✅ NO SE DETECTARON INCONSISTENCIAS CRÍTICAS');
-      } else {
-        console.log('\n🚨 SE DETECTARON INCONSISTENCIAS QUE REQUIEREN CORRECCIÓN');
-      }
-      
-      console.log('\n🎯 VERIFICACIÓN COMPLETADA - Revisa los logs arriba para detectar inconsistencias.');
-    }
-  }, [sales, fixedCosts, salaryWithdrawals, monetaryIncome, stockHistory, products, isLoading]);
-
-
 
   const salesChartData = useMemo(() => {
     if (salesChartView === 'daily') {
@@ -1404,8 +1020,8 @@ export default function AdminFinancePage() {
               const ingresosHistoricos = sales.filter(sale => isFromJulyOnwards(sale.created_at)).reduce((acc, sale) => acc + sale.total_price, 0) + 
                                          monetaryIncome.filter(income => !income.name.startsWith('[EGRESO]') && isFromJulyOnwards(income.created_at)).reduce((total, income) => total + income.amount, 0);
               
-              // Calcular meses desde julio 2025 hasta ahora para costos fijos
-              const startDate = new Date(2025, 6, 1); // Julio 2025
+              // Calcular meses desde julio 2025 hasta ahora para costos fijos (comenzando el día 2)
+              const startDate = new Date(2025, 6, 2); // 2 de julio 2025
               const currentDate = new Date();
               const monthsFromJuly = ((currentDate.getFullYear() - startDate.getFullYear()) * 12) + (currentDate.getMonth() - startDate.getMonth()) + 1;
               const costosHistoricos = fixedCosts.reduce((acc, cost) => acc + cost.amount, 0) * monthsFromJuly + // Costos fijos solo por meses desde julio
@@ -1416,8 +1032,8 @@ export default function AdminFinancePage() {
             })(),
             formula: 'Capital acumulado desde julio 2025 (fecha de inicio del negocio)',
             calculations: (() => {
-              // Calcular meses desde julio 2025 hasta ahora para mostrar en calculations
-              const startDate = new Date(2025, 6, 1);
+              // Calcular meses desde julio 2025 hasta ahora para mostrar en calculations (comenzando el día 2)
+              const startDate = new Date(2025, 6, 2); // 2 de julio 2025
               const currentDate = new Date();
               const monthsFromJuly = ((currentDate.getFullYear() - startDate.getFullYear()) * 12) + (currentDate.getMonth() - startDate.getMonth()) + 1;
               
@@ -1442,40 +1058,41 @@ export default function AdminFinancePage() {
               const monthlyIngresoBreakdown: string[] = [];
               const monthlyCostoBreakdown: string[] = [];
               
-              // Calcular totales históricos y guardar desglose por mes
+              // Calcular totales históricos y guardar desglose por mes (períodos del 2 al 1)
               months.forEach(month => {
+                const [year, monthNum] = month.value.split('-').map(Number);
+                
+                // Período del mes: del día 2 del mes al día 1 del siguiente
+                const periodStart = new Date(year, monthNum - 1, 2);
+                const periodEnd = new Date(year, monthNum, 1);
+                
                 const monthSales = sales.filter(sale => {
                   const saleDate = parseISO(sale.created_at);
-                  const [year, monthNum] = month.value.split('-').map(Number);
-                  return saleDate.getFullYear() === year && saleDate.getMonth() + 1 === monthNum;
+                  return saleDate >= periodStart && saleDate <= periodEnd;
                 }).reduce((acc, sale) => acc + sale.total_price, 0);
                 
                 const monthMonetaryIncome = monetaryIncome.filter(income => {
                   if (income.name.startsWith('[EGRESO]')) return false;
                   const incomeDate = parseISO(income.created_at);
-                  const [year, monthNum] = month.value.split('-').map(Number);
-                  return incomeDate.getFullYear() === year && incomeDate.getMonth() + 1 === monthNum;
+                  return incomeDate >= periodStart && incomeDate <= periodEnd;
                 }).reduce((total, income) => total + income.amount, 0);
                 
                 const monthFixedCosts = fixedCosts.reduce((acc, cost) => acc + cost.amount, 0);
                 
                 const monthSalaryWithdrawals = salaryWithdrawals.filter(w => {
                   const wDate = parseISO(w.created_at);
-                  const [year, monthNum] = month.value.split('-').map(Number);
-                  return wDate.getFullYear() === year && wDate.getMonth() + 1 === monthNum;
+                  return wDate >= periodStart && wDate <= periodEnd;
                 }).reduce((sum, w) => sum + w.amount, 0);
                 
                 const monthStockCosts = stockHistory.filter(entry => {
                   const entryDate = parseISO(entry.created_at);
-                  const [year, monthNum] = month.value.split('-').map(Number);
-                  return entryDate.getFullYear() === year && entryDate.getMonth() + 1 === monthNum;
+                  return entryDate >= periodStart && entryDate <= periodEnd;
                 }).reduce((acc, entry) => acc + ((entry.cost || 0) * entry.quantity_added), 0);
                 
                 const monthEgresos = monetaryIncome.filter(income => {
                   if (!income.name.startsWith('[EGRESO]')) return false;
                   const incomeDate = parseISO(income.created_at);
-                  const [year, monthNum] = month.value.split('-').map(Number);
-                  return incomeDate.getFullYear() === year && incomeDate.getMonth() + 1 === monthNum;
+                  return incomeDate >= periodStart && incomeDate <= periodEnd;
                 }).reduce((total, income) => total + income.amount, 0);
                 
                 const monthIngresoTotal = monthSales + monthMonetaryIncome;

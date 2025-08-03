@@ -114,10 +114,13 @@ export function CartSheet() {
     // 3. Aplicar descuento por método de pago
     let paymentDiscountAmount = 0;
     if (paymentMethod && paymentOptions[paymentMethod].type === 'discount') {
-        paymentDiscountAmount = subtotal * paymentOptions[paymentMethod].discount;
-        const paymentLabel = `DESCUENTO (${paymentOptions[paymentMethod].label}):`;
-        whatsappDetails += `\n${paymentLabel} -$${paymentDiscountAmount.toLocaleString('es-AR')}`;
-        discountDetailsBreakdown.push({ label: paymentLabel, amount: paymentDiscountAmount });
+        const paymentOption = paymentOptions[paymentMethod];
+        if ('discount' in paymentOption) {
+            paymentDiscountAmount = subtotal * paymentOption.discount;
+            const paymentLabel = `DESCUENTO (${paymentOption.label}):`;
+            whatsappDetails += `\n${paymentLabel} -$${paymentDiscountAmount.toLocaleString('es-AR')}`;
+            discountDetailsBreakdown.push({ label: paymentLabel, amount: paymentDiscountAmount });
+        }
     }
     
     subtotal -= paymentDiscountAmount;
@@ -126,9 +129,12 @@ export function CartSheet() {
     whatsappDetails += `\n*Total: $${subtotal.toLocaleString('es-AR')}*`;
     
     if (paymentMethod && paymentOptions[paymentMethod].type === 'installments') {
-        const installmentPrice = subtotal / paymentOptions[paymentMethod].installments;
-        details = `${paymentOptions[paymentMethod].installments} cuotas de $${installmentPrice.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-        whatsappDetails += ` (${details})`;
+        const paymentOption = paymentOptions[paymentMethod];
+        if ('installments' in paymentOption) {
+            const installmentPrice = subtotal / paymentOption.installments;
+            details = `${paymentOption.installments} cuotas de $${installmentPrice.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            whatsappDetails += ` (${details})`;
+        }
     }
 
     return {
