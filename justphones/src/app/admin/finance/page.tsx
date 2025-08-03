@@ -149,7 +149,7 @@ export default function AdminFinancePage() {
   // Generar meses disponibles desde julio 2025 hasta el mes actual
   const getAvailableMonths = () => {
     const months = [];
-    const startDate = new Date(2025, 6, 1); // Julio 2025 (mes 6 porque enero es 0)
+    const startDate = new Date(2025, 6, 3); // 3 de julio 2025 (mes 6 porque enero es 0)
     const currentDate = new Date();
     
     let currentMonth = new Date(startDate);
@@ -339,24 +339,24 @@ export default function AdminFinancePage() {
     }));
   };
 
-  // Función helper para filtrar por mes específico (del día 2 del mes al día 1 del siguiente)
+  // Función helper para filtrar por mes específico (del día 3 del mes al día 2 del siguiente)
   const isInSelectedMonth = (dateString: string) => {
     const date = parseISO(dateString);
     const [year, month] = selectedMonth.split('-').map(Number);
     
-    // Inicio del período: día 2 del mes seleccionado
-    const periodStart = new Date(year, month - 1, 2); // month - 1 porque los meses en Date son 0-indexed
+    // Inicio del período: día 3 del mes seleccionado
+    const periodStart = new Date(year, month - 1, 3); // month - 1 porque los meses en Date son 0-indexed
     
-    // Fin del período: día 1 del mes siguiente
-    const periodEnd = new Date(year, month, 1); // Día 1 del mes siguiente
+    // Fin del período: día 2 del mes siguiente
+    const periodEnd = new Date(year, month, 2); // Día 2 del mes siguiente
     
     return date >= periodStart && date <= periodEnd;
   };
 
-  // Función helper para filtrar desde julio 2025 en adelante (comenzando el día 2)
+  // Función helper para filtrar desde julio 2025 en adelante (comenzando el día 3)
   const isFromJulyOnwards = (dateString: string) => {
     const date = parseISO(dateString);
-    const julyStart = new Date(2025, 6, 2); // 2 de julio 2025 (mes 6 porque enero es 0)
+    const julyStart = new Date(2025, 6, 3); // 3 de julio 2025 (mes 6 porque enero es 0)
     return date >= julyStart;
   };
 
@@ -1020,8 +1020,8 @@ export default function AdminFinancePage() {
               const ingresosHistoricos = sales.filter(sale => isFromJulyOnwards(sale.created_at)).reduce((acc, sale) => acc + sale.total_price, 0) + 
                                          monetaryIncome.filter(income => !income.name.startsWith('[EGRESO]') && isFromJulyOnwards(income.created_at)).reduce((total, income) => total + income.amount, 0);
               
-              // Calcular meses desde julio 2025 hasta ahora para costos fijos (comenzando el día 2)
-              const startDate = new Date(2025, 6, 2); // 2 de julio 2025
+              // Calcular meses desde julio 2025 hasta ahora para costos fijos (comenzando el día 3)
+              const startDate = new Date(2025, 6, 3); // 3 de julio 2025
               const currentDate = new Date();
               const monthsFromJuly = ((currentDate.getFullYear() - startDate.getFullYear()) * 12) + (currentDate.getMonth() - startDate.getMonth()) + 1;
               const costosHistoricos = fixedCosts.reduce((acc, cost) => acc + cost.amount, 0) * monthsFromJuly + // Costos fijos solo por meses desde julio
@@ -1032,8 +1032,8 @@ export default function AdminFinancePage() {
             })(),
             formula: 'Capital acumulado desde julio 2025 (fecha de inicio del negocio)',
             calculations: (() => {
-              // Calcular meses desde julio 2025 hasta ahora para mostrar en calculations (comenzando el día 2)
-              const startDate = new Date(2025, 6, 2); // 2 de julio 2025
+              // Calcular meses desde julio 2025 hasta ahora para mostrar en calculations (comenzando el día 3)
+              const startDate = new Date(2025, 6, 3); // 3 de julio 2025
               const currentDate = new Date();
               const monthsFromJuly = ((currentDate.getFullYear() - startDate.getFullYear()) * 12) + (currentDate.getMonth() - startDate.getMonth()) + 1;
               
@@ -1058,13 +1058,13 @@ export default function AdminFinancePage() {
               const monthlyIngresoBreakdown: string[] = [];
               const monthlyCostoBreakdown: string[] = [];
               
-              // Calcular totales históricos y guardar desglose por mes (períodos del 2 al 1)
+              // Calcular totales históricos y guardar desglose por mes (períodos del 3 al 2)
               months.forEach(month => {
                 const [year, monthNum] = month.value.split('-').map(Number);
                 
-                // Período del mes: del día 2 del mes al día 1 del siguiente
-                const periodStart = new Date(year, monthNum - 1, 2);
-                const periodEnd = new Date(year, monthNum, 1);
+                // Período del mes: del día 3 del mes al día 2 del siguiente
+                const periodStart = new Date(year, monthNum - 1, 3);
+                const periodEnd = new Date(year, monthNum, 2);
                 
                 const monthSales = sales.filter(sale => {
                   const saleDate = parseISO(sale.created_at);
