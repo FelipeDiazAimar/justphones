@@ -7,10 +7,10 @@ import { useProducts } from '@/hooks/use-products';
 import { useProductViews } from '@/hooks/use-product-views';
 import { useCustomerRequests } from '@/hooks/use-customer-requests';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { DollarSign, ShoppingCart, Package, TrendingUp, AlertTriangle, Eye, HelpCircle, ArrowDownUp, TrendingDown, ChevronsUpDown, Percent, BarChart, PackageSearch, Activity, Coins, Goal, History, PlusCircle, Trash, ChevronDown, Edit, Wallet, Banknote } from 'lucide-react';
+import { DollarSign, ShoppingCart, Package, TrendingUp, AlertTriangle, Eye, HelpCircle, ArrowDownUp, TrendingDown, ChevronsUpDown, Percent, BarChart, PackageSearch, Activity, Coins, Goal, History, PlusCircle, Trash, ChevronDown, Edit, Wallet, Banknote, Building, CreditCard, Calculator, PiggyBank } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend, Tooltip as RechartsTooltip, XAxis, YAxis, CartesianGrid, BarChart as RechartsBarChart, Bar } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
-import { unslugify } from '@/lib/utils';
+import { unslugify, cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -141,7 +141,39 @@ export default function AdminFinancePage() {
   const [salesChartView, setSalesChartView] = useState<'daily' | 'monthly' | 'yearly'>('daily');
   const [profitChartView, setProfitChartView] = useState<'daily' | 'weekly' | 'monthly' | 'by_order'>('daily');
 
-  const [statsPeriod, setStatsPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'yearly' | 'all'>('all');
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+
+  // Generar meses disponibles desde julio 2025 hasta el mes actual
+  const getAvailableMonths = () => {
+    const months = [];
+    const startDate = new Date(2025, 6, 1); // Julio 2025 (mes 6 porque enero es 0)
+    const currentDate = new Date();
+    
+    let currentMonth = new Date(startDate);
+    
+    while (currentMonth <= currentDate) {
+      const year = currentMonth.getFullYear();
+      const month = currentMonth.getMonth() + 1;
+      const monthValue = `${year}-${String(month).padStart(2, '0')}`;
+      const monthLabel = currentMonth.toLocaleDateString('es-ES', { 
+        month: 'long', 
+        year: 'numeric' 
+      });
+      
+      months.push({ value: monthValue, label: monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1) });
+      
+      // Avanzar al siguiente mes
+      currentMonth.setMonth(currentMonth.getMonth() + 1);
+    }
+    
+    return months.reverse(); // Mostrar el más reciente primero
+  };
+
+  // Estado para controlar la expansión de cada card
+  const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
 
   const [rentabilidadSort, setRentabilidadSort] = useState<{
     column: 'name' | 'cost' | 'price' | 'profit' | 'stock' | 'margin';
@@ -299,6 +331,27 @@ export default function AdminFinancePage() {
     }
   };
 
+  // Función para alternar expansión de cards
+  const toggleCard = (cardId: string) => {
+    setExpandedCards(prev => ({
+      ...prev,
+      [cardId]: !prev[cardId]
+    }));
+  };
+
+  // Función helper para filtrar por mes específico
+  const isInSelectedMonth = (dateString: string) => {
+    const date = parseISO(dateString);
+    const [year, month] = selectedMonth.split('-').map(Number);
+    return date.getFullYear() === year && date.getMonth() + 1 === month;
+  };
+
+  // Función helper para filtrar desde julio 2025 en adelante
+  const isFromJulyOnwards = (dateString: string) => {
+    const date = parseISO(dateString);
+    const julyStart = new Date(2025, 6, 1); // Julio 2025
+    return date >= julyStart;
+  };
 
   const isLoading = isLoadingSales || isLoadingProducts || isLoadingViews || isLoadingStockHistory || isLoadingRequests || isLoadingFixedCosts || isLoadingSalaryWithdrawals || isLoadingMonetaryIncome;
 
@@ -691,182 +744,7 @@ export default function AdminFinancePage() {
     }
   }, [sales, fixedCosts, salaryWithdrawals, monetaryIncome, stockHistory, products, isLoading]);
 
-  const stats = useMemo(() => {
-    const productsMap = new Map(products.map(p => [p.id, p]));
-    const today = new Date();
-    
-    const filteredSales = sales.filter(sale => {
-      const saleDate = parseISO(sale.created_at);
-      switch(statsPeriod) {
-        case 'daily': return isAfter(saleDate, startOfToday());
-        case 'weekly': return isAfter(saleDate, startOfWeek(today, { weekStartsOn: 1 }));
-        case 'monthly': return isAfter(saleDate, startOfMonth(today));
-        case 'yearly': return isAfter(saleDate, startOfYear(today));
-        case 'all':
-        default: return true;
-      }
-    });
 
-    const totalRevenue = filteredSales.reduce((acc, sale) => acc + sale.total_price, 0);
-    
-    const totalCostOfGoodsSold = filteredSales.reduce((acc, sale) => {
-        const product = productsMap.get(sale.product_id);
-        return acc + (product ? (product as any).cost * sale.quantity : 0);
-    }, 0);
-    
-    const monthlyFixedCosts = fixedCosts.reduce((acc, cost) => acc + cost.amount, 0);
-    let applicableFixedCosts = 0;
-    const daysInMonth = getDaysInMonth(today);
-
-    switch(statsPeriod) {
-        case 'daily': 
-            applicableFixedCosts = monthlyFixedCosts / daysInMonth;
-            break;
-        case 'weekly':
-            applicableFixedCosts = (monthlyFixedCosts / daysInMonth) * 7;
-            break;
-        case 'monthly':
-            applicableFixedCosts = monthlyFixedCosts;
-            break;
-        case 'yearly': 
-            applicableFixedCosts = monthlyFixedCosts * (getMonth(today) + 1);
-            break;
-        case 'all':
-        default:
-            // This is a rough estimation for 'all' time
-            if (sales.length > 0) {
-              const oldestSaleDate = parseISO(sales[sales.length - 1].created_at);
-              const monthsDifference = (today.getFullYear() - oldestSaleDate.getFullYear()) * 12 + (today.getMonth() - oldestSaleDate.getMonth()) + 1;
-              applicableFixedCosts = monthlyFixedCosts * monthsDifference;
-            }
-            break;
-    }
-
-    let totalSalaryWithdrawn = 0;
-    if (salaryWithdrawals.length > 0) {
-        const monthlySalaryWithdrawals = salaryWithdrawals
-            .filter(w => isWithinInterval(parseISO(w.created_at), { start: startOfMonth(today), end: endOfMonth(today) }))
-            .reduce((sum, w) => sum + w.amount, 0);
-
-        switch (statsPeriod) {
-            case 'daily': 
-                totalSalaryWithdrawn = monthlySalaryWithdrawals / daysInMonth;
-                break;
-            case 'weekly':
-                totalSalaryWithdrawn = (monthlySalaryWithdrawals / daysInMonth) * 7;
-                break;
-            case 'monthly':
-                totalSalaryWithdrawn = monthlySalaryWithdrawals;
-                break;
-            case 'yearly':
-                totalSalaryWithdrawn = salaryWithdrawals
-                    .filter(w => isAfter(parseISO(w.created_at), startOfYear(today)))
-                    .reduce((sum, w) => sum + w.amount, 0);
-                break;
-            case 'all':
-            default:
-                totalSalaryWithdrawn = salaryWithdrawals.reduce((sum, w) => sum + w.amount, 0);
-                break;
-        }
-    }
-
-    // Filtrar costos de pedidos según el período seleccionado
-    const filteredStockHistory = stockHistory.filter(entry => {
-        const entryDate = parseISO(entry.created_at);
-        switch(statsPeriod) {
-            case 'daily': return isAfter(entryDate, startOfToday()) || isSameDay(entryDate, new Date());
-            case 'weekly': return isAfter(entryDate, startOfWeek(today, { weekStartsOn: 1 })) || isWithinInterval(entryDate, { start: startOfWeek(today, { weekStartsOn: 1 }), end: endOfWeek(today, { weekStartsOn: 1 }) });
-            case 'monthly': return isAfter(entryDate, startOfMonth(today)) || isWithinInterval(entryDate, { start: startOfMonth(today), end: endOfMonth(today) });
-            case 'yearly': return isAfter(entryDate, startOfYear(today)) || isWithinInterval(entryDate, { start: startOfYear(today), end: endOfYear(today) });
-            case 'all':
-            default: return true;
-        }
-    });
-
-    let totalStockHistoryCost = filteredStockHistory.reduce((acc, entry) => {
-        return acc + ((entry.cost || 0) * entry.quantity_added);
-    }, 0);
-
-    // Si es período diario y no hay pedidos específicos del día, prorratear los costos del mes
-    if (statsPeriod === 'daily' && filteredStockHistory.length === 0) {
-        const monthlyStockHistory = stockHistory.filter(entry => {
-            const entryDate = parseISO(entry.created_at);
-            return isWithinInterval(entryDate, { start: startOfMonth(today), end: endOfMonth(today) });
-        });
-        
-        const monthlyStockCost = monthlyStockHistory.reduce((acc, entry) => {
-            return acc + ((entry.cost || 0) * entry.quantity_added);
-        }, 0);
-        
-        totalStockHistoryCost = monthlyStockCost / daysInMonth;
-    }
-    
-    // Para período semanal, SIEMPRE prorratear los costos del mes
-    if (statsPeriod === 'weekly') {
-        const monthlyStockHistory = stockHistory.filter(entry => {
-            const entryDate = parseISO(entry.created_at);
-            return isWithinInterval(entryDate, { start: startOfMonth(today), end: endOfMonth(today) });
-        });
-        
-        const monthlyStockCost = monthlyStockHistory.reduce((acc, entry) => {
-            return acc + ((entry.cost || 0) * entry.quantity_added);
-        }, 0);
-        
-        totalStockHistoryCost = (monthlyStockCost / 30) * 7;
-    }
-
-    const totalCosts = applicableFixedCosts + totalSalaryWithdrawn + totalStockHistoryCost;
-    
-    const totalProfit = totalRevenue - totalCosts;
-    
-    const totalCapitalInStock = products.reduce((acc, product) => {
-        const stock = (product as any).colors.reduce((sum: number, color: any) => sum + color.stock, 0);
-        return acc + ((product as any).cost * stock);
-    }, 0);
-
-    // 🚨 CORRECCIÓN: Ingresos monetarios con prorrateo para períodos específicos
-    let totalMonetaryIncome = 0;
-    if (statsPeriod === 'all') {
-        totalMonetaryIncome = monetaryIncome.reduce((acc, income) => acc + income.amount, 0);
-    } else if (statsPeriod === 'daily') {
-        // Para período diario, dividir los ingresos monetarios totales entre los días del mes
-        const totalMonetaryIncomeMonth = monetaryIncome.reduce((acc, income) => acc + income.amount, 0);
-        totalMonetaryIncome = totalMonetaryIncomeMonth / daysInMonth;
-    } else if (statsPeriod === 'weekly') {
-        // Para período semanal, prorratear los ingresos monetarios (total / 30 * 7)
-        const totalMonetaryIncomeMonth = monetaryIncome.reduce((acc, income) => acc + income.amount, 0);
-        totalMonetaryIncome = (totalMonetaryIncomeMonth / 30) * 7;
-    } else if (statsPeriod === 'monthly') {
-        // Para período mensual, mostrar los ingresos monetarios totales
-        totalMonetaryIncome = monetaryIncome.reduce((acc, income) => acc + income.amount, 0);
-    } else {
-        totalMonetaryIncome = 0;
-    }
-
-    // ⚠️ NOTA: El capital financiero ahora es:
-    // - En períodos específicos: ganancia del período + ingresos monetarios prorrateados
-    // - En 'all': ganancia total + ingresos monetarios totales
-    const financialCapital = totalProfit + totalMonetaryIncome;
-
-    const totalItemsSoldCount = sales.reduce((acc, sale) => acc + sale.quantity, 0);
-    const totalItemsRequestedCount = customerRequests.reduce((acc, item) => acc + item.quantity, 0);
-    
-    const conversionRate = totalItemsRequestedCount > 0
-      ? (totalItemsSoldCount / totalItemsRequestedCount) * 100 
-      : 0;
-
-    return {
-      totalRevenue,
-      totalProfit,
-      totalCosts,
-      totalCapitalInStock,
-      totalItemsSoldCount,
-      conversionRate,
-      financialCapital,
-      totalMonetaryIncome, // Agregado para uso en la UI
-      totalStockHistoryCost, // Agregado para mostrar costos de pedidos en la UI
-    };
-  }, [sales, products, customerRequests, statsPeriod, fixedCosts, salaryWithdrawals, monetaryIncome, stockHistory]);
 
   const salesChartData = useMemo(() => {
     if (salesChartView === 'daily') {
@@ -1254,372 +1132,528 @@ export default function AdminFinancePage() {
       <div className="mt-8 mb-6 flex flex-col md:flex-row justify-between md:items-center gap-4">
         <h2 className="text-2xl font-bold">Análisis Financiero</h2>
         <div className="w-full md:w-auto">
-            <Select onValueChange={(value) => setStatsPeriod(value as any)} defaultValue={statsPeriod}>
+            <Select onValueChange={(value) => setSelectedMonth(value)} defaultValue={selectedMonth}>
                 <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar período" />
+                    <SelectValue placeholder="Seleccionar mes" />
                 </SelectTrigger>
                 <SelectContent>
-                    <SelectItem value="daily">Hoy</SelectItem>
-                    <SelectItem value="weekly">Esta Semana</SelectItem>
-                    <SelectItem value="monthly">Este Mes</SelectItem>
-                    <SelectItem value="yearly">Este Año</SelectItem>
-                    <SelectItem value="all">Total Histórico</SelectItem>
+                    {getAvailableMonths().map((month) => (
+                        <SelectItem key={month.value} value={month.value}>
+                            {month.label}
+                        </SelectItem>
+                    ))}
                 </SelectContent>
             </Select>
         </div>
       </div>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Ingresos Totales</CardTitle>
-            <div className="flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsRevenueExpanded(!isRevenueExpanded)}
-                className="h-6 w-6 p-0"
-              >
-                <ChevronDown className={`h-4 w-4 transition-transform ${isRevenueExpanded ? 'rotate-180' : ''}`} />
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${stats.totalRevenue.toLocaleString()}</div>
-            <Collapsible open={isRevenueExpanded} onOpenChange={setIsRevenueExpanded}>
-              <CollapsibleContent className="mt-3 space-y-2 text-sm">
-                <div className="text-muted-foreground font-medium">Cálculo detallado:</div>
-                <div className="space-y-3 text-xs bg-muted/30 p-3 rounded-md">
-                  <div>
-                    <span className="font-medium">Fórmula:</span>
-                    <div className="mt-1 font-mono text-xs bg-background px-2 py-1 rounded break-all">Σ(ventas.precio_total)</div>
+      
+      {/* Nueva sección de Análisis Financiero unificada */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {[
+          {
+            id: 'ingresos-productos',
+            title: 'Ingreso por Productos',
+            icon: <ShoppingCart className="h-4 w-4" />,
+            value: sales.filter(sale => isInSelectedMonth(sale.created_at)).reduce((acc, sale) => acc + sale.total_price, 0),
+            formula: 'SUMA(Cantidad vendida × Precio de venta)',
+            calculations: sales.filter(sale => isInSelectedMonth(sale.created_at)).map(sale => ({
+              label: `${sale.product_name} (${sale.quantity} × $${sale.price_per_unit})`,
+              value: sale.total_price,
+              isNegative: false
+            })),
+            isExpanded: expandedCards['ingresos-productos'] || false
+          },
+          {
+            id: 'movimientos-monetarios',
+            title: 'Movimientos Monetarios',
+            icon: <Banknote className="h-4 w-4" />,
+            value: (() => {
+              const monthlyIncomes = monetaryIncome.filter(income => isInSelectedMonth(income.created_at));
+              const ingresosMonetarios = monthlyIncomes.filter(income => !income.name.startsWith('[EGRESO]')).reduce((total, income) => total + income.amount, 0);
+              const egresosMonetarios = monthlyIncomes.filter(income => income.name.startsWith('[EGRESO]')).reduce((total, income) => total + income.amount, 0);
+              return ingresosMonetarios - egresosMonetarios;
+            })(),
+            formula: 'SUMA(Ingresos monetarios - Egresos monetarios)',
+            calculations: monetaryIncome.filter(income => isInSelectedMonth(income.created_at)).map(income => {
+              const isEgreso = income.name.startsWith('[EGRESO]');
+              return {
+                label: isEgreso ? income.name.replace('[EGRESO] ', '') : income.name,
+                value: income.amount,
+                isNegative: isEgreso
+              };
+            }),
+            isExpanded: expandedCards['movimientos-monetarios'] || false
+          },
+          {
+            id: 'costos-fijos',
+            title: 'Costos Fijos',
+            icon: <Building className="h-4 w-4" />,
+            value: fixedCosts.reduce((acc, cost) => acc + cost.amount, 0),
+            formula: 'SUMA(Costos fijos)',
+            calculations: fixedCosts.map(cost => ({
+              label: cost.name,
+              value: cost.amount,
+              isNegative: true
+            })),
+            isExpanded: expandedCards['costos-fijos'] || false
+          },
+          {
+            id: 'extracciones-sueldos',
+            title: 'Extracción de Sueldos',
+            icon: <Wallet className="h-4 w-4" />,
+            value: salaryWithdrawals
+              .filter(w => isInSelectedMonth(w.created_at))
+              .reduce((sum, w) => sum + w.amount, 0),
+            formula: 'SUMA(Extracciones de sueldos)',
+            calculations: salaryWithdrawals
+              .filter(salary => isInSelectedMonth(salary.created_at))
+              .map(salary => ({
+                label: salary.description || 'Extracción de sueldo',
+                value: salary.amount,
+                isNegative: true
+              })),
+            isExpanded: expandedCards['extracciones-sueldos'] || false
+          },
+          {
+            id: 'costos-pedidos',
+            title: 'Costos de Pedidos',
+            icon: <Package className="h-4 w-4" />,
+            value: stockHistory
+              .filter(entry => isInSelectedMonth(entry.created_at))
+              .reduce((acc, entry) => acc + ((entry.cost || 0) * entry.quantity_added), 0),
+            formula: 'SUMA(Costo × Cantidad pedida)',
+            calculations: (() => {
+              // Agrupar por fecha (día) para simular pedidos agrupados del mes seleccionado
+              type GroupedOrder = {
+                date: string;
+                totalCost: number;
+                items: Array<{
+                  product: string;
+                  quantity: number;
+                  cost: number;
+                  totalCost: number;
+                }>;
+              };
+
+              const monthlyStockHistory = stockHistory.filter(entry => isInSelectedMonth(entry.created_at));
+              
+              const groupedOrders = monthlyStockHistory.reduce((acc: Record<string, GroupedOrder>, entry) => {
+                const orderDate = parseISO(entry.created_at).toDateString();
+                if (!acc[orderDate]) {
+                  acc[orderDate] = {
+                    date: orderDate,
+                    totalCost: 0,
+                    items: []
+                  };
+                }
+                const entryCost = (entry.cost || 0) * entry.quantity_added;
+                acc[orderDate].totalCost += entryCost;
+                acc[orderDate].items.push({
+                  product: entry.product_name,
+                  quantity: entry.quantity_added,
+                  cost: entry.cost || 0,
+                  totalCost: entryCost
+                });
+                return acc;
+              }, {});
+
+              // Convertir a array y ordenar por fecha (más reciente primero)
+              return Object.values(groupedOrders)
+                .sort((a: GroupedOrder, b: GroupedOrder) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                .map((order: GroupedOrder) => ({
+                  label: `Pedido ${format(new Date(order.date), 'dd/MM/yyyy', { locale: es })} (${order.items.length} items)`,
+                  value: order.totalCost,
+                  isNegative: true
+                }));
+            })(),
+            isExpanded: expandedCards['costos-pedidos'] || false
+          },
+          {
+            id: 'costos-totales',
+            title: 'Costos Totales',
+            icon: <CreditCard className="h-4 w-4" />,
+            value: (() => {
+              const costosFijos = fixedCosts.reduce((acc, cost) => acc + cost.amount, 0);
+              const extraccionesSueldos = salaryWithdrawals.filter(w => isInSelectedMonth(w.created_at)).reduce((sum, w) => sum + w.amount, 0);
+              const costosPedidos = stockHistory.filter(entry => isInSelectedMonth(entry.created_at)).reduce((acc, entry) => acc + ((entry.cost || 0) * entry.quantity_added), 0);
+              const egresosMonetarios = monetaryIncome.filter(income => income.name.startsWith('[EGRESO]') && isInSelectedMonth(income.created_at)).reduce((total, income) => total + income.amount, 0);
+              return costosFijos + extraccionesSueldos + costosPedidos + egresosMonetarios;
+            })(),
+            formula: 'Costos fijos + Sueldos + Costos de pedidos + Egresos monetarios',
+            calculations: [
+              { label: 'Costos Fijos', value: fixedCosts.reduce((acc, cost) => acc + cost.amount, 0), isNegative: true },
+              { label: 'Extracciones de Sueldos', value: salaryWithdrawals.filter(w => isInSelectedMonth(w.created_at)).reduce((sum, w) => sum + w.amount, 0), isNegative: true },
+              { label: 'Costos de Pedidos', value: stockHistory.filter(entry => isInSelectedMonth(entry.created_at)).reduce((acc, entry) => acc + ((entry.cost || 0) * entry.quantity_added), 0), isNegative: true },
+              { label: 'Egresos Monetarios', value: monetaryIncome.filter(income => income.name.startsWith('[EGRESO]') && isInSelectedMonth(income.created_at)).reduce((total, income) => total + income.amount, 0), isNegative: true }
+            ],
+            isExpanded: expandedCards['costos-totales'] || false
+          },
+          {
+            id: 'ingresos-totales',
+            title: 'Ingresos Totales',
+            icon: <TrendingUp className="h-4 w-4" />,
+            value: (() => {
+              const ingresosProductos = sales.filter(sale => isInSelectedMonth(sale.created_at)).reduce((acc, sale) => acc + sale.total_price, 0);
+              const ingresosMonetarios = monetaryIncome.filter(income => !income.name.startsWith('[EGRESO]') && isInSelectedMonth(income.created_at)).reduce((total, income) => total + income.amount, 0);
+              return ingresosProductos + ingresosMonetarios;
+            })(),
+            formula: 'Ingresos por productos + Ingresos monetarios',
+            calculations: [
+              { label: 'Ingresos por Productos', value: sales.filter(sale => isInSelectedMonth(sale.created_at)).reduce((acc, sale) => acc + sale.total_price, 0), isNegative: false },
+              { label: 'Ingresos Monetarios', value: monetaryIncome.filter(income => !income.name.startsWith('[EGRESO]') && isInSelectedMonth(income.created_at)).reduce((total, income) => total + income.amount, 0), isNegative: false }
+            ],
+            isExpanded: expandedCards['ingresos-totales'] || false
+          },
+          {
+            id: 'ganancia',
+            title: 'Ganancia',
+            icon: <Calculator className="h-4 w-4" />,
+            value: (() => {
+              const ingresosProductos = sales.filter(sale => isInSelectedMonth(sale.created_at)).reduce((acc, sale) => acc + sale.total_price, 0);
+              const ingresosMonetarios = monetaryIncome.filter(income => !income.name.startsWith('[EGRESO]') && isInSelectedMonth(income.created_at)).reduce((total, income) => total + income.amount, 0);
+              const ingresosTotales = ingresosProductos + ingresosMonetarios;
+              
+              const costosFijos = fixedCosts.reduce((acc, cost) => acc + cost.amount, 0);
+              const extraccionesSueldos = salaryWithdrawals.filter(w => isInSelectedMonth(w.created_at)).reduce((sum, w) => sum + w.amount, 0);
+              const costosPedidos = stockHistory.filter(entry => isInSelectedMonth(entry.created_at)).reduce((acc, entry) => acc + ((entry.cost || 0) * entry.quantity_added), 0);
+              const egresosMonetarios = monetaryIncome.filter(income => income.name.startsWith('[EGRESO]') && isInSelectedMonth(income.created_at)).reduce((total, income) => total + income.amount, 0);
+              const costosTotales = costosFijos + extraccionesSueldos + costosPedidos + egresosMonetarios;
+              
+              return ingresosTotales - costosTotales;
+            })(),
+            formula: 'Ingresos totales - Costos totales',
+            calculations: (() => {
+              const ingresosProductos = sales.filter(sale => isInSelectedMonth(sale.created_at)).reduce((acc, sale) => acc + sale.total_price, 0);
+              const ingresosMonetarios = monetaryIncome.filter(income => !income.name.startsWith('[EGRESO]') && isInSelectedMonth(income.created_at)).reduce((total, income) => total + income.amount, 0);
+              const ingresosTotales = ingresosProductos + ingresosMonetarios;
+              
+              const costosFijos = fixedCosts.reduce((acc, cost) => acc + cost.amount, 0);
+              const extraccionesSueldos = salaryWithdrawals.filter(w => isInSelectedMonth(w.created_at)).reduce((sum, w) => sum + w.amount, 0);
+              const costosPedidos = stockHistory.filter(entry => isInSelectedMonth(entry.created_at)).reduce((acc, entry) => acc + ((entry.cost || 0) * entry.quantity_added), 0);
+              const egresosMonetarios = monetaryIncome.filter(income => income.name.startsWith('[EGRESO]') && isInSelectedMonth(income.created_at)).reduce((total, income) => total + income.amount, 0);
+              const costosTotales = costosFijos + extraccionesSueldos + costosPedidos + egresosMonetarios;
+              
+              return [
+                { label: 'Ingresos Totales', value: ingresosTotales, isNegative: false },
+                { label: 'Costos Totales', value: costosTotales, isNegative: true }
+              ];
+            })(),
+            isExpanded: expandedCards['ganancia'] || false
+          },
+          {
+            id: 'patrimonio-total',
+            title: 'Patrimonio Total',
+            icon: <Coins className="h-4 w-4" />,
+            value: products.reduce((acc, product) => {
+              const stock = product.colors.reduce((sum, color) => sum + color.stock, 0);
+              return acc + (product.cost * stock);
+            }, 0),
+            formula: 'SUMA(Costo del producto × Stock)',
+            calculations: products.map(product => {
+              const stock = product.colors.reduce((sum, color) => sum + color.stock, 0);
+              return {
+                label: `${unslugify(product.name)} (${stock} × $${product.cost})`,
+                value: product.cost * stock,
+                isNegative: false
+              };
+            }),
+            isExpanded: expandedCards['patrimonio-total'] || false
+          },
+          {
+            id: 'items-vendidos',
+            title: 'Items Vendidos',
+            icon: <DollarSign className="h-4 w-4" />,
+            value: sales.filter(sale => isInSelectedMonth(sale.created_at)).reduce((acc, sale) => acc + sale.quantity, 0),
+            formula: 'SUMA(Cantidad vendida)',
+            calculations: sales.filter(sale => isInSelectedMonth(sale.created_at)).map(sale => ({
+              label: `${sale.product_name}`,
+              value: sale.quantity,
+              isNegative: false
+            })),
+            isExpanded: expandedCards['items-vendidos'] || false
+          },
+          {
+            id: 'tasa-conversion',
+            title: 'Tasa de Conversión',
+            icon: <TrendingUp className="h-4 w-4" />,
+            value: (() => {
+              const itemsVendidos = sales.filter(sale => isInSelectedMonth(sale.created_at)).reduce((acc, sale) => acc + sale.quantity, 0);
+              const itemsPedidos = customerRequests.filter(request => isInSelectedMonth(request.created_at)).reduce((acc, item) => acc + item.quantity, 0);
+              return itemsPedidos > 0 ? (itemsVendidos / itemsPedidos) * 100 : 0;
+            })(),
+            formula: '(Items vendidos ÷ Items pedidos) × 100',
+            calculations: (() => {
+              const itemsVendidos = sales.filter(sale => isInSelectedMonth(sale.created_at)).reduce((acc, sale) => acc + sale.quantity, 0);
+              const itemsPedidos = customerRequests.filter(request => isInSelectedMonth(request.created_at)).reduce((acc, item) => acc + item.quantity, 0);
+              const porcentajeConversion = itemsPedidos > 0 ? (itemsVendidos / itemsPedidos) * 100 : 0;
+              
+              return [
+                { label: 'Total Items Vendidos', value: itemsVendidos, isNegative: false },
+                { label: 'Total Items Pedidos', value: itemsPedidos, isNegative: false },
+                { label: 'Porcentaje de Conversión', value: porcentajeConversion, isNegative: false }
+              ];
+            })(),
+            isExpanded: expandedCards['tasa-conversion'] || false
+          },
+          {
+            id: 'capital-disponible',
+            title: 'Capital Disponible',
+            icon: <PiggyBank className="h-4 w-4" />,
+            value: (() => {
+              // Capital disponible solo cuenta desde julio 2025 en adelante
+              const ingresosHistoricos = sales.filter(sale => isFromJulyOnwards(sale.created_at)).reduce((acc, sale) => acc + sale.total_price, 0) + 
+                                         monetaryIncome.filter(income => !income.name.startsWith('[EGRESO]') && isFromJulyOnwards(income.created_at)).reduce((total, income) => total + income.amount, 0);
+              
+              // Calcular meses desde julio 2025 hasta ahora para costos fijos
+              const startDate = new Date(2025, 6, 1); // Julio 2025
+              const currentDate = new Date();
+              const monthsFromJuly = ((currentDate.getFullYear() - startDate.getFullYear()) * 12) + (currentDate.getMonth() - startDate.getMonth()) + 1;
+              const costosHistoricos = fixedCosts.reduce((acc, cost) => acc + cost.amount, 0) * monthsFromJuly + // Costos fijos solo por meses desde julio
+                                     salaryWithdrawals.filter(w => isFromJulyOnwards(w.created_at)).reduce((sum, w) => sum + w.amount, 0) +
+                                     stockHistory.filter(entry => isFromJulyOnwards(entry.created_at)).reduce((acc, entry) => acc + ((entry.cost || 0) * entry.quantity_added), 0) +
+                                     monetaryIncome.filter(income => income.name.startsWith('[EGRESO]') && isFromJulyOnwards(income.created_at)).reduce((total, income) => total + income.amount, 0);
+              return ingresosHistoricos - costosHistoricos;
+            })(),
+            formula: 'Capital acumulado desde julio 2025 (fecha de inicio del negocio)',
+            calculations: (() => {
+              // Calcular meses desde julio 2025 hasta ahora para mostrar en calculations
+              const startDate = new Date(2025, 6, 1);
+              const currentDate = new Date();
+              const monthsFromJuly = ((currentDate.getFullYear() - startDate.getFullYear()) * 12) + (currentDate.getMonth() - startDate.getMonth()) + 1;
+              
+              // Generar todos los meses desde julio 2025 hasta ahora
+              const months = [];
+              let currentMonth = new Date(startDate);
+              while (currentMonth <= currentDate) {
+                const year = currentMonth.getFullYear();
+                const month = currentMonth.getMonth() + 1;
+                const monthValue = `${year}-${String(month).padStart(2, '0')}`;
+                const monthLabel = currentMonth.toLocaleDateString('es-ES', { 
+                  month: 'long', 
+                  year: 'numeric' 
+                });
+                months.push({ value: monthValue, label: monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1) });
+                currentMonth.setMonth(currentMonth.getMonth() + 1);
+              }
+
+              const calculations = [];
+              let totalIngresos = 0;
+              let totalCostos = 0;
+              const monthlyIngresoBreakdown: string[] = [];
+              const monthlyCostoBreakdown: string[] = [];
+              
+              // Calcular totales históricos y guardar desglose por mes
+              months.forEach(month => {
+                const monthSales = sales.filter(sale => {
+                  const saleDate = parseISO(sale.created_at);
+                  const [year, monthNum] = month.value.split('-').map(Number);
+                  return saleDate.getFullYear() === year && saleDate.getMonth() + 1 === monthNum;
+                }).reduce((acc, sale) => acc + sale.total_price, 0);
+                
+                const monthMonetaryIncome = monetaryIncome.filter(income => {
+                  if (income.name.startsWith('[EGRESO]')) return false;
+                  const incomeDate = parseISO(income.created_at);
+                  const [year, monthNum] = month.value.split('-').map(Number);
+                  return incomeDate.getFullYear() === year && incomeDate.getMonth() + 1 === monthNum;
+                }).reduce((total, income) => total + income.amount, 0);
+                
+                const monthFixedCosts = fixedCosts.reduce((acc, cost) => acc + cost.amount, 0);
+                
+                const monthSalaryWithdrawals = salaryWithdrawals.filter(w => {
+                  const wDate = parseISO(w.created_at);
+                  const [year, monthNum] = month.value.split('-').map(Number);
+                  return wDate.getFullYear() === year && wDate.getMonth() + 1 === monthNum;
+                }).reduce((sum, w) => sum + w.amount, 0);
+                
+                const monthStockCosts = stockHistory.filter(entry => {
+                  const entryDate = parseISO(entry.created_at);
+                  const [year, monthNum] = month.value.split('-').map(Number);
+                  return entryDate.getFullYear() === year && entryDate.getMonth() + 1 === monthNum;
+                }).reduce((acc, entry) => acc + ((entry.cost || 0) * entry.quantity_added), 0);
+                
+                const monthEgresos = monetaryIncome.filter(income => {
+                  if (!income.name.startsWith('[EGRESO]')) return false;
+                  const incomeDate = parseISO(income.created_at);
+                  const [year, monthNum] = month.value.split('-').map(Number);
+                  return incomeDate.getFullYear() === year && incomeDate.getMonth() + 1 === monthNum;
+                }).reduce((total, income) => total + income.amount, 0);
+                
+                const monthIngresoTotal = monthSales + monthMonetaryIncome;
+                const monthCostoTotal = monthFixedCosts + monthSalaryWithdrawals + monthStockCosts + monthEgresos;
+                
+                totalIngresos += monthIngresoTotal;
+                totalCostos += monthCostoTotal;
+                
+                // Obtener nombre corto del mes (JULIO, AGOSTO, etc.)
+                const shortMonthName = month.label.split(' ')[0].toUpperCase();
+                
+                monthlyIngresoBreakdown.push(`${shortMonthName}: $${monthIngresoTotal.toLocaleString()}`);
+                monthlyCostoBreakdown.push(`${shortMonthName}: $${monthCostoTotal.toLocaleString()}`);
+              });
+              
+              // Mostrar totales con desglose
+              calculations.push({ label: `Total Ingresos Históricos:`, value: totalIngresos, isNegative: false });
+              // Agregar cada mes en líneas separadas
+              monthlyIngresoBreakdown.forEach(monthBreakdown => {
+                calculations.push({ label: monthBreakdown.toLowerCase(), value: 0, isNegative: false, hideValue: true });
+              });
+              
+              calculations.push({ label: `Total Costos Históricos:`, value: totalCostos, isNegative: true });
+              // Agregar cada mes en líneas separadas
+              monthlyCostoBreakdown.forEach(monthBreakdown => {
+                calculations.push({ label: monthBreakdown.toLowerCase(), value: 0, isNegative: true, hideValue: true });
+              });
+              
+              calculations.push({ 
+                label: `Capital Disponible (${monthsFromJuly} meses):`, 
+                value: totalIngresos - totalCostos, 
+                isNegative: totalIngresos - totalCostos < 0 
+              });
+              
+              return calculations;
+            })(),
+            isExpanded: expandedCards['capital-disponible'] || false
+          }
+        ].map((card) => (
+          <Card key={card.id} className="transition-all duration-200 hover:shadow-md">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">{card.title}</CardTitle>
+              <div className="flex items-center gap-2">
+                {card.icon}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => toggleCard(card.id)}
+                  className="h-6 w-6 p-0"
+                >
+                  <ChevronDown className={`h-4 w-4 transition-transform ${card.isExpanded ? 'rotate-180' : ''}`} />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className={`text-2xl font-bold ${
+                (card.id.includes('costos') || card.id === 'extracciones-sueldos') ? "text-red-600" : 
+                (card.id === 'ganancia' || card.id === 'capital-disponible' || card.id === 'movimientos-monetarios') && card.value < 0 ? "text-red-600" : "text-green-600"
+              }`}>
+                {card.id === 'items-vendidos' ? 
+                  `${card.value.toLocaleString()} items` : 
+                  card.id === 'tasa-conversion' ?
+                    `${card.value.toFixed(1)}%` :
+                  (card.id.includes('costos') || card.id === 'extracciones-sueldos') ?
+                    `-$${card.value.toLocaleString()}` :
+                    (card.id === 'ganancia' || card.id === 'capital-disponible' || card.id === 'movimientos-monetarios') && card.value < 0 ?
+                      `-$${Math.abs(card.value).toLocaleString()}` :
+                      `$${card.value.toLocaleString()}`
+                }
+              </div>
+              
+              {/* Mostrar último pedido para Costos de Pedidos */}
+              {card.id === 'costos-pedidos' && !card.isExpanded && (() => {
+                // Agrupar por fecha para obtener el último pedido completo
+                type LastOrderGroup = {
+                  date: string;
+                  totalCost: number;
+                  items: Array<{
+                    product: string;
+                    quantity: number;
+                    cost: number;
+                  }>;
+                };
+
+                const monthlyStockHistory = stockHistory.filter(entry => isInSelectedMonth(entry.created_at));
+                const groupedOrders = monthlyStockHistory.reduce((acc: Record<string, LastOrderGroup>, entry) => {
+                  const orderDate = parseISO(entry.created_at).toDateString();
+                  if (!acc[orderDate]) {
+                    acc[orderDate] = {
+                      date: orderDate,
+                      totalCost: 0,
+                      items: []
+                    };
+                  }
+                  const entryCost = (entry.cost || 0) * entry.quantity_added;
+                  acc[orderDate].totalCost += entryCost;
+                  acc[orderDate].items.push({
+                    product: entry.product_name,
+                    quantity: entry.quantity_added,
+                    cost: entry.cost || 0
+                  });
+                  return acc;
+                }, {});
+
+                const latestOrder = Object.values(groupedOrders)
+                  .sort((a: LastOrderGroup, b: LastOrderGroup) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+                
+                if (latestOrder) {
+                  return (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Último: ${latestOrder.totalCost.toLocaleString()} ({format(new Date(latestOrder.date), 'dd/MM/yyyy', { locale: es })})
+                    </p>
+                  );
+                }
+                return null;
+              })()} 
+              
+              <Collapsible open={card.isExpanded} onOpenChange={() => toggleCard(card.id)}>
+                <CollapsibleContent className="mt-3 space-y-2 text-sm">
+                  <div className="text-muted-foreground font-medium">Fórmula:</div>
+                  <div className="text-xs bg-muted/30 p-2 rounded-md font-mono">
+                    {card.formula}
                   </div>
-                  <div className="border-t pt-3 space-y-2">
-                    <div className="flex justify-between">
-                      <span>Período seleccionado:</span>
-                      <span className="capitalize font-medium">{statsPeriod === 'all' ? 'Total Histórico' : statsPeriod === 'daily' ? 'Hoy' : statsPeriod === 'weekly' ? 'Esta Semana' : statsPeriod === 'monthly' ? 'Este Mes' : 'Este Año'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Ventas consideradas:</span>
-                      <span className="font-medium">{sales.filter(sale => {
-                        const saleDate = parseISO(sale.created_at);
-                        const today = new Date();
-                        switch(statsPeriod) {
-                          case 'daily': return isAfter(saleDate, startOfToday());
-                          case 'weekly': return isAfter(saleDate, startOfWeek(today, { weekStartsOn: 1 }));
-                          case 'monthly': return isAfter(saleDate, startOfMonth(today));
-                          case 'yearly': return isAfter(saleDate, startOfYear(today));
-                          case 'all':
-                          default: return true;
-                        }
-                      }).length} ventas</span>
-                    </div>
-                    <div className="flex justify-between lg:flex-col lg:gap-1 border-t pt-2 font-medium text-sm">
+                  
+                  <div className="text-muted-foreground font-medium">Cálculos:</div>
+                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                    {card.calculations.length > 0 ? (
+                      card.calculations.map((calc, index) => (
+                        <div key={index} className="flex justify-between items-center text-xs">
+                          <span className="truncate mr-2">{calc.label}</span>
+                          {!(calc as any).hideValue && (
+                            <span className={`font-medium whitespace-nowrap ${calc.isNegative ? "text-red-600" : "text-green-600"}`}>
+                              {card.id === 'items-vendidos' ? 
+                                `${calc.value}` : 
+                                card.id === 'tasa-conversion' ?
+                                  calc.label === 'Porcentaje de Conversión' ?
+                                    `${calc.value.toFixed(1)}%` :
+                                    `${calc.value} items` :
+                                calc.isNegative ?
+                                  `-$${calc.value.toLocaleString()}` :
+                                  `$${calc.value.toLocaleString()}`
+                              }
+                            </span>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-xs text-muted-foreground italic">
+                        No hay datos para mostrar
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="border-t pt-2 mt-2">
+                    <div className="flex justify-between items-center text-sm font-medium">
                       <span>Total:</span>
-                      <span className="text-green-600">${stats.totalRevenue.toLocaleString()}</span>
-                    </div>
-                  </div>
-                  <div className="mt-3 pt-3 border-t">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={() => setIsRevenueBreakdownDialogOpen(true)}
-                      className="w-full text-xs whitespace-normal h-auto py-2 px-3"
-                    >
-                      Ver Desglose Completo
-                    </Button>
-                  </div>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Ganancias Totales</CardTitle>
-            <div className="flex items-center gap-2">
-              <Activity className="h-4 w-4 text-muted-foreground" />
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsProfitExpanded(!isProfitExpanded)}
-                className="h-6 w-6 p-0"
-              >
-                <ChevronDown className={`h-4 w-4 transition-transform ${isProfitExpanded ? 'rotate-180' : ''}`} />
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${stats.totalProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-            <Collapsible open={isProfitExpanded} onOpenChange={setIsProfitExpanded}>
-              <CollapsibleContent className="mt-3 space-y-2 text-sm">
-                <div className="text-muted-foreground font-medium">Cálculo detallado:</div>
-                <div className="space-y-3 text-xs bg-muted/30 p-3 rounded-md">
-                  <div>
-                    <span className="font-medium">Fórmula:</span>
-                    <div className="mt-1 font-mono text-xs bg-background px-2 py-1 rounded">Ingresos - Costos</div>
-                  </div>
-                  <div className="border-t pt-3 space-y-2">
-                    <div className="flex justify-between">
-                      <span>Ingresos Totales:</span>
-                      <span className="text-green-600 font-medium">+${stats.totalRevenue.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Costos Totales:</span>
-                      <span className="text-red-600 font-medium">-${stats.totalCosts.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between lg:flex-col lg:gap-1 border-t pt-2 font-medium text-sm">
-                      <span>Ganancia Total:</span>
-                      <span className="text-primary">${stats.totalProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    </div>
-                  </div>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          </CardContent>
-        </Card>
-         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Capital Disponible</CardTitle>
-            <div className="flex items-center gap-2">
-              <Banknote className="h-4 w-4 text-muted-foreground" />
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsFinancialCapitalExpanded(!isFinancialCapitalExpanded)}
-                className="h-6 w-6 p-0"
-              >
-                <ChevronDown className={`h-4 w-4 transition-transform ${isFinancialCapitalExpanded ? 'rotate-180' : ''}`} />
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${stats.financialCapital.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-             <p className="text-xs text-muted-foreground">{statsPeriod === 'all' ? 'Ganancias + Ingresos Monetarios' : statsPeriod === 'daily' ? 'Ganancias + Ingresos Prorrateados' : statsPeriod === 'weekly' ? 'Ganancias + Ingresos Monetarios' : statsPeriod === 'monthly' ? 'Ganancias + Ingresos Monetarios' : 'Solo Ganancias del Período'}</p>
-            <Collapsible open={isFinancialCapitalExpanded} onOpenChange={setIsFinancialCapitalExpanded}>
-              <CollapsibleContent className="mt-3 space-y-2 text-sm">
-                <div className="text-muted-foreground font-medium">Cálculo detallado:</div>
-                <div className="space-y-3 text-xs bg-muted/30 p-3 rounded-md">
-                  <div>
-                    <span className="font-medium">Fórmula:</span>
-                    <div className="mt-1 font-mono text-xs bg-background px-2 py-1 rounded">
-                      {(statsPeriod === 'all' || statsPeriod === 'weekly' || statsPeriod === 'monthly') ? 'Ganancias + Ingresos Monetarios' : 'Solo Ganancias del Período'}
-                    </div>
-                  </div>
-                  <div className="border-t pt-3 space-y-2">
-                    <div className="flex justify-between">
-                      <span>Ganancias Totales:</span>
-                      <span className="text-green-600 font-medium">+${stats.totalProfit.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Ingresos Monetarios:</span>
-                      <span className={`font-medium ${(statsPeriod === 'all' || statsPeriod === 'weekly' || statsPeriod === 'monthly') ? 'text-green-600' : 'text-muted-foreground'}`}>
-                        {(statsPeriod === 'all' || statsPeriod === 'weekly' || statsPeriod === 'monthly') ? '+' : ''}${stats.totalMonetaryIncome.toLocaleString()}
+                      <span className={`${
+                        (card.id.includes('costos') || card.id === 'extracciones-sueldos') ? "text-red-600" : 
+                        (card.id === 'ganancia' || card.id === 'capital-disponible' || card.id === 'movimientos-monetarios') && card.value < 0 ? "text-red-600" : "text-green-600"
+                      }`}>
+                        {card.id === 'items-vendidos' ? 
+                          `${card.value.toLocaleString()} items` : 
+                          card.id === 'tasa-conversion' ?
+                            `${card.value.toFixed(1)}%` :
+                          (card.id.includes('costos') || card.id === 'extracciones-sueldos') ?
+                            `-$${card.value.toLocaleString()}` :
+                            (card.id === 'ganancia' || card.id === 'capital-disponible' || card.id === 'movimientos-monetarios') && card.value < 0 ?
+                              `-$${Math.abs(card.value).toLocaleString()}` :
+                              `$${card.value.toLocaleString()}`
+                        }
                       </span>
                     </div>
-                    <div className="flex justify-between lg:flex-col lg:gap-1 border-t pt-2 font-medium text-sm">
-                      <span>Capital Disponible:</span>
-                      <span className="text-primary">${stats.financialCapital.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    </div>
                   </div>
-                  <div className="mt-3 pt-3 border-t text-xs text-muted-foreground italic">
-                    <span>{statsPeriod === 'all' 
-                      ? '💡 Representa el capital líquido disponible para reinversión o retiro.' 
-                      : statsPeriod === 'weekly'
-                      ? '💡 Los ingresos monetarios se incluyen prorrateados para el análisis semanal.'
-                      : statsPeriod === 'monthly'
-                      ? '💡 Los ingresos monetarios se incluyen completos para el análisis mensual.'
-                      : '💡 Los ingresos monetarios solo se incluyen en el Total Histórico para evitar duplicación.'}
-                    </span>
-                  </div>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Costos Totales</CardTitle>
-            <div className="flex items-center gap-2">
-              <TrendingDown className="h-4 w-4 text-muted-foreground" />
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsCostsExpanded(!isCostsExpanded)}
-                className="h-6 w-6 p-0"
-              >
-                <ChevronDown className={`h-4 w-4 transition-transform ${isCostsExpanded ? 'rotate-180' : ''}`} />
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${stats.totalCosts.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-            <Collapsible open={isCostsExpanded} onOpenChange={setIsCostsExpanded}>
-              <CollapsibleContent className="mt-3 space-y-2 text-sm">
-                <div className="text-muted-foreground font-medium">Cálculo detallado:</div>
-                <div className="space-y-3 text-xs bg-muted/30 p-3 rounded-md">
-                  <div>
-                    <span className="font-medium">Fórmula:</span>
-                    <div className="mt-1 font-mono text-xs bg-background px-2 py-1 rounded">Fijos + Sueldos + Pedidos</div>
-                  </div>
-                  <div className="border-t pt-3 space-y-2">
-                    <div className="flex justify-between">
-                      <span>Costos Fijos:</span>
-                      <span className="text-red-600 font-medium">${(() => {
-                        const today = new Date();
-                        const monthlyFixedCosts = fixedCosts.reduce((acc, cost) => acc + cost.amount, 0);
-                        const daysInMonth = getDaysInMonth(today);
-                        let applicableFixedCosts = 0;
-                        switch(statsPeriod) {
-                          case 'daily': 
-                            applicableFixedCosts = monthlyFixedCosts / daysInMonth;
-                            break;
-                          case 'weekly':
-                            applicableFixedCosts = (monthlyFixedCosts / daysInMonth) * 7;
-                            break;
-                          case 'monthly':
-                            applicableFixedCosts = monthlyFixedCosts;
-                            break;
-                          case 'yearly': 
-                            applicableFixedCosts = monthlyFixedCosts * (getMonth(today) + 1);
-                            break;
-                          case 'all':
-                          default:
-                            if (sales.length > 0) {
-                              const oldestSaleDate = parseISO(sales[sales.length - 1].created_at);
-                              const monthsDifference = (today.getFullYear() - oldestSaleDate.getFullYear()) * 12 + (today.getMonth() - oldestSaleDate.getMonth()) + 1;
-                              applicableFixedCosts = monthlyFixedCosts * monthsDifference;
-                            }
-                            break;
-                        }
-                        return applicableFixedCosts;
-                      })().toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Sueldos Extraídos:</span>
-                      <span className="text-red-600 font-medium">${(() => {
-                        const today = new Date();
-                        const daysInMonth = getDaysInMonth(today);
-                        let totalSalaryWithdrawn = 0;
-                        if (salaryWithdrawals.length > 0) {
-                          const monthlySalaryWithdrawals = salaryWithdrawals
-                            .filter(w => isWithinInterval(parseISO(w.created_at), { start: startOfMonth(today), end: endOfMonth(today) }))
-                            .reduce((sum, w) => sum + w.amount, 0);
-                          switch (statsPeriod) {
-                            case 'daily': 
-                              totalSalaryWithdrawn = monthlySalaryWithdrawals / daysInMonth;
-                              break;
-                            case 'weekly':
-                              totalSalaryWithdrawn = (monthlySalaryWithdrawals / daysInMonth) * 7;
-                              break;
-                            case 'monthly':
-                              totalSalaryWithdrawn = monthlySalaryWithdrawals;
-                              break;
-                            case 'yearly':
-                              totalSalaryWithdrawn = salaryWithdrawals
-                                .filter(w => isAfter(parseISO(w.created_at), startOfYear(today)))
-                                .reduce((sum, w) => sum + w.amount, 0);
-                              break;
-                            case 'all':
-                            default:
-                              totalSalaryWithdrawn = salaryWithdrawals.reduce((sum, w) => sum + w.amount, 0);
-                              break;
-                          }
-                        }
-                        return totalSalaryWithdrawn;
-                      })().toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Costos de Pedidos:</span>
-                      <span className="text-red-600 font-medium">${(() => {
-                        const today = new Date();
-                        const daysInMonth = getDaysInMonth(today);
-                        const filteredStockHistory = stockHistory.filter(entry => {
-                          const entryDate = parseISO(entry.created_at);
-                          switch(statsPeriod) {
-                            case 'daily': return isAfter(entryDate, startOfToday()) || isSameDay(entryDate, new Date());
-                            case 'weekly': return isAfter(entryDate, startOfWeek(today, { weekStartsOn: 1 })) || isWithinInterval(entryDate, { start: startOfWeek(today, { weekStartsOn: 1 }), end: endOfWeek(today, { weekStartsOn: 1 }) });
-                            case 'monthly': return isAfter(entryDate, startOfMonth(today)) || isWithinInterval(entryDate, { start: startOfMonth(today), end: endOfMonth(today) });
-                            case 'yearly': return isAfter(entryDate, startOfYear(today)) || isWithinInterval(entryDate, { start: startOfYear(today), end: endOfYear(today) });
-                            case 'all':
-                            default: return true;
-                          }
-                        });
-                        
-                        let totalStockHistoryCost = filteredStockHistory.reduce((acc, entry) => acc + ((entry.cost || 0) * entry.quantity_added), 0);
-                        
-                        // Si es período diario y no hay pedidos específicos del día, prorratear los costos del mes
-                        if (statsPeriod === 'daily' && filteredStockHistory.length === 0) {
-                          const monthlyStockHistory = stockHistory.filter(entry => {
-                            const entryDate = parseISO(entry.created_at);
-                            return isWithinInterval(entryDate, { start: startOfMonth(today), end: endOfMonth(today) });
-                          });
-                          
-                          const monthlyStockCost = monthlyStockHistory.reduce((acc, entry) => {
-                            return acc + ((entry.cost || 0) * entry.quantity_added);
-                          }, 0);
-                          
-                          totalStockHistoryCost = monthlyStockCost / daysInMonth;
-                        }
-                        
-                        // Para período semanal, SIEMPRE prorratear los costos del mes
-                        if (statsPeriod === 'weekly') {
-                          const monthlyStockHistory = stockHistory.filter(entry => {
-                            const entryDate = parseISO(entry.created_at);
-                            return isWithinInterval(entryDate, { start: startOfMonth(today), end: endOfMonth(today) });
-                          });
-                          
-                          const monthlyStockCost = monthlyStockHistory.reduce((acc, entry) => {
-                            return acc + ((entry.cost || 0) * entry.quantity_added);
-                          }, 0);
-                          
-                          totalStockHistoryCost = (monthlyStockCost / 30) * 7;
-                        }
-                        
-                        return totalStockHistoryCost;
-                      })().toLocaleString()}</span>
-                    </div>
-                  </div>
-                  <div className="flex justify-between lg:flex-col lg:gap-1 border-t pt-2 font-medium text-sm">
-                    <span>Total Costos:</span>
-                    <span className="text-primary">${stats.totalCosts.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className="mt-3 pt-3 border-t text-xs text-muted-foreground italic">
-                    <span>💡 Incluye todos los costos operativos y de inversión del período seleccionado.</span>
-                  </div>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Patrimonio (Stock)</CardTitle>
-            <Coins className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${stats.totalCapitalInStock.toLocaleString()}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Items Vendidos (Total)</CardTitle>
-            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">+{stats.totalItemsSoldCount}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Tasa de Conversión</CardTitle>
-            <Goal className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.conversionRate.toFixed(1)}%</div>
-             <p className="text-xs text-muted-foreground">de pedidos a ventas</p>
-          </CardContent>
-        </Card>
+                </CollapsibleContent>
+              </Collapsible>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       <div className="grid gap-4 mt-6 grid-cols-1">
@@ -2389,18 +2423,7 @@ export default function AdminFinancePage() {
                       </TableHeader>
                       <TableBody>
                           {(() => {
-                            const today = new Date();
-                            const filteredSales = sales.filter(sale => {
-                              const saleDate = parseISO(sale.created_at);
-                              switch(statsPeriod) {
-                                case 'daily': return isAfter(saleDate, startOfToday());
-                                case 'weekly': return isAfter(saleDate, startOfWeek(today, { weekStartsOn: 1 }));
-                                case 'monthly': return isAfter(saleDate, startOfMonth(today));
-                                case 'yearly': return isAfter(saleDate, startOfYear(today));
-                                case 'all':
-                                default: return true;
-                              }
-                            });
+                            const filteredSales = sales.filter(sale => isInSelectedMonth(sale.created_at));
                             
                             return filteredSales.length > 0 ? filteredSales.map((sale) => {
                               const product = products.find(p => p.id === sale.product_id);
@@ -2437,7 +2460,7 @@ export default function AdminFinancePage() {
                   <div className="mt-4 p-4 bg-muted/50 rounded-lg">
                     <div className="flex justify-between items-center font-semibold text-lg">
                       <span>Total de Ingresos:</span>
-                      <span className="text-green-600">${stats.totalRevenue.toLocaleString()}</span>
+                      <span className="text-green-600">${sales.reduce((acc, sale) => acc + sale.total_price, 0).toLocaleString()}</span>
                     </div>
                   </div>
               </ScrollArea>
