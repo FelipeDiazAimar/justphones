@@ -20,10 +20,11 @@ export function ProductCard({ product }: ProductCardProps) {
   const firstAvailableColor = product.colors.find(c => c.stock > 0);
   const displayImage = product.coverImage || firstAvailableColor?.image || '/Cover.png?v=3';
   
-  // Preparar las imágenes del carousel solo para cover images
-  const carouselImages = product.coverImages && product.coverImages.length > 0 
-    ? product.coverImages 
-    : [displayImage];
+  // Preparar las imágenes del carousel: imagen principal + imágenes extras
+  const carouselImages = [
+    displayImage, // Imagen principal (coverImage o primera disponible)
+    ...(product.coverImages && product.coverImages.length > 0 ? product.coverImages : [])
+  ].filter((img, index, arr) => arr.indexOf(img) === index); // Eliminar duplicados
     
   const showMarquee = product.model.length > 17;
   const animationDuration = showMarquee ? `${product.model.length / 5}s` : undefined;
@@ -109,8 +110,8 @@ export function ProductCard({ product }: ProductCardProps) {
         )}
 
                 {product.discount && product.discount > 0 && (
-          <div className="absolute top-[150px] md:top-16 left-[16px] z-20 transform -rotate-90 origin-left">
-            <Badge variant="destructive" className="text-xs px-2 py-1 whitespace-nowrap">
+          <div className="absolute top-[50px] md:top-16 left-[16px] z-20 transform -rotate-90 origin-left">
+            <Badge variant="destructive" className="text-[10px] px-1.5 py-0.5 whitespace-nowrap">
               {product.discount}% OFF
             </Badge>
           </div>

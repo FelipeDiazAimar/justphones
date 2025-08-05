@@ -410,7 +410,8 @@ export default function AdminProductsPage() {
   // Manejar las previews de las múltiples imágenes de portada
   useEffect(() => {
     // Limpiar URLs blob anteriores
-    coverImagesPreviews.forEach(url => {
+    const previousPreviews = coverImagesPreviews.slice(); // Hacer una copia
+    previousPreviews.forEach(url => {
       if (url.startsWith('blob:')) {
         URL.revokeObjectURL(url);
       }
@@ -433,11 +434,7 @@ export default function AdminProductsPage() {
 
     // Cleanup function
     return () => {
-      coverImagesPreviews.forEach(url => {
-        if (url.startsWith('blob:')) {
-          URL.revokeObjectURL(url);
-        }
-      });
+      // No hacer cleanup aquí ya que se hace al inicio del próximo efecto
     };
   }, [watchedCoverImages]);
 

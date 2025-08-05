@@ -38,14 +38,31 @@ export default function ProductDetailPage() {
   const [api, setApi] = useState<CarouselApi>()
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isViewingCoverImages, setIsViewingCoverImages] = useState(true);
+  const [hasUserSelectedColor, setHasUserSelectedColor] = useState(false);
   
   // Combinar imágenes de portada y de colores
   const allImages = useMemo(() => {
     if (!product) return [];
     
-    const coverImages = product.coverImages && product.coverImages.length > 0 
-      ? product.coverImages.map(img => ({ type: 'cover' as const, image: img, name: 'Portada' }))
-      : [{ type: 'cover' as const, image: product.coverImage, name: 'Portada' }];
+    // Incluir imagen principal y las extras
+    const coverImages = [];
+    
+    // Agregar imagen principal
+    if (product.coverImage) {
+      coverImages.push({ type: 'cover' as const, image: product.coverImage, name: 'Portada' });
+    }
+    
+    // Agregar imágenes extras
+    if (product.coverImages && product.coverImages.length > 0) {
+      product.coverImages.forEach(img => {
+        coverImages.push({ type: 'cover' as const, image: img, name: 'Portada' });
+      });
+    }
+    
+    // Si no hay imagen principal ni extras, usar imagen por defecto
+    if (coverImages.length === 0) {
+      coverImages.push({ type: 'cover' as const, image: '/Cover.png?v=3', name: 'Portada' });
+    }
     
     const colorImages = product.colors.map(color => ({ 
       type: 'color' as const, 
@@ -56,6 +73,15 @@ export default function ProductDetailPage() {
     }));
     
     return [...coverImages, ...colorImages];
+  }, [product]);
+
+  // Calcular el número de imágenes de portada para usar en varios lugares
+  const coverImagesCount = useMemo(() => {
+    if (!product) return 0;
+    let count = 0;
+    if (product.coverImage) count++;
+    if (product.coverImages?.length) count += product.coverImages.length;
+    return count || 1; // Al menos 1 para la imagen por defecto
   }, [product]);
   
   useEffect(() => {
@@ -98,36 +124,24 @@ export default function ProductDetailPage() {
 
   // Auto-play para el carousel
   useEffect(() => {
-    if (!api || !product) return;
+    if (!api || !product || hasUserSelectedColor) return;
     
     let interval: NodeJS.Timeout;
     
-    if (isViewingCoverImages) {
-      // Auto-play para las cover images
-      const coverImagesCount = product.coverImages?.length || 1;
-      if (coverImagesCount > 1) {
-        interval = setInterval(() => {
-          const currentSnap = api.selectedScrollSnap();
-          const nextIndex = (currentSnap + 1) % coverImagesCount;
-          api.scrollTo(nextIndex);
-        }, 3000);
-      }
-    } else {
-      // Auto-play para todas las imágenes (cover + color)
-      const totalImages = allImages.length;
-      if (totalImages > 1) {
-        interval = setInterval(() => {
-          const currentSnap = api.selectedScrollSnap();
-          const nextIndex = (currentSnap + 1) % totalImages;
-          api.scrollTo(nextIndex);
-        }, 3000);
-      }
+    // Auto-play para todas las imágenes (cover + color)
+    const totalImages = allImages.length;
+    if (totalImages > 1) {
+      interval = setInterval(() => {
+        const currentSnap = api.selectedScrollSnap();
+        const nextIndex = (currentSnap + 1) % totalImages;
+        api.scrollTo(nextIndex);
+      }, 3000);
     }
 
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [api, isViewingCoverImages, product, allImages]);
+  }, [api, isViewingCoverImages, product, allImages, hasUserSelectedColor, coverImagesCount]);
 
   // Manejar navegación manual a imagen de color
   useEffect(() => {
@@ -143,8 +157,6 @@ export default function ProductDetailPage() {
     const onSelect = () => {
       const newSelectedIndex = api.selectedScrollSnap();
       setSelectedIndex(newSelectedIndex);
-      
-      const coverImagesCount = product.coverImages?.length || 1;
       
       if (newSelectedIndex < coverImagesCount) {
         // Está viendo imágenes de portada
@@ -168,7 +180,7 @@ export default function ProductDetailPage() {
     return () => {
       api.off("select", onSelect);
     };
-  }, [api, product, selectedColor]);
+  }, [api, product, selectedColor, coverImagesCount]);
 
   const isLoading = isLoadingProducts || !id || !product;
 
@@ -284,14 +296,31 @@ export default function ProductDetailPage() {
                      {isSoldOut && (
                         <div className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-lg z-10 pointer-events-none overflow-hidden">
                             <div className="absolute w-[200%] h-8 bg-black transform -rotate-[55deg] flex items-center justify-center space-x-8 whitespace-nowrap">
-                                <span className="text-white font-bold text-xl tracking-widest">AGOTADO</span>
-                                <span className="text-white font-bold text-xl tracking-widest">AGOTADO</span>
-                                <span className="text-white font-bold text-xl tracking-widest">AGOTADO</span>
+                                <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                                <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                                <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                                <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                                <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                                <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                                <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                                <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                                <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                                <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                                <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                                <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                                <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
                             </div>
                             <div className="absolute w-[200%] h-8 bg-black transform rotate-[55deg] flex items-center justify-center space-x-8 whitespace-nowrap">
-                                <span className="text-white font-bold text-xl tracking-widest">AGOTADO</span>
-                                <span className="text-white font-bold text-xl tracking-widest">AGOTADO</span>
-                                <span className="text-white font-bold text-xl tracking-widest">AGOTADO</span>
+                                <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                                <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                                <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                                <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                                <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                                <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                                <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                                <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                                <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
+                                <span className="text-white font-bold text-lg md:text-xl tracking-widest">SOLD OUT</span>
                             </div>
                         </div>
                     )}
@@ -351,7 +380,6 @@ export default function ProductDetailPage() {
                         <h3 className="text-lg font-medium mb-2">Color: <span className="font-normal text-foreground">{selectedColor?.name}</span></h3>
                         <div className="flex items-center space-x-2">
                             {product.colors.map((color, index) => {
-                                const coverImagesCount = product.coverImages?.length || 1;
                                 const colorImageIndex = coverImagesCount + index;
                                 
                                 return (
@@ -360,6 +388,7 @@ export default function ProductDetailPage() {
                                         onClick={() => {
                                             setSelectedColor(color);
                                             setIsViewingCoverImages(false);
+                                            setHasUserSelectedColor(true);
                                             api?.scrollTo(colorImageIndex);
                                         }}
                                         className={cn(
