@@ -98,6 +98,7 @@ const productSchema = z.object({
   price: z.coerce.number().min(0, "El precio debe ser positivo"),
   discount: z.coerce.number().min(0, "El descuento no puede ser negativo.").default(0).optional(),
   coverImage: imageFieldSchema,
+  coverImages: z.array(imageFieldSchema).optional(),
   category: z.enum(['case', 'accessory', 'auriculares'], {
     errorMap: () => ({ message: "Categoría debe ser: case, accessory o auriculares" })
   }),
@@ -290,6 +291,7 @@ export default function AdminProductsPage() {
   
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
   const [coverImageUrlInput, setCoverImageUrlInput] = useState('');
+  const [coverImagesPreviews, setCoverImagesPreviews] = useState<string[]>([]);
   const [previewDialogUrl, setPreviewDialogUrl] = useState<string | null>(null);
 
   const [isSalesHistoryDialogOpen, setIsSalesHistoryDialogOpen] = useState(false);
@@ -302,7 +304,7 @@ export default function AdminProductsPage() {
   const [imgSrc, setImgSrc] = useState('');
   const [isCropperOpen, setIsCropperOpen] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
-  const [activeCropField, setActiveCropField] = useState<{ type: 'cover' | 'color', index?: number } | null>(null);
+  const [activeCropField, setActiveCropField] = useState<{ type: 'cover' | 'color' | 'coverImage', index?: number } | null>(null);
   const [originalFile, setOriginalFile] = useState<File | null>(null);
 
 
@@ -332,6 +334,7 @@ export default function AdminProductsPage() {
       cost: 0,
       discount: 0,
       coverImage: '',
+      coverImages: [],
       category: 'case',
       model: '',
       colors: [{ name: 'Negro', hex: '#000000', image: '', stock: 0 }],
@@ -342,10 +345,20 @@ export default function AdminProductsPage() {
 
   const watchedCategory = watch("category");
   const watchedCoverImage = watch('coverImage');
+  const watchedCoverImages = watch('coverImages');
 
   const { fields, append, remove } = useFieldArray({
     control,
     name: "colors",
+  });
+  
+  const { 
+    fields: coverImagesFields, 
+    append: appendCoverImage, 
+    remove: removeCoverImage 
+  } = useFieldArray({
+    control,
+    name: "coverImages",
   });
   
   const {
@@ -393,6 +406,40 @@ export default function AdminProductsPage() {
         }
     };
   }, [watchedCoverImage]);
+
+  // Manejar las previews de las múltiples imágenes de portada
+  useEffect(() => {
+    // Limpiar URLs blob anteriores
+    coverImagesPreviews.forEach(url => {
+      if (url.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+      }
+    });
+
+    if (watchedCoverImages && Array.isArray(watchedCoverImages)) {
+      const newPreviews = watchedCoverImages.map(image => {
+        if (image instanceof File) {
+          return URL.createObjectURL(image);
+        } else if (typeof image === 'string' && image) {
+          return image;
+        }
+        return '';
+      }).filter(Boolean);
+      
+      setCoverImagesPreviews(newPreviews);
+    } else {
+      setCoverImagesPreviews([]);
+    }
+
+    // Cleanup function
+    return () => {
+      coverImagesPreviews.forEach(url => {
+        if (url.startsWith('blob:')) {
+          URL.revokeObjectURL(url);
+        }
+      });
+    };
+  }, [watchedCoverImages]);
 
 
   const saleProduct = useMemo(() => {
@@ -515,6 +562,12 @@ export default function AdminProductsPage() {
     if (coverImagePreview && coverImagePreview.startsWith('blob:')) {
       URL.revokeObjectURL(coverImagePreview);
     }
+    // Clean up cover images blob URLs
+    coverImagesPreviews.forEach(url => {
+      if (url.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+      }
+    });
   };
 
   const handleAddNewProduct = () => {
@@ -525,6 +578,7 @@ export default function AdminProductsPage() {
       cost: 0,
       discount: 0,
       coverImage: '',
+      coverImages: [],
       category: 'case',
       model: '',
       colors: [{ name: 'Negro', hex: '#000000', image: '', stock: 0 }],
@@ -534,6 +588,7 @@ export default function AdminProductsPage() {
     setEditingProduct(null);
     setCoverImagePreview(null);
     setCoverImageUrlInput('');
+    setCoverImagesPreviews([]);
     setIsProductDialogOpen(true);
   };
 
@@ -543,10 +598,19 @@ export default function AdminProductsPage() {
       discount: product.discount || 0,
       featured: product.featured ?? false,
       is_new: product.is_new ?? false,
+      coverImages: product.coverImages || [],
     });
     setEditingProduct(product);
     setCoverImagePreview(product.coverImage);
     setCoverImageUrlInput(product.coverImage);
+    
+    // Establecer previews para las imágenes adicionales
+    if (product.coverImages && product.coverImages.length > 0) {
+      setCoverImagesPreviews(product.coverImages);
+    } else {
+      setCoverImagesPreviews([]);
+    }
+    
     setIsProductDialogOpen(true);
   };
 
@@ -564,7 +628,7 @@ export default function AdminProductsPage() {
       ));
   }
 
-  const handleFileSelect = (file: File, type: 'cover' | 'color', index?: number) => {
+  const handleFileSelect = (file: File, type: 'cover' | 'color' | 'coverImage', index?: number) => {
       setCrop(undefined);
       setActiveCropField({ type, index });
       setOriginalFile(file);
@@ -583,6 +647,8 @@ export default function AdminProductsPage() {
           const croppedImageFile = await getCroppedImg(imgRef.current, completedCrop, originalFile.name);
           if (activeCropField.type === 'cover') {
               setValue('coverImage', croppedImageFile, { shouldValidate: true });
+          } else if (activeCropField.type === 'coverImage' && activeCropField.index !== undefined) {
+              setValue(`coverImages.${activeCropField.index}`, croppedImageFile, { shouldValidate: true });
           } else if (activeCropField.type === 'color' && activeCropField.index !== undefined) {
               setValue(`colors.${activeCropField.index}.image`, croppedImageFile, { shouldValidate: true });
           }
@@ -637,15 +703,26 @@ export default function AdminProductsPage() {
                 }
                 
                 if (!uploadResult.success) {
-                  throw new Error(uploadResult.error || `Error al subir imagen ${imageType}`);
+                  // Si R2 falla, mostrar una advertencia pero continuar sin imagen
+                  console.warn(`⚠️ [PRODUCTS] ${imageType} upload failed, using fallback`);
+                  toast({ 
+                    variant: 'destructive', 
+                    title: `Error al subir imagen ${imageType}`, 
+                    description: 'Por favor, usa URLs directas mientras se corrige la configuración de R2' 
+                  });
+                  return ''; // Retornar vacío en lugar de fallar
                 }
                 
                 console.log(`✅ [PRODUCTS] ${imageType} image uploaded successfully:`, uploadResult.url);
                 return uploadResult.url || '';
             } catch (e: any) {
                 console.error(`❌ [PRODUCTS] Error uploading ${imageType} image:`, e);
-                handleStorageError(e, `Error al subir imagen ${imageType}`);
-                throw e;
+                toast({ 
+                  variant: 'destructive', 
+                  title: `Error al subir imagen ${imageType}`, 
+                  description: 'Por favor, usa URLs directas mientras se corrige la configuración de R2' 
+                });
+                return ''; // Retornar vacío en lugar de fallar
             }
         }
         return '';
@@ -654,6 +731,16 @@ export default function AdminProductsPage() {
     try {
         console.log('📁 [PRODUCTS] Processing cover image...');
         const coverImageUrl = await processImage(formData.coverImage, 'cover');
+
+        console.log('📁 [PRODUCTS] Processing additional cover images...');
+        const coverImagesUrls = formData.coverImages && formData.coverImages.length > 0 
+          ? await Promise.all(
+              formData.coverImages.map((image, index) => {
+                console.log(`📁 [PRODUCTS] Processing cover image ${index + 1}`);
+                return processImage(image, 'cover');
+              })
+            )
+          : [];
 
         console.log('🎨 [PRODUCTS] Processing color images...');
         const colorImageUrls = await Promise.all(
@@ -666,6 +753,7 @@ export default function AdminProductsPage() {
         const finalProductData = {
             ...formData,
             coverImage: coverImageUrl,
+            coverImages: coverImagesUrls.filter(url => url !== ''), // Filtrar URLs vacías
             colors: formData.colors.map((color, index) => ({
                 ...color,
                 image: colorImageUrls[index],
@@ -1611,6 +1699,101 @@ export default function AdminProductsPage() {
                       </div>
                     )}
                     {errors.coverImage && <p className="text-red-500 text-sm mt-1">{typeof errors.coverImage.message === 'string' ? errors.coverImage.message : ''}</p>}
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 items-start gap-4">
+                <Label className="md:text-right pt-2">Imágenes Adicionales</Label>
+                <div className="md:col-span-3 space-y-4">
+                    <p className="text-sm text-muted-foreground">Añade más imágenes para el carousel de la product card (opcional)</p>
+                    
+                    {coverImagesFields.map((field, index) => (
+                        <div key={field.id} className="border rounded-lg p-4 space-y-4">
+                            <div className="flex items-center justify-between">
+                                <h4 className="font-medium">Imagen {index + 1}</h4>
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={() => removeCoverImage(index)}
+                                >
+                                    <X className="h-4 w-4" />
+                                    Eliminar
+                                </Button>
+                            </div>
+                            
+                            <Tabs defaultValue="upload" className="w-full">
+                                <TabsList className="grid w-full grid-cols-2">
+                                    <TabsTrigger value="upload">Subir Archivo</TabsTrigger>
+                                    <TabsTrigger value="url">Usar URL</TabsTrigger>
+                                </TabsList>
+                                <TabsContent value="upload">
+                                    <label
+                                        htmlFor={`cover-image-${index}-upload-input`}
+                                        className="relative flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted hover:bg-card mt-4"
+                                    >
+                                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                            <UploadCloud className="w-8 h-8 mb-2 text-muted-foreground" />
+                                            <p className="mb-2 text-sm text-muted-foreground"><span className="font-semibold">Click para subir</span></p>
+                                            <p className="text-xs text-muted-foreground">PNG, JPG, WEBP (recorte 3:5)</p>
+                                        </div>
+                                        <input
+                                            id={`cover-image-${index}-upload-input`}
+                                            type="file"
+                                            className="hidden"
+                                            accept="image/png, image/jpeg, image/webp"
+                                            onChange={(e) => {
+                                                if (e.target.files && e.target.files[0]) {
+                                                    handleFileSelect(e.target.files[0], 'coverImage', index);
+                                                }
+                                            }}
+                                        />
+                                    </label>
+                                </TabsContent>
+                                <TabsContent value="url">
+                                    <div className="pt-4 space-y-2">
+                                        <Input
+                                            placeholder="https://ejemplo.com/imagen.png"
+                                            value={typeof watch(`coverImages.${index}`) === 'string' ? watch(`coverImages.${index}`) : ''}
+                                            onChange={(e) => {
+                                                setValue(`coverImages.${index}`, e.target.value, { shouldValidate: true });
+                                            }}
+                                        />
+                                    </div>
+                                </TabsContent>
+                            </Tabs>
+
+                            {coverImagesPreviews[index] && (
+                                <div className="flex items-center gap-2 mt-4">
+                                    <div className="relative w-10 h-10 rounded-md overflow-hidden border flex-shrink-0">
+                                        <Image src={coverImagesPreviews[index]} alt={`Thumbnail ${index + 1}`} fill className="object-cover" unoptimized={true} />
+                                    </div>
+                                    <Button type="button" variant="outline" size="sm" className="flex-grow" onClick={() => setPreviewDialogUrl(coverImagesPreviews[index])}>Ver Previa</Button>
+                                    <Button
+                                        type="button"
+                                        variant="destructive"
+                                        size="icon"
+                                        className="h-9 w-9 flex-shrink-0 rounded-full"
+                                        onClick={() => {
+                                            setValue(`coverImages.${index}`, '');
+                                        }}
+                                    >
+                                        <X className="h-4 w-4"/>
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                    
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => appendCoverImage('')}
+                        className="w-full"
+                    >
+                        <PlusCircle className="h-4 w-4 mr-2" />
+                        Añadir Imagen
+                    </Button>
                 </div>
             </div>
             

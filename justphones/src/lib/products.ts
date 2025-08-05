@@ -14,6 +14,7 @@ export type Product = {
   price: number;
   discount?: number;
   coverImage: string;
+  coverImages?: string[]; // Array de imágenes de portada para el carousel
   colors: ProductColor[];
   category: 'case' | 'accessory' | 'auriculares';
   model: string;

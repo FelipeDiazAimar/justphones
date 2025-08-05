@@ -37,6 +37,26 @@ export default function ProductDetailPage() {
   const [quantity, setQuantity] = useState<number | ''>(1);
   const [api, setApi] = useState<CarouselApi>()
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [isViewingCoverImages, setIsViewingCoverImages] = useState(true);
+  
+  // Combinar imágenes de portada y de colores
+  const allImages = useMemo(() => {
+    if (!product) return [];
+    
+    const coverImages = product.coverImages && product.coverImages.length > 0 
+      ? product.coverImages.map(img => ({ type: 'cover' as const, image: img, name: 'Portada' }))
+      : [{ type: 'cover' as const, image: product.coverImage, name: 'Portada' }];
+    
+    const colorImages = product.colors.map(color => ({ 
+      type: 'color' as const, 
+      image: color.image || '/Cover.png?v=3', 
+      name: color.name,
+      hex: color.hex,
+      stock: color.stock
+    }));
+    
+    return [...coverImages, ...colorImages];
+  }, [product]);
   
   useEffect(() => {
     const trackView = async () => {
@@ -67,20 +87,54 @@ export default function ProductDetailPage() {
     if (product && product.colors.length > 0) {
       const initialColor = product.colors.find(c => c.stock > 0) || product.colors[0];
       setSelectedColor(initialColor);
+      // Solo cambiar a vista de color si el usuario selecciona manualmente
+      // Inicialmente mantenemos isViewingCoverImages = true para el auto-play
     }
   }, [product]);
-  
+
   useEffect(() => {
     setQuantity(1);
   }, [selectedColor]);
 
+  // Auto-play para el carousel
+  useEffect(() => {
+    if (!api || !product) return;
+    
+    let interval: NodeJS.Timeout;
+    
+    if (isViewingCoverImages) {
+      // Auto-play para las cover images
+      const coverImagesCount = product.coverImages?.length || 1;
+      if (coverImagesCount > 1) {
+        interval = setInterval(() => {
+          const currentSnap = api.selectedScrollSnap();
+          const nextIndex = (currentSnap + 1) % coverImagesCount;
+          api.scrollTo(nextIndex);
+        }, 3000);
+      }
+    } else {
+      // Auto-play para todas las imágenes (cover + color)
+      const totalImages = allImages.length;
+      if (totalImages > 1) {
+        interval = setInterval(() => {
+          const currentSnap = api.selectedScrollSnap();
+          const nextIndex = (currentSnap + 1) % totalImages;
+          api.scrollTo(nextIndex);
+        }, 3000);
+      }
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [api, isViewingCoverImages, product, allImages]);
+
+  // Manejar navegación manual a imagen de color
   useEffect(() => {
     if (!api || !selectedColor || !product) return;
-    const newSelectedIndex = product.colors.findIndex(c => c.hex === selectedColor.hex);
-    if (newSelectedIndex !== -1 && newSelectedIndex !== api.selectedScrollSnap()) {
-      api.scrollTo(newSelectedIndex);
-      setSelectedIndex(newSelectedIndex);
-    }
+    
+    // Solo cambiar automáticamente si el usuario seleccionó un color manualmente
+    // (no en la inicialización)
   }, [api, selectedColor, product]);
 
   useEffect(() => {
@@ -89,10 +143,21 @@ export default function ProductDetailPage() {
     const onSelect = () => {
       const newSelectedIndex = api.selectedScrollSnap();
       setSelectedIndex(newSelectedIndex);
-      if(product.colors[newSelectedIndex]) {
-        const newSelectedColor = product.colors[newSelectedIndex];
-        if (newSelectedColor && newSelectedColor.hex !== selectedColor?.hex) {
-          setSelectedColor(newSelectedColor);
+      
+      const coverImagesCount = product.coverImages?.length || 1;
+      
+      if (newSelectedIndex < coverImagesCount) {
+        // Está viendo imágenes de portada
+        setIsViewingCoverImages(true);
+      } else {
+        // Está viendo imágenes de colores
+        setIsViewingCoverImages(false);
+        const colorIndex = newSelectedIndex - coverImagesCount;
+        if (product.colors[colorIndex]) {
+          const newSelectedColor = product.colors[colorIndex];
+          if (newSelectedColor && newSelectedColor.hex !== selectedColor?.hex) {
+            setSelectedColor(newSelectedColor);
+          }
         }
       }
     };
@@ -198,12 +263,12 @@ export default function ProductDetailPage() {
                     {hasDiscount && <Badge variant="destructive" className="absolute top-2 left-2 z-10">{product.discount}% OFF</Badge>}
                     <Carousel setApi={setApi} className="rounded-lg overflow-hidden">
                         <CarouselContent>
-                            {product.colors.map((color, index) => (
+                            {allImages.map((imageData, index) => (
                                 <CarouselItem key={index}>
                                     <div className="aspect-[3/5] relative">
                                         <Image
-                                            src={color.image || '/Cover.png?v=3'}
-                                            alt={`${product.name} - ${color.name}`}
+                                            src={imageData.image || '/Cover.png?v=3'}
+                                            alt={`${product.name} - ${imageData.name}`}
                                             fill
                                             className="object-cover"
                                             data-ai-hint="phone case"
@@ -233,7 +298,7 @@ export default function ProductDetailPage() {
                 </div>
 
                 <div className="flex justify-center gap-3 mb-8 lg:mb-0">
-                    {product.colors.map((_, index) => (
+                    {allImages.map((_, index) => (
                         <button
                             key={index}
                             onClick={() => api?.scrollTo(index)}
@@ -285,20 +350,31 @@ export default function ProductDetailPage() {
                     <div className="mb-6">
                         <h3 className="text-lg font-medium mb-2">Color: <span className="font-normal text-foreground">{selectedColor?.name}</span></h3>
                         <div className="flex items-center space-x-2">
-                            {product.colors.map((color, index) => (
-                                <button
-                                    key={index}
-                                    onClick={() => setSelectedColor(color)}
-                                    className={cn(
-                                        "h-8 w-8 rounded-full border-2 transition-all",
-                                        selectedColor.hex === color.hex ? 'border-primary ring-2 ring-primary ring-offset-2' : 'border-border',
-                                        color.stock === 0 && 'opacity-50'
-                                    )}
-                                    style={{ backgroundColor: color.hex }}
-                                    title={color.name}
-                                    aria-label={`Select color ${color.name}`}
-                                />
-                            ))}
+                            {product.colors.map((color, index) => {
+                                const coverImagesCount = product.coverImages?.length || 1;
+                                const colorImageIndex = coverImagesCount + index;
+                                
+                                return (
+                                    <button
+                                        key={index}
+                                        onClick={() => {
+                                            setSelectedColor(color);
+                                            setIsViewingCoverImages(false);
+                                            api?.scrollTo(colorImageIndex);
+                                        }}
+                                        className={cn(
+                                            "h-8 w-8 rounded-full border-2 transition-all",
+                                            selectedColor?.hex === color.hex && !isViewingCoverImages 
+                                                ? 'border-primary ring-2 ring-primary ring-offset-2' 
+                                                : 'border-border',
+                                            color.stock === 0 && 'opacity-50'
+                                        )}
+                                        style={{ backgroundColor: color.hex }}
+                                        title={color.name}
+                                        aria-label={`Select color ${color.name}`}
+                                    />
+                                );
+                            })}
                         </div>
                     </div>
 
