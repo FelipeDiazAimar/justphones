@@ -253,6 +253,13 @@ export default function ProductDetailPage() {
   const productName = unslugify(product.name);
   const hasDiscount = Boolean(product.discount && product.discount > 0);
 
+  // Lógica de precios (detalle): aplicar descuento propio y luego 20% EF/TRANSF
+  const productDiscountPercent = product.discount ? product.discount : 0;
+  const cashDiscountPercent = 20;
+  const basePrice = product.price;
+  const priceAfterProductDiscount = basePrice * (1 - productDiscountPercent / 100); // para tachado
+  const finalCashPrice = priceAfterProductDiscount * (1 - cashDiscountPercent / 100); // precio principal
+
   return (
     <MainLayout>
         <div className="max-w-xs sm:max-w-lg lg:max-w-6xl mx-auto px-4 lg:grid lg:grid-cols-2 lg:gap-12">
@@ -260,14 +267,11 @@ export default function ProductDetailPage() {
                 <h1 className="text-4xl font-bold tracking-tight">{productName}</h1>
                 <p className="text-xl text-muted-foreground mt-1">{product.model}</p>
                 <div className="mt-2 flex flex-col items-center">
-                    {hasDiscount ? (
-                        <div className="flex flex-col items-center">
-                            <p className="text-3xl font-light text-primary">${(product.price * (1 - (product.discount ?? 0) / 100)).toLocaleString()}</p>
-                            <p className="text-lg text-muted-foreground line-through">${product.price.toLocaleString()}</p>
-                        </div>
-                    ) : (
-                        <p className="text-3xl font-light text-primary">${product.price.toLocaleString()}</p>
-                    )}
+                  <div className="flex items-baseline gap-2">
+                    <p className="text-3xl font-light text-primary">${finalCashPrice.toLocaleString()}</p>
+                    <span className="text-[11px] font-semibold text-orange-500">EF/TRANSF 20% OFF</span>
+                  </div>
+                  <p className="text-lg text-muted-foreground line-through">${priceAfterProductDiscount.toLocaleString()}</p>
                 </div>
             </div>
             <div>
@@ -345,15 +349,12 @@ export default function ProductDetailPage() {
                 <div className="hidden lg:block text-left mb-4">
                     <h1 className="text-4xl font-bold tracking-tight">{productName}</h1>
                     <p className="text-xl text-muted-foreground mt-1">{product.model}</p>
-                     <div className="mt-2 flex flex-col items-start">
-                        {hasDiscount ? (
-                            <div className="flex flex-col items-start">
-                                <p className="text-3xl font-light text-primary">${(product.price * (1 - (product.discount ?? 0) / 100)).toLocaleString()}</p>
-                                <p className="text-lg text-muted-foreground line-through">${product.price.toLocaleString()}</p>
-                            </div>
-                        ) : (
-                            <p className="text-3xl font-light text-primary">${product.price.toLocaleString()}</p>
-                        )}
+                    <div className="mt-2 flex flex-col items-start">
+                      <div className="flex items-baseline gap-3">
+                        <p className="text-3xl font-light text-primary">${finalCashPrice.toLocaleString()}</p>
+                        <span className="text-xs md:text-sm font-semibold text-orange-500">EF/TRANSF 20% OFF</span>
+                      </div>
+                      <p className="text-lg text-muted-foreground line-through">${priceAfterProductDiscount.toLocaleString()}</p>
                     </div>
                 </div>
 
@@ -464,12 +465,13 @@ export default function ProductDetailPage() {
                         </div>
                         <div className="mt-6 text-center">
                             <h4 className="font-semibold mb-3 text-sm uppercase tracking-wider">Métodos de envío</h4>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-muted-foreground">
-                                <div className="p-3 rounded-lg bg-card border">
-                                    <Store className="mx-auto h-6 w-6 mb-1 text-primary" />
-                                    <p>Retiro en Freyre</p>
-                                    <p className="font-bold text-primary">Gratis</p>
-                                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-muted-foreground">
+                <div className="p-3 rounded-lg bg-card border">
+                  <Store className="mx-auto h-6 w-6 mb-1 text-primary" />
+                  <p>Retiro en Freyre</p>
+                  <p>Retiro en San Francisco</p>
+                  <p className="font-bold text-primary">Gratis</p>
+                </div>
                                 <div className="p-3 rounded-lg bg-card border">
                                     <Truck className="mx-auto h-6 w-6 mb-1 text-primary" />
                                     <p>Envío a domicilio</p>

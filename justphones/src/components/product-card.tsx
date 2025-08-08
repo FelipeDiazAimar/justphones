@@ -32,6 +32,15 @@ export function ProductCard({ product }: ProductCardProps) {
   const hasDiscount = product.discount && product.discount > 0;
   const [api, setApi] = useState<CarouselApi>();
 
+  // Lógica de precios:
+  // 1. Aplicar primero el descuento propio del producto (si existe)
+  // 2. Aplicar luego el 20% de descuento por EFECTIVO/TRANSFERENCIA
+  const productDiscountPercent = product.discount ? product.discount : 0;
+  const cashDiscountPercent = 20;
+  const basePrice = product.price;
+  const priceAfterProductDiscount = basePrice * (1 - productDiscountPercent / 100);
+  const finalCashPrice = priceAfterProductDiscount * (1 - cashDiscountPercent / 100);
+
   // Auto-play solo para cover images
   useEffect(() => {
     if (!api || carouselImages.length <= 1) {
@@ -136,14 +145,15 @@ export function ProductCard({ product }: ProductCardProps) {
               ))}
           </div>
           <div className="flex flex-col items-center justify-center min-h-[40px]">
-            {hasDiscount ? (
-              <div className="flex flex-col items-center">
-                <p className="text-base md:text-lg font-bold text-primary">${(product.price * (1 - (product.discount ?? 0) / 100)).toLocaleString()}</p>
-                <p className="text-xs md:text-sm text-white/80 line-through">${product.price.toLocaleString()}</p>
-              </div>
-            ) : (
-                <p className="text-base md:text-lg font-bold text-primary">${product.price.toLocaleString()}</p>
-            )}
+            <div className="flex flex-col items-center">
+              <p className="text-base md:text-lg font-bold text-primary">
+                ${finalCashPrice.toLocaleString()}
+              </p>
+              <span className="mt-0.5 text-[8px] md:text-[10px] font-semibold text-orange-500 tracking-tight">EF/TRANSF 20% OFF</span>
+            </div>
+            <p className="mt-1 text-xs md:text-sm text-white/60 line-through">
+              ${priceAfterProductDiscount.toLocaleString()}
+            </p>
           </div>
         </div>
         <div className="absolute top-0 left-1/2 -translate-x-1/2 z-10 bg-black/70 text-white font-semibold px-1 py-1 md:py-1 rounded-b-lg w-[90px] md:w-[130px] overflow-hidden">
