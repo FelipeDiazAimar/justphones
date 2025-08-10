@@ -362,6 +362,15 @@ export default function AdminFinancePage() {
 
   const isLoading = isLoadingSales || isLoadingProducts || isLoadingViews || isLoadingStockHistory || isLoadingRequests || isLoadingFixedCosts || isLoadingSalaryWithdrawals || isLoadingMonetaryIncome;
 
+  // Listas filtradas por el mes seleccionado para secciones de gestión
+  const monthlySalaryWithdrawals = useMemo(() => {
+    return salaryWithdrawals.filter(w => isInSelectedMonth(w.created_at));
+  }, [salaryWithdrawals, selectedMonth]);
+
+  const monthlyMonetaryIncome = useMemo(() => {
+    return monetaryIncome.filter(income => isInSelectedMonth(income.created_at));
+  }, [monetaryIncome, selectedMonth]);
+
   const salesChartData = useMemo(() => {
     if (salesChartView === 'daily') {
       const last30Days = new Date();
@@ -1568,7 +1577,7 @@ export default function AdminFinancePage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {salaryWithdrawals.length > 0 ? salaryWithdrawals.map((s) => (
+                                {monthlySalaryWithdrawals.length > 0 ? monthlySalaryWithdrawals.map((s) => (
                                     <TableRow key={s.id}>
                                         <TableCell>{new Date(s.created_at).toLocaleDateString()}</TableCell>
                                         <TableCell className="text-muted-foreground">{s.description || 'Sin descripción'}</TableCell>
@@ -1666,7 +1675,7 @@ export default function AdminFinancePage() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {monetaryIncome.length > 0 ? monetaryIncome.slice(0, 5).map((income) => (
+                            {monthlyMonetaryIncome.length > 0 ? monthlyMonetaryIncome.slice(0, 5).map((income) => (
                                 <TableRow key={income.id}>
                                     <TableCell>{new Date(income.created_at).toLocaleDateString()}</TableCell>
                                     <TableCell className="font-medium">{income.name}</TableCell>
@@ -1997,7 +2006,7 @@ export default function AdminFinancePage() {
                           </TableRow>
                       </TableHeader>
                       <TableBody>
-                          {monetaryIncome.length > 0 ? monetaryIncome.map((income) => (
+                          {monthlyMonetaryIncome.length > 0 ? monthlyMonetaryIncome.map((income) => (
                               <TableRow key={income.id}>
                                   <TableCell>{new Date(income.created_at).toLocaleString()}</TableCell>
                                   <TableCell className="font-medium">{income.name}</TableCell>
