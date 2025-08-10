@@ -81,14 +81,29 @@ export function CustomerRequestsProvider({ children }: { children: ReactNode }) 
   };
 
   const deleteCustomerRequest = async (requestId: string) => {
-    const { error } = await supabase.from('customer_requests').delete().eq('id', requestId);
-    if (error) {
-      console.error('Error deleting customer request:', error.message);
-      toast({ variant: 'destructive', title: 'Error', description: `No se pudo eliminar el pedido: ${error.message}` });
+    console.log('[useCustomerRequests] deleteCustomerRequest llamado', { requestId });
+    try {
+      const res = await fetch(`/api/admin/customer-requests?id=${encodeURIComponent(requestId)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const body = await res.json().catch(() => ({}));
+      console.log('[useCustomerRequests] API delete response', { status: res.status, body });
+      if (!res.ok || body?.success !== true) {
+        const msg = body?.error || `Status ${res.status}`;
+        console.warn('[useCustomerRequests] Eliminación fallida vía API', { requestId, msg });
+        toast({ variant: 'destructive', title: 'Error', description: `No se pudo eliminar el pedido: ${msg}` });
+        return false;
+      }
+      console.log('[useCustomerRequests] Eliminación confirmada por API, realizando refetch...', { requestId });
+      await fetchCustomerRequests();
+      console.log('[useCustomerRequests] Refetch post-eliminación completado');
+      return true;
+    } catch (e: any) {
+      console.error('[useCustomerRequests] Error llamando API de eliminación', { requestId, error: e?.message });
+      toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar el pedido: error de red' });
       return false;
     }
-    await fetchCustomerRequests();
-    return true;
   };
 
   

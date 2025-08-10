@@ -57,6 +57,8 @@ export default function AdminPedidosPage() {
   const { sales, addSale, updateSale, deleteSale, isLoading: isLoadingSales } = useSales();
   const { products, isLoading: isLoadingProducts } = useProducts();
   const { customerRequests, updateCustomerRequest, deleteCustomerRequest, isLoading: isLoadingRequests } = useCustomerRequests();
+  // Lista local para reflejar borrados inmediatamente sin esperar al refetch
+  const [localCustomerRequests, setLocalCustomerRequests] = useState<CustomerRequest[]>([]);
   const { toast } = useToast();
   
   const [allRequestsCurrentPage, setAllRequestsCurrentPage] = useState(1);
@@ -198,8 +200,37 @@ export default function AdminPedidosPage() {
   };
 
   const handleDeleteRequest = async (requestId: string) => {
-    const success = await deleteCustomerRequest(requestId);
-    if(success) toast({ title: "Pedido de cliente eliminado" });
+    console.log('[Historial] Solicitud de eliminación recibida', {
+      requestId,
+      currentCount: localCustomerRequests.length,
+      ids: localCustomerRequests.map(r => r.id)
+    });
+    try {
+      const success = await deleteCustomerRequest(requestId);
+      console.log('[Historial] Resultado de deleteCustomerRequest', { success, requestId });
+      if (success) {
+        toast({ title: "Pedido de cliente eliminado" });
+        // Actualización optimista de la lista y paginación
+        setLocalCustomerRequests((prev) => {
+          const next = prev.filter(r => r.id !== requestId);
+          const totalBefore = prev.length;
+          const totalAfter = next.length;
+          const totalPagesAfter = Math.max(1, Math.ceil(totalAfter / ITEMS_PER_PAGE));
+          if (allRequestsCurrentPage > totalPagesAfter) {
+            console.log('[Historial] Ajuste de página tras eliminación', { from: allRequestsCurrentPage, to: totalPagesAfter, totalAfter });
+            setAllRequestsCurrentPage(totalPagesAfter);
+          }
+          console.log('[Historial] Lista local actualizada', { totalBefore, totalAfter });
+          return next;
+        });
+      } else {
+        console.warn('[Historial] deleteCustomerRequest devolvió false/undefined', { requestId });
+        toast({ variant: 'destructive', title: 'No se pudo eliminar', description: 'Intenta nuevamente.' });
+      }
+    } catch (error) {
+      console.error('[Historial] Error al eliminar pedido', { requestId, error });
+      toast({ variant: 'destructive', title: 'Error al eliminar', description: 'Intenta nuevamente.' });
+    }
   };
   
   const onEditRequestSubmit = async (data: z.infer<typeof editRequestSchema>) => {
@@ -510,21 +541,32 @@ export default function AdminPedidosPage() {
   };
   
   const paginatedAllRequests = useMemo(() => {
-    const sortedRequests = [...customerRequests].sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    const sortedRequests = [...localCustomerRequests].sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     return sortedRequests.slice(
       (allRequestsCurrentPage - 1) * ITEMS_PER_PAGE,
       allRequestsCurrentPage * ITEMS_PER_PAGE
     );
-  }, [customerRequests, allRequestsCurrentPage]);
+  }, [localCustomerRequests, allRequestsCurrentPage]);
   
-  const allRequestsTotalPages = Math.ceil(customerRequests.length / ITEMS_PER_PAGE);
+  const allRequestsTotalPages = Math.max(1, Math.ceil(localCustomerRequests.length / ITEMS_PER_PAGE));
   
   const handleAllRequestsPageChange = (page: number) => {
     if (page < 1 || page > allRequestsTotalPages) return;
+    console.log('[Historial] Cambio de página', { from: allRequestsCurrentPage, to: page, totalPages: allRequestsTotalPages });
     setAllRequestsCurrentPage(page);
     const section = document.getElementById('all-requests-section');
     if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
+
+  // Log de cambios en la lista para verificar refresco tras eliminar
+  useEffect(() => {
+    // Sincronizar lista local al refrescar del backend
+    setLocalCustomerRequests(customerRequests);
+    console.log('[Historial] customerRequests actualizado', {
+      count: customerRequests.length,
+      ids: customerRequests.map(r => r.id)
+    });
+  }, [customerRequests]);
 
   if (isLoading) {
     return (
@@ -913,7 +955,7 @@ export default function AdminPedidosPage() {
                                       </AlertDialogHeader>
                                       <AlertDialogFooter>
                                           <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                          <AlertDialogAction onClick={() => handleDeleteRequest(request.id)} className="bg-destructive hover:bg-destructive/90">
+                                          <AlertDialogAction onClick={() => { console.log('[Historial] Confirmar eliminación click', { id: request.id }); handleDeleteRequest(request.id); }} className="bg-destructive hover:bg-destructive/90">
                                               Eliminar
                                           </AlertDialogAction>
                                       </AlertDialogFooter>
