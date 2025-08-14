@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useMemo, useState, useEffect } from 'react';
@@ -63,7 +62,7 @@ const salaryWithdrawalSchema = z.object({
 const monetaryIncomeSchema = z.object({
     id: z.string().optional(),
     name: z.string().min(1, "El nombre es requerido."),
-    amount: z.coerce.number().min(1, "El monto debe ser mayor a 1."),
+    amount: z.coerce.number(), // permite negativos y positivos
     description: z.string().optional(),
 });
 
@@ -753,7 +752,7 @@ export default function AdminFinancePage() {
   };
 
   return (
-    <>
+    <React.Fragment>
       <div className="mt-8 mb-6 flex flex-col md:flex-row justify-between md:items-center gap-4">
         <h2 className="text-2xl font-bold">Análisis Financiero</h2>
         <div className="w-full md:w-auto">
@@ -790,20 +789,24 @@ export default function AdminFinancePage() {
           },
           {
             id: 'movimientos-monetarios',
-            title: 'Movimientos Monetarios',
+            title: 'Movimientos monetarios',
             icon: <Banknote className="h-4 w-4" />,
             value: (() => {
               const monthlyIncomes = monetaryIncome.filter(income => isInSelectedMonth(income.created_at));
-              const ingresosMonetarios = monthlyIncomes.filter(income => !income.name.startsWith('[EGRESO]')).reduce((total, income) => total + income.amount, 0);
-              const egresosMonetarios = monthlyIncomes.filter(income => income.name.startsWith('[EGRESO]')).reduce((total, income) => total + income.amount, 0);
+              const ingresosMonetarios = monthlyIncomes
+                .filter(income => !income.name.startsWith('[EGRESO]') && income.amount > 0)
+                .reduce((total, income) => total + income.amount, 0);
+              const egresosMonetarios = monthlyIncomes
+                .filter(income => income.name.startsWith('[EGRESO]') || income.amount < 0)
+                .reduce((total, income) => total + Math.abs(income.amount), 0);
               return ingresosMonetarios - egresosMonetarios;
             })(),
             formula: 'SUMA(Ingresos monetarios - Egresos monetarios)',
             calculations: monetaryIncome.filter(income => isInSelectedMonth(income.created_at)).map(income => {
-              const isEgreso = income.name.startsWith('[EGRESO]');
+              const isEgreso = income.name.startsWith('[EGRESO]') || income.amount < 0;
               return {
                 label: isEgreso ? income.name.replace('[EGRESO] ', '') : income.name,
-                value: income.amount,
+                value: Math.abs(income.amount),
                 isNegative: isEgreso
               };
             }),
@@ -901,7 +904,9 @@ export default function AdminFinancePage() {
               const costosFijos = fixedCosts.reduce((acc, cost) => acc + cost.amount, 0);
               const extraccionesSueldos = salaryWithdrawals.filter(w => isInSelectedMonth(w.created_at)).reduce((sum, w) => sum + w.amount, 0);
               const costosPedidos = stockHistory.filter(entry => isInSelectedMonth(entry.created_at)).reduce((acc, entry) => acc + ((entry.cost || 0) * entry.quantity_added), 0);
-              const egresosMonetarios = monetaryIncome.filter(income => income.name.startsWith('[EGRESO]') && isInSelectedMonth(income.created_at)).reduce((total, income) => total + income.amount, 0);
+              const egresosMonetarios = monetaryIncome
+                .filter(income => isInSelectedMonth(income.created_at) && (income.name.startsWith('[EGRESO]') || income.amount < 0))
+                .reduce((total, income) => total + Math.abs(income.amount), 0);
               return costosFijos + extraccionesSueldos + costosPedidos + egresosMonetarios;
             })(),
             formula: 'Costos fijos + Sueldos + Costos de pedidos + Egresos monetarios',
@@ -909,7 +914,7 @@ export default function AdminFinancePage() {
               { label: 'Costos Fijos', value: fixedCosts.reduce((acc, cost) => acc + cost.amount, 0), isNegative: true },
               { label: 'Extracciones de Sueldos', value: salaryWithdrawals.filter(w => isInSelectedMonth(w.created_at)).reduce((sum, w) => sum + w.amount, 0), isNegative: true },
               { label: 'Costos de Pedidos', value: stockHistory.filter(entry => isInSelectedMonth(entry.created_at)).reduce((acc, entry) => acc + ((entry.cost || 0) * entry.quantity_added), 0), isNegative: true },
-              { label: 'Egresos Monetarios', value: monetaryIncome.filter(income => income.name.startsWith('[EGRESO]') && isInSelectedMonth(income.created_at)).reduce((total, income) => total + income.amount, 0), isNegative: true }
+              { label: 'Egresos Monetarios', value: monetaryIncome.filter(income => isInSelectedMonth(income.created_at) && (income.name.startsWith('[EGRESO]') || income.amount < 0)).reduce((total, income) => total + Math.abs(income.amount), 0), isNegative: true }
             ],
             isExpanded: expandedCards['costos-totales'] || false
           },
@@ -919,13 +924,15 @@ export default function AdminFinancePage() {
             icon: <TrendingUp className="h-4 w-4" />,
             value: (() => {
               const ingresosProductos = sales.filter(sale => isInSelectedMonth(sale.created_at)).reduce((acc, sale) => acc + sale.total_price, 0);
-              const ingresosMonetarios = monetaryIncome.filter(income => !income.name.startsWith('[EGRESO]') && isInSelectedMonth(income.created_at)).reduce((total, income) => total + income.amount, 0);
+              const ingresosMonetarios = monetaryIncome
+                .filter(income => isInSelectedMonth(income.created_at) && !income.name.startsWith('[EGRESO]') && income.amount > 0)
+                .reduce((total, income) => total + income.amount, 0);
               return ingresosProductos + ingresosMonetarios;
             })(),
             formula: 'Ingresos por productos + Ingresos monetarios',
             calculations: [
               { label: 'Ingresos por Productos', value: sales.filter(sale => isInSelectedMonth(sale.created_at)).reduce((acc, sale) => acc + sale.total_price, 0), isNegative: false },
-              { label: 'Ingresos Monetarios', value: monetaryIncome.filter(income => !income.name.startsWith('[EGRESO]') && isInSelectedMonth(income.created_at)).reduce((total, income) => total + income.amount, 0), isNegative: false }
+              { label: 'Ingresos Monetarios', value: monetaryIncome.filter(income => isInSelectedMonth(income.created_at) && !income.name.startsWith('[EGRESO]') && income.amount > 0).reduce((total, income) => total + income.amount, 0), isNegative: false }
             ],
             isExpanded: expandedCards['ingresos-totales'] || false
           },
@@ -935,13 +942,17 @@ export default function AdminFinancePage() {
             icon: <Calculator className="h-4 w-4" />,
             value: (() => {
               const ingresosProductos = sales.filter(sale => isInSelectedMonth(sale.created_at)).reduce((acc, sale) => acc + sale.total_price, 0);
-              const ingresosMonetarios = monetaryIncome.filter(income => !income.name.startsWith('[EGRESO]') && isInSelectedMonth(income.created_at)).reduce((total, income) => total + income.amount, 0);
+              const ingresosMonetarios = monetaryIncome
+                .filter(income => isInSelectedMonth(income.created_at) && !income.name.startsWith('[EGRESO]') && income.amount > 0)
+                .reduce((total, income) => total + income.amount, 0);
               const ingresosTotales = ingresosProductos + ingresosMonetarios;
               
               const costosFijos = fixedCosts.reduce((acc, cost) => acc + cost.amount, 0);
               const extraccionesSueldos = salaryWithdrawals.filter(w => isInSelectedMonth(w.created_at)).reduce((sum, w) => sum + w.amount, 0);
               const costosPedidos = stockHistory.filter(entry => isInSelectedMonth(entry.created_at)).reduce((acc, entry) => acc + ((entry.cost || 0) * entry.quantity_added), 0);
-              const egresosMonetarios = monetaryIncome.filter(income => income.name.startsWith('[EGRESO]') && isInSelectedMonth(income.created_at)).reduce((total, income) => total + income.amount, 0);
+              const egresosMonetarios = monetaryIncome
+                .filter(income => isInSelectedMonth(income.created_at) && (income.name.startsWith('[EGRESO]') || income.amount < 0))
+                .reduce((total, income) => total + Math.abs(income.amount), 0);
               const costosTotales = costosFijos + extraccionesSueldos + costosPedidos + egresosMonetarios;
               
               return ingresosTotales - costosTotales;
@@ -949,13 +960,17 @@ export default function AdminFinancePage() {
             formula: 'Ingresos totales - Costos totales',
             calculations: (() => {
               const ingresosProductos = sales.filter(sale => isInSelectedMonth(sale.created_at)).reduce((acc, sale) => acc + sale.total_price, 0);
-              const ingresosMonetarios = monetaryIncome.filter(income => !income.name.startsWith('[EGRESO]') && isInSelectedMonth(income.created_at)).reduce((total, income) => total + income.amount, 0);
+              const ingresosMonetarios = monetaryIncome
+                .filter(income => isInSelectedMonth(income.created_at) && !income.name.startsWith('[EGRESO]') && income.amount > 0)
+                .reduce((total, income) => total + income.amount, 0);
               const ingresosTotales = ingresosProductos + ingresosMonetarios;
               
               const costosFijos = fixedCosts.reduce((acc, cost) => acc + cost.amount, 0);
               const extraccionesSueldos = salaryWithdrawals.filter(w => isInSelectedMonth(w.created_at)).reduce((sum, w) => sum + w.amount, 0);
               const costosPedidos = stockHistory.filter(entry => isInSelectedMonth(entry.created_at)).reduce((acc, entry) => acc + ((entry.cost || 0) * entry.quantity_added), 0);
-              const egresosMonetarios = monetaryIncome.filter(income => income.name.startsWith('[EGRESO]') && isInSelectedMonth(income.created_at)).reduce((total, income) => total + income.amount, 0);
+              const egresosMonetarios = monetaryIncome
+                .filter(income => isInSelectedMonth(income.created_at) && (income.name.startsWith('[EGRESO]') || income.amount < 0))
+                .reduce((total, income) => total + Math.abs(income.amount), 0);
               const costosTotales = costosFijos + extraccionesSueldos + costosPedidos + egresosMonetarios;
               
               return [
@@ -1027,7 +1042,9 @@ export default function AdminFinancePage() {
             value: (() => {
               // Capital disponible solo cuenta desde julio 2025 en adelante
               const ingresosHistoricos = sales.filter(sale => isFromJulyOnwards(sale.created_at)).reduce((acc, sale) => acc + sale.total_price, 0) + 
-                                         monetaryIncome.filter(income => !income.name.startsWith('[EGRESO]') && isFromJulyOnwards(income.created_at)).reduce((total, income) => total + income.amount, 0);
+                                         monetaryIncome
+                                           .filter(income => isFromJulyOnwards(income.created_at) && !income.name.startsWith('[EGRESO]') && income.amount > 0)
+                                           .reduce((total, income) => total + income.amount, 0);
               
               // Calcular meses desde julio 2025 hasta ahora para costos fijos (comenzando el día 3)
               const startDate = new Date(2025, 6, 3); // 3 de julio 2025
@@ -1036,7 +1053,9 @@ export default function AdminFinancePage() {
               const costosHistoricos = fixedCosts.reduce((acc, cost) => acc + cost.amount, 0) * monthsFromJuly + // Costos fijos solo por meses desde julio
                                      salaryWithdrawals.filter(w => isFromJulyOnwards(w.created_at)).reduce((sum, w) => sum + w.amount, 0) +
                                      stockHistory.filter(entry => isFromJulyOnwards(entry.created_at)).reduce((acc, entry) => acc + ((entry.cost || 0) * entry.quantity_added), 0) +
-                                     monetaryIncome.filter(income => income.name.startsWith('[EGRESO]') && isFromJulyOnwards(income.created_at)).reduce((total, income) => total + income.amount, 0);
+                                     monetaryIncome
+                                       .filter(income => isFromJulyOnwards(income.created_at) && (income.name.startsWith('[EGRESO]') || income.amount < 0))
+                                       .reduce((total, income) => total + Math.abs(income.amount), 0);
               return ingresosHistoricos - costosHistoricos;
             })(),
             formula: 'Capital acumulado desde julio 2025 (fecha de inicio del negocio)',
@@ -1061,7 +1080,7 @@ export default function AdminFinancePage() {
                 currentMonth.setMonth(currentMonth.getMonth() + 1);
               }
 
-              const calculations = [];
+              const calculations = [] as Array<{ label: string; value: number; isNegative: boolean; hideValue?: boolean }>;
               let totalIngresos = 0;
               let totalCostos = 0;
               const monthlyIngresoBreakdown: string[] = [];
@@ -1081,9 +1100,8 @@ export default function AdminFinancePage() {
                 }).reduce((acc, sale) => acc + sale.total_price, 0);
                 
                 const monthMonetaryIncome = monetaryIncome.filter(income => {
-                  if (income.name.startsWith('[EGRESO]')) return false;
                   const incomeDate = parseISO(income.created_at);
-                  return incomeDate >= periodStart && incomeDate <= periodEnd;
+                  return (!income.name.startsWith('[EGRESO]') && income.amount > 0) && incomeDate >= periodStart && incomeDate <= periodEnd;
                 }).reduce((total, income) => total + income.amount, 0);
                 
                 const monthFixedCosts = fixedCosts.reduce((acc, cost) => acc + cost.amount, 0);
@@ -1099,10 +1117,9 @@ export default function AdminFinancePage() {
                 }).reduce((acc, entry) => acc + ((entry.cost || 0) * entry.quantity_added), 0);
                 
                 const monthEgresos = monetaryIncome.filter(income => {
-                  if (!income.name.startsWith('[EGRESO]')) return false;
                   const incomeDate = parseISO(income.created_at);
-                  return incomeDate >= periodStart && incomeDate <= periodEnd;
-                }).reduce((total, income) => total + income.amount, 0);
+                  return (income.name.startsWith('[EGRESO]') || income.amount < 0) && incomeDate >= periodStart && incomeDate <= periodEnd;
+                }).reduce((total, income) => total + Math.abs(income.amount), 0);
                 
                 const monthIngresoTotal = monthSales + monthMonetaryIncome;
                 const monthCostoTotal = monthFixedCosts + monthSalaryWithdrawals + monthStockCosts + monthEgresos;
@@ -1236,7 +1253,7 @@ export default function AdminFinancePage() {
                             <span className={`font-medium whitespace-nowrap ${calc.isNegative ? "text-red-600" : "text-green-600"}`}>
                               {card.id === 'items-vendidos' ? 
                                 `${calc.value}` : 
-                                card.id === 'tasa-conversion' ?
+                                card.id === 'tasa_conversión' ?
                                   calc.label === 'Porcentaje de Conversión' ?
                                     `${calc.value.toFixed(1)}%` :
                                     `${calc.value} items` :
@@ -1631,7 +1648,7 @@ export default function AdminFinancePage() {
                     <div>
                         <CardTitle className="flex items-center gap-2">
                             <Banknote className="h-5 w-5 text-green-500" />
-                            Gestión de Ingresos Monetarios
+                            Gestión de Movimientos Monetarios
                         </CardTitle>
                         <CardDescription>
                             Registra ingresos de capital externos al negocio.
@@ -1680,7 +1697,9 @@ export default function AdminFinancePage() {
                                     <TableCell>{new Date(income.created_at).toLocaleDateString()}</TableCell>
                                     <TableCell className="font-medium">{income.name}</TableCell>
                                     <TableCell className="text-muted-foreground">{income.description || 'Sin descripción'}</TableCell>
-                                    <TableCell className="text-right font-medium">${income.amount.toLocaleString()}</TableCell>
+                                    <TableCell className={`text-right font-medium ${ (income.amount < 0 || income.name.startsWith('[EGRESO]')) ? 'text-red-500' : 'text-green-500' }`}>
+                                      {(income.amount < 0 || income.name.startsWith('[EGRESO]')) ? `-$${Math.abs(income.amount).toLocaleString()}` : `$${income.amount.toLocaleString()}`}
+                                    </TableCell>
                                     <TableCell className="text-right">
                                         <div className="flex items-center justify-end">
                                             <Button variant="ghost" size="icon" className="rounded-full" onClick={() => handleEditIncome(income)}>
@@ -1712,7 +1731,7 @@ export default function AdminFinancePage() {
                                 </TableRow>
                             )) : (
                                 <TableRow>
-                                    <TableCell colSpan={5} className="h-24 text-center">No hay ingresos registrados.</TableCell>
+                                    <TableCell colSpan={4} className="h-24 text-center">No hay ingresos registrados.</TableCell>
                                 </TableRow>
                             )}
                         </TableBody>
@@ -2097,6 +2116,6 @@ export default function AdminFinancePage() {
               </DialogFooter>
           </DialogContent>
       </Dialog>
-    </>
+    </React.Fragment>
   );
 }

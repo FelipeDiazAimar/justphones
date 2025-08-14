@@ -61,10 +61,13 @@ export function MonetaryIncomeProvider({ children }: { children: ReactNode }) {
     const { error } = await supabase.from('monetary_income').insert([data]);
     if (error) {
       console.error('Error adding monetary income:', error.message);
+      const description = error.message.includes('violates row-level security policy')
+        ? 'Acción bloqueada por la seguridad de la base de datos. Por favor, revisa las políticas de RLS para la tabla "monetary_income".'
+        : `No se pudo registrar el ingreso: ${error.message}`;
       toast({ 
           variant: 'destructive', 
           title: 'Error', 
-          description: `No se pudo registrar el ingreso: ${error.message}` 
+          description 
       });
       return false;
     }
@@ -75,10 +78,13 @@ export function MonetaryIncomeProvider({ children }: { children: ReactNode }) {
     const { error } = await supabase.from('monetary_income').update(data).eq('id', id);
     if (error) {
         console.error('Error updating monetary income:', error.message);
+        const description = error.message.includes('violates row-level security policy')
+          ? 'Acción bloqueada por la seguridad de la base de datos. Por favor, revisa las políticas de RLS para la tabla "monetary_income".'
+          : `No se pudo actualizar el ingreso: ${error.message}`;
         toast({ 
             variant: 'destructive', 
             title: 'Error', 
-            description: `No se pudo actualizar el ingreso: ${error.message}` 
+            description 
         });
         return false;
     }
@@ -89,10 +95,13 @@ export function MonetaryIncomeProvider({ children }: { children: ReactNode }) {
     const { error } = await supabase.from('monetary_income').delete().eq('id', id);
     if (error) {
       console.error('Error deleting monetary income:', error.message);
+      const description = error.message.includes('violates row-level security policy')
+        ? 'Acción bloqueada por la seguridad de la base de datos. Por favor, revisa las políticas de RLS para la tabla "monetary_income".'
+        : `No se pudo eliminar el ingreso: ${error.message}`;
       toast({ 
           variant: 'destructive', 
           title: 'Error', 
-          description: `No se pudo eliminar el ingreso: ${error.message}` 
+          description 
       });
       return false;
     }
