@@ -162,9 +162,17 @@ export function CartSheet() {
         paymentInfo += `\nCódigo Utilizado: *${appliedDiscount.code}*`;
       }
       const total = finalPriceDetails.whatsappDetails;
-      const finalMessage = `¡Hola! Quisiera hacer el siguiente pedido:\n\n${message}${deliveryInfo}${paymentInfo}${total}`;
+      
+      // Agregar información bancaria si el método de pago es transferencia
+      let bankInfo = '';
+      if (paymentMethod === 'transfer') {
+        bankInfo = `\n\n💳 *Datos para transferencia:*\n🏷️ Alias: *just.phones1739*\n🏦 CBU: *0000003100065370884191*`;
+      }
+      
+      const finalMessage = `¡Hola! Quisiera hacer el siguiente pedido:\n\n${message}${deliveryInfo}${paymentInfo}${total}${bankInfo}`;
       const encodedText = encodeURIComponent(finalMessage);
-      return `https://wa.me/${phoneNumber}?text=${encodedText}`;
+      // Usar web.whatsapp.com para forzar que se abra en el navegador, no en la app nativa
+      return `https://web.whatsapp.com/send?phone=${phoneNumber}&text=${encodedText}`;
     } catch {
       return '';
     }
@@ -210,104 +218,79 @@ export function CartSheet() {
       }
       
       const total = finalPriceDetails.whatsappDetails;
-      const finalMessage = `¡Hola! Quisiera hacer el siguiente pedido:\n\n${message}${deliveryInfo}${paymentInfo}${total}`;
+      
+      // Agregar información bancaria si el método de pago es transferencia
+      let bankInfo = '';
+      if (paymentMethod === 'transfer') {
+        bankInfo = `\n\n💳 *Datos para transferencia:*\n🏷️ Alias: *just.phones1739*\n🏦 CBU: *0000003100065370884191*`;
+      }
+      
+      const finalMessage = `¡Hola! Quisiera hacer el siguiente pedido:\n\n${message}${deliveryInfo}${paymentInfo}${total}${bankInfo}`;
       const encodedText = encodeURIComponent(finalMessage);
 
-  // URLs para distintos entornos (mejor compatibilidad en desktop)
-  const ua = navigator.userAgent;
-  const isSafari = /Safari\//.test(ua) && !/Chrome\//.test(ua) && !/Chromium\//.test(ua);
+  // URLs para distintos entornos
   const waMeUrl = `https://wa.me/${phoneNumber}?text=${encodedText}`;
-  const apiUrl = `https://api.whatsapp.com/send?phone=${phoneNumber}&text=${encodedText}`;
   const webUrl = `https://web.whatsapp.com/send?phone=${phoneNumber}&text=${encodedText}`;
-  const schemeUrl = `whatsapp://send?phone=${phoneNumber}&text=${encodedText}`; // intento con la app de escritorio si está instalada
+  const schemeUrl = `whatsapp://send?phone=${phoneNumber}&text=${encodedText}`;
 
-  // Safari desktop suele funcionar mejor con api.whatsapp.com primero
-  const desktopUrls = isSafari ? [apiUrl, webUrl, waMeUrl] : [webUrl, apiUrl, waMeUrl];
+  // Para desktop: solo WhatsApp Web (evita páginas intermedias)
+  // Para móvil: wa.me que suele abrir la app nativa
+  const desktopUrl = webUrl;
   const mobileUrl = waMeUrl;
 
       console.log('📱 Abriendo WhatsApp...', {
-        primaryUrl: isMobile ? mobileUrl : desktopUrls[0],
+        primaryUrl: isMobile ? mobileUrl : desktopUrl,
         isMobile,
         messageLength: finalMessage.length
       });
 
       if (isMobile) {
-        // Mantener el flujo móvil actual (funciona bien) con fallback
-        const link = document.createElement('a');
-        link.href = mobileUrl;
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        setTimeout(() => {
-          window.location.href = mobileUrl;
-        }, 100);
-      } else {
-        // Desktop: intentar primero la app nativa de WhatsApp; si no, caer a WhatsApp Web
+        // Móvil: Priorizar app nativa de WhatsApp (mejor experiencia móvil)
         let opened = false;
 
-        // 1) Intento con protocolo nativo (si existe app de WhatsApp Desktop)
+        // 1) Intentar primero con el protocolo nativo (app de WhatsApp)
         try {
-          const wScheme = window.open(schemeUrl, '_blank');
-          if (wScheme && !wScheme.closed) {
-            opened = true;
-          }
+          window.location.href = schemeUrl;
+          opened = true;
         } catch (e) {
           console.warn('No se pudo abrir la app nativa de WhatsApp', e);
         }
 
-        // 2) Si no se abrió nativo, usar el flujo robusto de web: preabrir pestaña y navegar
+        // 2) Si no funciona el protocolo nativo, usar wa.me (que suele abrir la app)
         if (!opened) {
-          const preOpened = window.open('', '_blank');
-          if (preOpened) {
-            try { preOpened.opener = null; } catch {}
-            for (const url of desktopUrls) {
-              try {
-                preOpened.location.href = url;
-                opened = true;
-                break;
-              } catch (e) {
-                console.warn('No se pudo navegar en la pestaña preabierta, probando siguiente URL', e);
-              }
-            }
+          const link = document.createElement('a');
+          link.href = mobileUrl;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          
+          // Fallback adicional para móviles
+          setTimeout(() => {
             if (!opened) {
-              // Como último recurso, cierra la pestaña y usa navegación directa
-              try { preOpened.close(); } catch {}
+              window.location.href = mobileUrl;
             }
-          }
+          }, 100);
         }
-
-        // 3) Más fallbacks si seguimos sin abrir
-        if (!opened) {
-          // Intentar directamente con window.open a las URLs web
-          for (const url of desktopUrls) {
-            const w = window.open(url, '_blank', 'noopener,noreferrer');
-            if (w && !w.closed) {
-              opened = true;
-              break;
-            }
-          }
-        }
-
-        if (!opened) {
-          // Fallback con <a> apuntando a wa.me
-          const a = document.createElement('a');
-          a.href = waMeUrl;
-          a.target = '_blank';
-          a.rel = 'noopener noreferrer';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-        }
-
-        if (!opened) {
-          console.log('⚠️ No se pudo abrir en nueva pestaña, usando navegación directa');
+      } else {
+        // Desktop: Usar solo WhatsApp Web directamente
+        try {
+          const w = window.open(desktopUrl, '_blank', 'noopener,noreferrer,width=1024,height=768');
+          console.log('✅ WhatsApp Web abierto correctamente');
+        } catch (e) {
+          console.warn('No se pudo abrir WhatsApp Web', e);
+          // Si falla, copiamos el enlace y mostramos instrucciones
           try {
-            await navigator.clipboard?.writeText(waMeUrl);
-            toast({ description: 'No pudimos abrir WhatsApp automáticamente. Copiamos el enlace en tu portapapeles.' });
-          } catch {}
-          window.location.href = waMeUrl;
+            await navigator.clipboard?.writeText(desktopUrl);
+            toast({ 
+              title: 'Enlace copiado',
+              description: 'No pudimos abrir WhatsApp automáticamente. Pegá el enlace en tu navegador.' 
+            });
+          } catch {
+            // Si también falla copiar, navegamos directamente
+            window.location.href = desktopUrl;
+          }
         }
       }
 
@@ -510,7 +493,7 @@ export function CartSheet() {
                 </Button>
                 <div className="w-full max-w-xs -mt-1">
                   <p className="text-xs text-muted-foreground text-center mb-1">
-                    ¿No se preparó correctamente el mensaje de tu pedido?
+                    ¿El mensaje no aparece en WhatsApp?
                   </p>
                   <Button
                     type="button"
@@ -521,23 +504,25 @@ export function CartSheet() {
                     onClick={async () => {
                       try {
                         if (!copyableWhatsAppUrl) return;
+                        
+                        // Copiar la URL completa, no solo el mensaje
                         await navigator.clipboard.writeText(copyableWhatsAppUrl);
                         toast({
                           title: 'Enlace copiado',
-                          description: 'Pegalo en la barra de búsqueda de tu navegador para abrir WhatsApp.',
+                          description: 'Pégalo en tu navegador para abrir WhatsApp.',
                         });
                       } catch (e) {
                         console.error('No se pudo copiar el enlace', e);
                         toast({
                           variant: 'destructive',
                           title: 'No se pudo copiar',
-                          description: 'Intentá nuevamente o copiá el enlace manualmente.',
+                          description: 'Intentá nuevamente o escribí el pedido manualmente.',
                         });
                       }
                     }}
                   >
                     <Copy className="mr-2 h-4 w-4" />
-                    Copiar aquí
+                    Copiar enlace
                   </Button>
                 </div>
               </div>
