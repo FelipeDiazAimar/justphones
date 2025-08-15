@@ -271,6 +271,7 @@ export default function AdminProductsPage() {
   const [isStockUpdateDialogOpen, setIsStockUpdateDialogOpen] = useState(false);
   const [stockUpdates, setStockUpdates] = useState<Record<string, string>>({});
   const [stockUpdateSearchQuery, setStockUpdateSearchQuery] = useState('');
+  const [isSavingStockUpdate, setIsSavingStockUpdate] = useState(false);
 
   const [mobileStockInputs, setMobileStockInputs] = useState<Record<string, string | number>>({});
 
@@ -297,6 +298,14 @@ export default function AdminProductsPage() {
   const [isSalesHistoryDialogOpen, setIsSalesHistoryDialogOpen] = useState(false);
   const [isProductHistoryDialogOpen, setIsProductHistoryDialogOpen] = useState(false);
   const [isStockHistoryDialogOpen, setIsStockHistoryDialogOpen] = useState(false);
+
+  // Edit/delete pedido (stock order) state
+  const [isEditPedidoOpen, setIsEditPedidoOpen] = useState(false);
+  const [pedidoEditingId, setPedidoEditingId] = useState<string | null>(null);
+  const [pedidoEditingEntries, setPedidoEditingEntries] = useState<StockHistory[]>([]);
+  const [pedidoQuantities, setPedidoQuantities] = useState<Record<string, number>>({}); // key: stock_history.id -> new qty
+  const [isSavingPedidoEdit, setIsSavingPedidoEdit] = useState(false);
+  const [isDeletingPedido, setIsDeletingPedido] = useState(false);
 
   // Cropping state
   const [crop, setCrop] = useState<Crop>();
@@ -1025,6 +1034,7 @@ export default function AdminProductsPage() {
       });
       return;
     }
+    setIsSavingStockUpdate(true);
     
     const pedidoId = crypto.randomUUID();
     const historyEntries: Omit<StockHistory, 'id' | 'created_at'>[] = [];
@@ -1078,6 +1088,7 @@ export default function AdminProductsPage() {
         description: `Todos los productos seleccionados no existen o han sido eliminados. Items omitidos: ${skippedItems.join(', ')}`,
       });
       setStockUpdates({});
+      setIsSavingStockUpdate(false);
       return;
     }
     
@@ -1120,6 +1131,8 @@ export default function AdminProductsPage() {
         title: 'Error al Actualizar Stock',
         description: `Ocurrió un error: ${error.message}`,
       });
+    } finally {
+      setIsSavingStockUpdate(false);
     }
   }, [stockUpdates, fetchProducts, fetchStockHistory, supabase, toast]);
 
@@ -1197,9 +1210,11 @@ export default function AdminProductsPage() {
   }, [watchedCategory, models]);
 
   const groupedStockHistory = useMemo(() => {
-    if (!stockHistory || stockHistory.length === 0) return [];
+  if (!stockHistory || stockHistory.length === 0) return [];
+  // Ignorar registros anulados/soft-delete (cantidad 0 o marcados)
+  const visible = stockHistory.filter(e => (e.quantity_added ?? 0) > 0 && e.notes !== '__DELETED__');
   
-    const grouped = stockHistory.reduce((acc, entry) => {
+  const grouped = visible.reduce((acc, entry) => {
       const pedidoId = entry.pedido_id;
       if (!acc[pedidoId]) {
         acc[pedidoId] = {
@@ -1231,6 +1246,271 @@ export default function AdminProductsPage() {
         }
       });
   }, [stockHistory]);
+
+  // Helpers for editing/deleting pedidos
+  const openEditPedido = (pedidoId: string, entries: StockHistory[]) => {
+    setPedidoEditingId(pedidoId);
+    setPedidoEditingEntries(entries);
+    const initial: Record<string, number> = {};
+    entries.forEach(e => { initial[e.id] = e.quantity_added; });
+    setPedidoQuantities(initial);
+    setIsEditPedidoOpen(true);
+  };
+
+  const handleSavePedidoEdit = async () => {
+    if (!pedidoEditingId) return;
+    setIsSavingPedidoEdit(true);
+
+    try {
+      // Preflight checks and build deltas
+      const deltas: { entry: StockHistory; delta: number }[] = [];
+      const issues: string[] = [];
+
+      for (const entry of pedidoEditingEntries) {
+        const newQty = Number(pedidoQuantities[entry.id] ?? entry.quantity_added);
+        if (!Number.isFinite(newQty) || newQty < 0) {
+          issues.push(`${unslugify(entry.product_name)} (${entry.color_name}): cantidad inválida`);
+          continue;
+        }
+        const delta = newQty - entry.quantity_added;
+        if (delta === 0) continue;
+
+        const product = productsRef.current.find(p => p.id === entry.product_id);
+        if (!product) {
+          issues.push(`${unslugify(entry.product_name)}: producto no encontrado`);
+          continue;
+        }
+        const color = product.colors.find(c => c.name === entry.color_name);
+        if (!color) {
+          issues.push(`${unslugify(entry.product_name)} (${entry.color_name}): color no encontrado`);
+          continue;
+        }
+        if (delta < 0 && color.stock + delta < 0) {
+          issues.push(`${unslugify(entry.product_name)} (${entry.color_name}): stock insuficiente para restar ${Math.abs(delta)} (actual ${color.stock})`);
+          continue;
+        }
+        deltas.push({ entry, delta });
+      }
+
+      if (issues.length > 0) {
+        toast({
+          variant: 'destructive',
+          title: 'No se puede guardar cambios',
+          description: issues.join(' | '),
+        });
+        setIsSavingPedidoEdit(false);
+        return;
+      }
+
+      // Nothing to change
+      if (deltas.length === 0) {
+        toast({ title: 'Sin cambios', description: 'No se modificó ninguna cantidad.' });
+        setIsSavingPedidoEdit(false);
+        setIsEditPedidoOpen(false);
+        return;
+      }
+
+      // Build product updates
+      const productUpdates = new Map<string, Product>();
+      for (const { entry, delta } of deltas) {
+        const base = productsRef.current.find(p => p.id === entry.product_id);
+        if (!base) continue;
+        const clone: Product = productUpdates.get(base.id) || JSON.parse(JSON.stringify(base));
+        const color = clone.colors.find(c => c.name === entry.color_name);
+        if (color) color.stock += delta;
+        productUpdates.set(clone.id, clone);
+      }
+
+      // Apply product updates without refetch each time
+      for (const [productId, updatedProduct] of productUpdates.entries()) {
+        const ok = await updateProduct(productId, { colors: updatedProduct.colors }, false);
+        if (!ok) throw new Error(`Error actualizando producto ${productId}`);
+      }
+
+      // Update stock_history rows
+      for (const { entry } of deltas) {
+        const newQty = Number(pedidoQuantities[entry.id] ?? entry.quantity_added);
+        const { error } = await supabase
+          .from('stock_history')
+          .update({ quantity_added: newQty })
+          .eq('id', entry.id);
+        if (error) throw new Error(`Error actualizando historial: ${error.message}`);
+      }
+
+      await fetchProducts();
+      await fetchStockHistory();
+      toast({ title: 'Pedido actualizado', description: `Se guardaron los cambios del pedido #${pedidoEditingId.substring(0,4)}.` });
+      setIsEditPedidoOpen(false);
+    } catch (e: any) {
+      console.error('Error saving pedido edit:', e);
+      toast({ variant: 'destructive', title: 'Error', description: e.message || 'No se pudo guardar los cambios del pedido.' });
+    } finally {
+      setIsSavingPedidoEdit(false);
+    }
+  };
+
+  const handleDeletePedido = async (pedidoId: string, entries: StockHistory[]) => {
+    setIsDeletingPedido(true);
+    try {
+      console.log('[PEDIDOS][DELETE] Inicio eliminación de pedido:', {
+        pedidoId,
+        entriesCount: entries.length,
+        entryIds: entries.map(e => e.id)
+      });
+      // Verificación previa: ¿existen aún las filas objetivo?
+      const idsToDeletePre = entries.map(e => e.id);
+      const { data: preRowsByIds, error: preErrIds } = await supabase
+        .from('stock_history')
+        .select('id, pedido_id')
+        .in('id', idsToDeletePre);
+      const { data: preRowsByPedido, error: preErrPedido } = await supabase
+        .from('stock_history')
+        .select('id')
+        .eq('pedido_id', pedidoId);
+      console.log('[PEDIDOS][DELETE] Preselect filas existentes:', {
+        preErrIds,
+        preErrPedido,
+        countByIds: preRowsByIds?.length ?? 0,
+        idsFound: preRowsByIds?.map(r => r.id) ?? [],
+        countByPedido: preRowsByPedido?.length ?? 0,
+      });
+      // Preflight checks (ensure we can subtract the quantities)
+      const issues: string[] = [];
+      for (const entry of entries) {
+        const product = productsRef.current.find(p => p.id === entry.product_id);
+        if (!product) { issues.push(`${unslugify(entry.product_name)}: producto no encontrado`); continue; }
+        const color = product.colors.find(c => c.name === entry.color_name);
+        if (!color) { issues.push(`${unslugify(entry.product_name)} (${entry.color_name}): color no encontrado`); continue; }
+        if (color.stock - entry.quantity_added < 0) {
+          issues.push(`${unslugify(entry.product_name)} (${entry.color_name}): stock insuficiente para revertir (${entry.quantity_added} > ${color.stock})`);
+        }
+      }
+
+      if (issues.length > 0) {
+        toast({ variant: 'destructive', title: 'No se puede eliminar el pedido', description: issues.join(' | ') });
+        console.warn('[PEDIDOS][DELETE] Preflight falló, abortando:', issues);
+        setIsDeletingPedido(false);
+        return;
+      }
+
+      // Prepare product updates and originals for potential rollback
+      const productUpdates = new Map<string, Product>();
+      const originalSnapshots = new Map<string, Product>();
+      for (const entry of entries) {
+        const base = productsRef.current.find(p => p.id === entry.product_id);
+        if (!base) continue;
+        if (!originalSnapshots.has(base.id)) {
+          originalSnapshots.set(base.id, JSON.parse(JSON.stringify(base)) as Product);
+        }
+        const clone: Product = productUpdates.get(base.id) || JSON.parse(JSON.stringify(base));
+        const color = clone.colors.find(c => c.name === entry.color_name);
+        if (color) color.stock -= entry.quantity_added;
+        productUpdates.set(clone.id, clone);
+      }
+
+      // Apply product updates without refetch each time
+      for (const [productId, updatedProduct] of productUpdates.entries()) {
+        const ok = await updateProduct(productId, { colors: updatedProduct.colors }, false);
+        console.log('[PEDIDOS][DELETE] Actualización de stock aplicada a producto', productId, 'ok:', ok);
+        if (!ok) throw new Error(`Error actualizando producto ${productId}`);
+      }
+
+      // Intentar borrar usando endpoint con service role (evita RLS)
+      const idsToDelete = entries.map(e => e.id);
+      console.log('[PEDIDOS][DELETE] Intentando borrar vía API admin (service role)...');
+      let adminDeleted = 0;
+      try {
+        const resp = await fetch('/api/admin/stock-history/delete-pedido', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pedidoId, entryIds: idsToDelete }),
+        });
+        const json = await resp.json();
+        console.log('[PEDIDOS][DELETE] Respuesta API admin:', json);
+        if (resp.ok && json?.success) {
+          adminDeleted = json.deleted || 0;
+        } else {
+          console.warn('[PEDIDOS][DELETE] API admin no pudo eliminar, se intentará client-side. Error:', json?.error);
+        }
+      } catch (apiErr) {
+        console.warn('[PEDIDOS][DELETE] Error llamando API admin, se intentará client-side:', apiErr);
+      }
+
+      let deletedCount = 0;
+      if (adminDeleted > 0) {
+        deletedCount = adminDeleted;
+      } else {
+        console.log('[PEDIDOS][DELETE] Intentando borrar stock_history por IDs (client-side):', idsToDelete);
+        const { data: deletedByIds, error: delErr } = await supabase
+          .from('stock_history')
+          .delete()
+          .in('id', idsToDelete)
+          .select('id');
+
+        deletedCount = Array.isArray(deletedByIds) ? deletedByIds.length : 0;
+        console.log('[PEDIDOS][DELETE] Resultado borrado por IDs:', { delErr, deletedCount, deletedByIds });
+
+        if (delErr) {
+          // Rollback product stock changes
+          for (const [productId, original] of originalSnapshots.entries()) {
+            console.warn('[PEDIDOS][DELETE] Error borrando por IDs. Revirtiendo stock de producto', productId);
+            await updateProduct(productId, { colors: original.colors }, false);
+          }
+          // Refrescar UI tras rollback
+          try {
+            await fetchProducts();
+            await fetchStockHistory();
+          } catch (_) {}
+          throw new Error(`Error eliminando historial: ${delErr.message}`);
+        }
+      }
+
+      // Si no se borró nada por IDs, intentar por pedido_id (fallback) o cancelar y revertir stocks
+      if (deletedCount === 0) {
+        console.warn('[PEDIDOS][DELETE] 0 filas eliminadas por IDs. Intentando borrar por pedido_id:', pedidoId);
+        const { data: deletedByPedido, error: delErr2 } = await supabase
+          .from('stock_history')
+          .delete()
+          .eq('pedido_id', pedidoId)
+          .select('id');
+        const deletedByPedidoCount = Array.isArray(deletedByPedido) ? deletedByPedido.length : 0;
+        console.log('[PEDIDOS][DELETE] Resultado borrado por pedido_id:', { delErr2, deletedByPedidoCount, deletedByPedido });
+
+        if (delErr2 || deletedByPedidoCount === 0) {
+          console.warn('[PEDIDOS][DELETE] Hard delete falló o eliminó 0. Intentando soft-delete (set quantity=0, notes=__DELETED__).');
+          const { data: softData, error: softErr } = await supabase
+            .from('stock_history')
+            .update({ quantity_added: 0, notes: '__DELETED__' })
+            .eq('pedido_id', pedidoId)
+            .select('id');
+          console.log('[PEDIDOS][DELETE] Soft-delete resultado:', { softErr, softCount: softData?.length ?? 0, softIds: softData?.map(r => r.id) });
+
+          if (softErr || (softData?.length ?? 0) === 0) {
+            for (const [productId, original] of originalSnapshots.entries()) {
+              console.warn('[PEDIDOS][DELETE] Soft-delete también falló. Revirtiendo stock de producto', productId);
+              await updateProduct(productId, { colors: original.colors }, false);
+            }
+            // Refrescar UI tras rollback
+            try {
+              await fetchProducts();
+              await fetchStockHistory();
+            } catch (_) {}
+            throw new Error(softErr ? `Error soft-deleting historial: ${softErr.message}` : 'No se eliminaron registros del historial. Verifica RLS o filtros.');
+          }
+        }
+      }
+
+      await fetchProducts();
+      await fetchStockHistory();
+      console.log('[PEDIDOS][DELETE] Eliminación completada. Refrescos ejecutados.');
+      toast({ title: 'Pedido eliminado', description: `Se revirtió el stock y se eliminó el pedido #${pedidoId.substring(0,4)}.` });
+    } catch (e: any) {
+      console.error('Error deleting pedido:', e);
+      toast({ variant: 'destructive', title: 'Error', description: e.message || 'No se pudo eliminar el pedido.' });
+    } finally {
+      setIsDeletingPedido(false);
+    }
+  };
 
   const filteredStockUpdateProducts = useMemo(() => {
     if (!stockUpdateSearchQuery) {
@@ -2288,9 +2568,11 @@ export default function AdminProductsPage() {
               </ScrollArea>
               <DialogFooter>
                   <DialogClose asChild>
-                      <Button type="button" variant="secondary">Cancelar</Button>
+                      <Button type="button" variant="secondary" disabled={isSavingStockUpdate}>Cancelar</Button>
                   </DialogClose>
-                  <Button onClick={handleBulkStockUpdate}>Guardar Cambios</Button>
+                  <Button onClick={handleBulkStockUpdate} disabled={isSavingStockUpdate}>
+                    {isSavingStockUpdate ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Guardar Cambios'}
+                  </Button>
               </DialogFooter>
           </DialogContent>
       </Dialog>
@@ -2314,6 +2596,32 @@ export default function AdminProductsPage() {
                             ({date.toLocaleString()})
                         </span>
                         </h3>
+                                <div className="flex items-center gap-2 mt-2 sm:mt-0">
+                                  <Button variant="outline" size="sm" onClick={() => openEditPedido(pedido_id, entries)}>
+                                    <Edit className="h-4 w-4 mr-1" /> Editar pedido
+                                  </Button>
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button variant="destructive" size="sm">
+                                        <Trash className="h-4 w-4 mr-1" /> Eliminar pedido
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Eliminar pedido</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          Esta acción revertirá el stock agregado por este pedido y eliminará sus registros. ¿Deseas continuar?
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                        <AlertDialogAction onClick={() => handleDeletePedido(pedido_id, entries)} disabled={isDeletingPedido} className="bg-destructive hover:bg-destructive/90">
+                                          {isDeletingPedido ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Eliminar'}
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </div>
                     </div>
                     <div className="border rounded-lg">
                       <div className="hidden md:block">
@@ -2426,6 +2734,62 @@ export default function AdminProductsPage() {
                   <Button onClick={handleCropConfirm}>Confirmar Recorte</Button>
               </DialogFooter>
           </DialogContent>
+      </Dialog>
+
+      {/* Edit Pedido Dialog */}
+      <Dialog open={isEditPedidoOpen} onOpenChange={setIsEditPedidoOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Editar Pedido</DialogTitle>
+            <DialogDescription>Modifica las cantidades ingresadas por color. Se ajustará el stock según los cambios.</DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-[60vh] -mx-6 px-6">
+            <div className="space-y-3 py-2">
+              {pedidoEditingEntries.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4">No hay items para este pedido.</p>
+              ) : (
+                pedidoEditingEntries.map((e) => {
+                  const product = products.find(p => p.id === e.product_id);
+                  const color = product?.colors.find(c => c.name === e.color_name);
+                  const currentStock = color?.stock ?? 0;
+                  const newQty = pedidoQuantities[e.id] ?? e.quantity_added;
+                  return (
+                    <div key={e.id} className="grid grid-cols-1 md:grid-cols-5 items-center gap-2 border rounded-md p-2">
+                      <div className="md:col-span-2">
+                        <p className="text-sm font-medium">{unslugify(e.product_name)}</p>
+                        <p className="text-xs text-muted-foreground">{e.product_model} • {e.color_name}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Label className="text-xs text-muted-foreground">Cantidad</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={newQty}
+                          onChange={(ev) => setPedidoQuantities(prev => ({ ...prev, [e.id]: Number(ev.target.value) }))}
+                          className="w-24"
+                        />
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Stock actual: <span className="font-medium">{currentStock}</span>
+                      </div>
+                      <div className="text-xs">
+                        Costo: ${e.cost || 0}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </ScrollArea>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="secondary">Cancelar</Button>
+            </DialogClose>
+            <Button onClick={handleSavePedidoEdit} disabled={isSavingPedidoEdit}>
+              {isSavingPedidoEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Guardar Cambios'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
     </>
   );
