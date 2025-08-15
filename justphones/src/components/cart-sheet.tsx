@@ -166,7 +166,7 @@ export function CartSheet() {
       // Agregar información bancaria si el método de pago es transferencia
       let bankInfo = '';
       if (paymentMethod === 'transfer') {
-        bankInfo = `\n\n💳 *Datos para transferencia:*\n🏷️ Alias: *just.phones1739*\n🏦 CBU: *0000003100065370884191*`;
+        bankInfo = `\n\n💳 *Datos para transferencia:*\n👤 Nombre: *Franco Vagliente*\n🏷️ Alias: *just.phones1739*\n🏦 CVU: *0000003100065370884191*`;
       }
       
       const finalMessage = `¡Hola! Quisiera hacer el siguiente pedido:\n\n${message}${deliveryInfo}${paymentInfo}${total}${bankInfo}`;
@@ -222,7 +222,7 @@ export function CartSheet() {
       // Agregar información bancaria si el método de pago es transferencia
       let bankInfo = '';
       if (paymentMethod === 'transfer') {
-        bankInfo = `\n\n💳 *Datos para transferencia:*\n🏷️ Alias: *just.phones1739*\n🏦 CBU: *0000003100065370884191*`;
+        bankInfo = `\n\n💳 *Datos para transferencia:*\n👤 Nombre: *Franco Vagliente*\n🏷️ Alias: *just.phones1739*\n🏦 CVU: *0000003100065370884191*`;
       }
       
       const finalMessage = `¡Hola! Quisiera hacer el siguiente pedido:\n\n${message}${deliveryInfo}${paymentInfo}${total}${bankInfo}`;
