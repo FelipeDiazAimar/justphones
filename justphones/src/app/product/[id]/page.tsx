@@ -15,6 +15,7 @@ import { cn, unslugify, expandModelString } from '@/lib/utils';
 import { useProducts } from '@/hooks/use-products';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCart } from '@/hooks/use-cart';
+import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { CartIcon } from '@/components/icons/cart';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -32,6 +33,7 @@ export default function ProductDetailPage() {
   const { products, getProductById, isLoading: isLoadingProducts } = useProducts();
   const product = useMemo(() => (id ? getProductById(id) : undefined), [id, getProductById]);
   const { addToCart } = useCart();
+  const { toast } = useToast();
 
   const [selectedColor, setSelectedColor] = useState<ProductColor | null>(null);
   const [quantity, setQuantity] = useState<number | ''>(1);
@@ -221,6 +223,11 @@ export default function ProductDetailPage() {
   const handleAddToCart = () => {
     if (product && selectedColor) {
       addToCart(product, selectedColor, Number(quantity) || 1);
+      toast({
+        variant: "success",
+        title: "¡Producto agregado!",
+        description: `${productName} (${selectedColor.name}) se agregó al carrito.`,
+      });
     }
   };
 

@@ -164,29 +164,31 @@ function CasesCatalogPageContent() {
   return (
     <MainLayout>
       <div>
-        <div className="mb-6">
-          <h2 className="text-3xl font-bold tracking-tight">{titleComponent}</h2>
-           {searchQuery && (
-              <p className="text-lg text-muted-foreground mt-1">
-                  Resultados para: <span className="text-primary font-semibold">"{searchQuery}"</span>
-              </p>
-          )}
-        </div>
-        <div className="flex justify-end mb-4 lg:hidden">
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="outline" size="icon" className="rounded-full animate-pulse">
-                <Filter className="h-4 w-4" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left">
-              <SheetHeader className="sr-only">
-                <SheetTitle>Filtros</SheetTitle>
-                <SheetDescription>Filtra los productos para encontrar lo que buscas.</SheetDescription>
-              </SheetHeader>
-              <ProductFilters filters={filters} setFilters={setFilters} products={caseProducts} showSubCategoryFilter={true} subCategoryList={subcategories.case}/>
-            </SheetContent>
-          </Sheet>
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight">{titleComponent}</h2>
+             {searchQuery && (
+                <p className="text-lg text-muted-foreground mt-1">
+                    Resultados para: <span className="text-primary font-semibold">"{searchQuery}"</span>
+                </p>
+            )}
+          </div>
+          <div className="lg:hidden">
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="icon" className="rounded-full animate-pulse">
+                  <Filter className="h-4 w-4" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left">
+                <SheetHeader className="sr-only">
+                  <SheetTitle>Filtros</SheetTitle>
+                  <SheetDescription>Filtra los productos para encontrar lo que buscas.</SheetDescription>
+                </SheetHeader>
+                <ProductFilters filters={filters} setFilters={setFilters} products={caseProducts} showSubCategoryFilter={true} subCategoryList={subcategories.case}/>
+              </SheetContent>
+            </Sheet>
+          </div>
         </div>
         <div className="grid grid-cols-12 gap-8">
           <ProductFilters filters={filters} setFilters={setFilters} products={caseProducts} className="hidden lg:block lg:col-span-3" showSubCategoryFilter={true} subCategoryList={subcategories.case} />

@@ -84,7 +84,7 @@ function CatalogPageContent() {
 
   if (isLoading) {
     return (
-      <MainLayout>
+      <MainLayout noPaddingTop>
         <Skeleton className="h-48 w-full mb-8" />
         <Skeleton className="w-full aspect-[16/9] lg:aspect-[3/1] rounded-lg mb-12" />
         <div className="mb-12">
@@ -108,7 +108,7 @@ function CatalogPageContent() {
   }
 
   return (
-    <MainLayout>
+    <MainLayout noPaddingTop>
       {/* Message Banner */}
       <div className="relative mb-6">
         <div className="message-banner py-2 overflow-hidden absolute left-1/2 transform -translate-x-1/2 w-screen">
@@ -250,7 +250,7 @@ function CatalogPageContent() {
 export default function CatalogPage() {
   return (
     <Suspense fallback={
-      <MainLayout>
+      <MainLayout noPaddingTop>
         <Skeleton className="h-48 w-full mb-8" />
         <Skeleton className="w-full aspect-[16/9] lg:aspect-[3/1] rounded-lg mb-12" />
         <div className="mb-12">

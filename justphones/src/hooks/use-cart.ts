@@ -89,9 +89,6 @@ export function useCartState() {
       setCartItems(prevItems => prevItems.map(item =>
         item.id === itemId ? { ...item, quantity: newQuantity } : item
       ));
-      toast({
-        title: "Producto actualizado en el carrito",
-      });
     } else {
       if (quantityToAdd > color.stock) {
          toast({
@@ -102,9 +99,6 @@ export function useCartState() {
         return;
       }
       setCartItems(prevItems => [...prevItems, { id: itemId, product, color, quantity: quantityToAdd }]);
-      toast({
-        title: "Producto añadido al carrito",
-      });
     }
   };
 
@@ -130,9 +124,6 @@ export function useCartState() {
     if (newCartItems.length === 0) {
         localStorage.removeItem(CART_STORAGE_KEY);
     }
-    toast({
-      title: "Producto eliminado del carrito",
-    });
   };
   
   const updateItemQuantity = (itemId: string, quantity: number) => {
