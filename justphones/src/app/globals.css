@@ -1,5 +1,6 @@
 @import 'react-image-crop/dist/ReactCrop.css';
 @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -132,5 +133,65 @@ body {
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     animation: shine 2s ease-in-out infinite;
+  }
+
+  /* Message banner styles */
+  .message-banner {
+    background: #ff6600;
+  }
+
+  .text-bright-white {
+    color: white;
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  @keyframes marquee-scroll {
+    0% {
+      transform: translateX(0%);
+    }
+    100% {
+      transform: translateX(-100%);
+    }
+  }
+
+  .animate-marquee {
+    animation: marquee-scroll 25s linear infinite;
+  }
+
+  /* Message carousel animation */
+  @keyframes message-carousel {
+    0% {
+      opacity: 0;
+      transform: translateX(-100%);
+    }
+    10%, 25% {
+      opacity: 1;
+      transform: translateX(0);
+    }
+    30% {
+      opacity: 0;
+      transform: translateX(100%);
+    }
+    35%, 100% {
+      opacity: 0;
+      transform: translateX(-100%);
+    }
+  }
+
+  .message-item {
+    opacity: 0;
+    animation: message-carousel 9s ease-in-out infinite;
+  }
+
+  .message-item:nth-child(1) {
+    animation-delay: 0s;
+  }
+
+  .message-item:nth-child(2) {
+    animation-delay: 3s;
+  }
+
+  .message-item:nth-child(3) {
+    animation-delay: 6s;
   }
 }

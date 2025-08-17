@@ -15,6 +15,7 @@ export default {
         headline: ['"Inter"', 'sans-serif'],
         code: ['monospace'],
         anton: ['"Anton"', 'sans-serif'],
+        'sf-pro': ['"SF Pro Display"', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
       },
       colors: {
         background: 'hsl(var(--background))',
