@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -33,6 +33,23 @@ const unslugify = (slug: string): string => {
 export function ProductFilters({ filters, setFilters, className, products, hideModelFilter = false, showSubCategoryFilter = false, subCategoryList = [] }: ProductFiltersProps) {
   const productSource = products || [];
   const availableColors = [...new Set(productSource.flatMap(p => p.colors.map(c => c.hex)))];
+  
+  // Estado para detectar si es dispositivo móvil
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 1024); // lg breakpoint de Tailwind
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Definir los valores por defecto del acordeón basado en el tamaño de pantalla
+  const defaultAccordionValues: string[] = [];
   
   const availableModels = useMemo(() => {
     const allIndividualModels = productSource.flatMap(p => expandModelString(p.model));
@@ -99,12 +116,13 @@ export function ProductFilters({ filters, setFilters, className, products, hideM
 
   return (
     <div className={className}>
-      <Card className="bg-card/50 backdrop-blur-xl shadow-none border-foreground/10">
-        <CardHeader>
+      <Card className="bg-card/50 backdrop-blur-xl shadow-none border-foreground/10 h-fit max-h-[80vh] flex flex-col">
+        <CardHeader className="flex-shrink-0">
           <CardTitle>Filtros</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <Accordion type="multiple" defaultValue={['color', 'modelo', 'precio', 'subcategoria']} className="w-full">
+        <CardContent className="space-y-6 overflow-y-auto flex-1 pr-2">
+          <div className="pr-2">
+            <Accordion type="multiple" defaultValue={defaultAccordionValues} className="w-full">
             <AccordionItem value="color">
               <AccordionTrigger className="text-base font-semibold">Color</AccordionTrigger>
               <AccordionContent className="grid grid-cols-5 gap-2 pt-4">
@@ -176,7 +194,7 @@ export function ProductFilters({ filters, setFilters, className, products, hideM
             </AccordionItem>
           </Accordion>
 
-           <div>
+           <div className="mt-4">
               <Label className="text-base font-semibold">Ordenar por</Label>
               <Select onValueChange={handleSortChange} defaultValue={filters.sortBy}>
                 <SelectTrigger className="w-full mt-2">
@@ -190,7 +208,7 @@ export function ProductFilters({ filters, setFilters, className, products, hideM
                 </SelectContent>
               </Select>
             </div>
-
+          </div>
         </CardContent>
       </Card>
     </div>
