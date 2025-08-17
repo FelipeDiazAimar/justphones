@@ -15,6 +15,7 @@ import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, Pagi
 import { useProducts } from '@/hooks/use-products';
 import { Skeleton } from '@/components/ui/skeleton';
 import { unslugify, expandModelString } from '@/lib/utils';
+import { MessageBanner } from '@/components/message-banner';
 
 const ITEMS_PER_PAGE = 9;
 
@@ -120,7 +121,8 @@ export default function ModelCatalogPage() {
 
   if (isLoading) {
     return (
-      <MainLayout>
+      <MainLayout noPaddingTop>
+        <MessageBanner />
         <div className="flex justify-between items-center mb-6">
           <Skeleton className="h-9 w-1/3" />
           <Skeleton className="h-10 w-10 rounded-full lg:hidden" />
@@ -143,7 +145,8 @@ export default function ModelCatalogPage() {
 
   if (productsForModel.length === 0 && modelName) {
       return (
-          <MainLayout>
+          <MainLayout noPaddingTop>
+              <MessageBanner />
               <div className="text-center py-20">
                   <h1 className="text-4xl font-bold tracking-tight mb-4">¡Ups!</h1>
                   <p className="text-xl text-muted-foreground mb-8">Aún no tenemos productos para {modelName}, pero ¡vuelven a entrar pronto!</p>
@@ -156,7 +159,8 @@ export default function ModelCatalogPage() {
   }
 
   return (
-    <MainLayout>
+    <MainLayout noPaddingTop>
+      <MessageBanner />
       <div>
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-3xl font-bold tracking-tight">{modelName} <span className="text-primary">Cases</span></h2>

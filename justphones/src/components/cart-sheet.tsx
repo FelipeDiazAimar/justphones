@@ -16,8 +16,15 @@ import {
   SheetFooter,
   SheetTrigger,
 } from '@/components/ui/sheet';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Trash, Plus, Minus, Tag, Check, Loader2, Copy } from 'lucide-react';
+import { Trash, Plus, Minus, Tag, Check, Loader2, Copy, Camera, Gift } from 'lucide-react';
 import { CartIcon } from './icons/cart';
 import { Badge } from './ui/badge';
 import {
@@ -50,6 +57,7 @@ export function CartSheet() {
   const [appliedDiscount, setAppliedDiscount] = useState<{ code: string; percentage: number, name: string; } | null>(null);
   const [isApplyingCode, setIsApplyingCode] = useState(false);
   const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);
+  const [showFirstPurchasePopup, setShowFirstPurchasePopup] = useState(false);
   const { toast } = useToast();
   const supabase = createClient();
   const phoneNumber = '5493564338599'; 
@@ -299,10 +307,11 @@ export function CartSheet() {
       await confirmCustomerRequests(cartItems);
       console.log('✅ Pedido registrado exitosamente');
 
-      // Resetear el estado después de un pequeño delay
+      // Mostrar popup de primera compra después de un pequeño delay
       setTimeout(() => {
+        setShowFirstPurchasePopup(true);
         setIsProcessingCheckout(false);
-      }, 2000);
+      }, 1000);
       
     } catch (error) {
       console.error('❌ Error durante el checkout:', error);
@@ -541,6 +550,50 @@ export function CartSheet() {
           </div>
         )}
       </SheetContent>
+
+      {/* First Purchase Popup */}
+      <Dialog open={showFirstPurchasePopup} onOpenChange={setShowFirstPurchasePopup}>
+        <DialogContent className="sm:max-w-md border-2 border-primary/20 bg-gradient-to-br from-background via-primary/5 to-background shadow-2xl backdrop-blur-sm">
+          <DialogHeader className="text-center space-y-4">
+            <div className="flex justify-center">
+              <div className="relative">
+                <div className="h-16 w-16 bg-gradient-to-br from-primary to-primary/80 rounded-full flex items-center justify-center shadow-lg animate-pulse">
+                  <Gift className="h-8 w-8 text-white" />
+                </div>
+                <div className="absolute -top-1 -right-1 h-5 w-5 bg-green-500 rounded-full flex items-center justify-center">
+                  <Camera className="h-3 w-3 text-white" />
+                </div>
+              </div>
+            </div>
+            <DialogTitle className="text-xl font-bold text-center bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">
+              ¡Obtén 10% OFF en tu próxima compra!
+            </DialogTitle>
+            <DialogDescription className="text-center space-y-3 text-base">
+              <p className="font-medium text-foreground">
+                Si es tu <span className="text-primary font-bold">primera compra</span>, ¡tenemos un regalo para ti!
+              </p>
+              <div className="bg-primary/10 rounded-lg p-4 border border-primary/20">
+                <p className="text-sm">
+                  📸 Sube una <span className="font-semibold">foto etiquetando</span> a{" "}
+                  <span className="font-bold text-primary">@just.phones.fv</span> de tu compra y obtén{" "}
+                  <span className="font-bold text-green-600">10% de descuento</span> en tu próxima compra.
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                *Válido solo para primeras compras. El descuento se aplicará en tu siguiente pedido.
+              </p>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-center pt-4">
+            <Button 
+              onClick={() => setShowFirstPurchasePopup(false)}
+              className="w-full max-w-xs bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg"
+            >
+              ¡Entendido!
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Sheet>
   );
 }

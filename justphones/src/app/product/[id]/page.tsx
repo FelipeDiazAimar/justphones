@@ -22,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Store, Truck, MessageSquare, Landmark, CreditCard } from 'lucide-react';
 import Aurora from '@/components/aurora';
 import { createClient } from '@/lib/supabase/client';
+import { MessageBanner } from '@/components/message-banner';
 
 
 export default function ProductDetailPage() {
@@ -188,7 +189,8 @@ export default function ProductDetailPage() {
 
   if (isLoading) {
     return (
-        <MainLayout>
+        <MainLayout noPaddingTop>
+            <MessageBanner />
             <div className="max-w-xs sm:max-w-lg lg:max-w-6xl mx-auto px-4 lg:grid lg:grid-cols-2 lg:gap-12">
                 <div>
                     <Skeleton className="w-full relative aspect-[3/5] rounded-lg mb-8" />
@@ -212,7 +214,8 @@ export default function ProductDetailPage() {
 
   if (!selectedColor) {
     return (
-      <MainLayout>
+      <MainLayout noPaddingTop>
+        <MessageBanner />
         <div className="text-center py-20">
           <h1 className="text-2xl">Cargando detalles del producto...</h1>
         </div>
@@ -268,7 +271,8 @@ export default function ProductDetailPage() {
   const finalCashPrice = priceAfterProductDiscount * (1 - cashDiscountPercent / 100); // precio principal
 
   return (
-    <MainLayout>
+    <MainLayout noPaddingTop>
+        <MessageBanner />
         <div className="max-w-xs sm:max-w-lg lg:max-w-6xl mx-auto px-4 lg:grid lg:grid-cols-2 lg:gap-12">
              <div className="block lg:hidden text-center mb-4">
                 <h1 className="text-4xl font-bold tracking-tight">{productName}</h1>

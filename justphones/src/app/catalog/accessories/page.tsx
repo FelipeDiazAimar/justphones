@@ -5,6 +5,7 @@ import React, { useState, useMemo, useEffect, Suspense } from 'react';
 import { Analytics } from "@vercel/analytics/next";
 import { useSearchParams, useRouter } from 'next/navigation';
 import { MainLayout } from '@/components/main-layout';
+import { MessageBanner } from '@/components/message-banner';
 import type { Product } from '@/lib/products';
 import { ProductCard } from '@/components/product-card';
 import { ProductFilters } from '@/components/product-filters';
@@ -136,7 +137,8 @@ function AccessoriesCatalogPageContent() {
 
   if (isLoading || isLoadingSubcategories) {
     return (
-      <MainLayout>
+      <MainLayout noPaddingTop>
+        <MessageBanner />
         <div className="flex justify-between items-center mb-6">
           <Skeleton className="h-9 w-1/3" />
           <Skeleton className="h-10 w-10 rounded-full lg:hidden" />
@@ -158,7 +160,8 @@ function AccessoriesCatalogPageContent() {
   }
 
   return (
-    <MainLayout>
+    <MainLayout noPaddingTop>
+      <MessageBanner />
       <div>
         <div className="flex justify-between items-center mb-6">
           <div>
@@ -249,7 +252,8 @@ function AccessoriesCatalogPageContent() {
 export default function AccessoriesCatalogPage() {
   return (
     <Suspense fallback={
-      <MainLayout>
+      <MainLayout noPaddingTop>
+        <MessageBanner />
         <div className="flex flex-col gap-8">
           <div className="flex items-center justify-between">
             <Skeleton className="h-8 w-32" />

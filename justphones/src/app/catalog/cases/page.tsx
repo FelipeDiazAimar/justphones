@@ -16,6 +16,7 @@ import { useProducts } from '@/hooks/use-products';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useSubcategories } from '@/hooks/use-subcategories';
 import { unslugify, expandModelString } from '@/lib/utils';
+import { MessageBanner } from '@/components/message-banner';
 
 const ITEMS_PER_PAGE = 9;
 
@@ -140,7 +141,8 @@ function CasesCatalogPageContent() {
 
   if (isLoading) {
     return (
-      <MainLayout>
+      <MainLayout noPaddingTop>
+        <MessageBanner />
         <div className="flex justify-between items-center mb-6">
           <Skeleton className="h-9 w-1/3" />
           <Skeleton className="h-10 w-10 rounded-full lg:hidden" />
@@ -162,7 +164,8 @@ function CasesCatalogPageContent() {
   }
 
   return (
-    <MainLayout>
+    <MainLayout noPaddingTop>
+      <MessageBanner />
       <div>
         <div className="flex justify-between items-center mb-6">
           <div>
@@ -253,7 +256,8 @@ function CasesCatalogPageContent() {
 export default function CasesCatalogPage() {
   return (
     <Suspense fallback={
-      <MainLayout>
+      <MainLayout noPaddingTop>
+        <MessageBanner />
         <div className="flex flex-col gap-8">
           <div className="flex items-center justify-between">
             <Skeleton className="h-8 w-32" />
