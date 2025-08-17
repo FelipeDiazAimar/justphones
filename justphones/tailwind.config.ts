@@ -14,6 +14,7 @@ export default {
         body: ['"Inter"', 'sans-serif'],
         headline: ['"Inter"', 'sans-serif'],
         code: ['monospace'],
+        anton: ['"Anton"', 'sans-serif'],
       },
       colors: {
         background: 'hsl(var(--background))',

@@ -1,4 +1,5 @@
 @import 'react-image-crop/dist/ReactCrop.css';
+@import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -105,5 +106,31 @@ body {
 
   .animate-scroll {
     animation: scroll 8s linear infinite;
+  }
+
+  /* Shine effect animation */
+  @keyframes shine {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+
+  .text-shine {
+    background: linear-gradient(
+      90deg,
+      white 0%,
+      white 40%,
+      #d1d5db 50%,
+      white 60%,
+      white 100%
+    );
+    background-size: 200% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shine 2s ease-in-out infinite;
   }
 }

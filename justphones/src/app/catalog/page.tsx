@@ -126,6 +126,11 @@ function CatalogPageContent() {
                           className="object-cover"
                           unoptimized={true}
                       />
+                      {image.alt_text && (
+                        <div className="absolute bottom-4 right-4 font-anton text-lg md:text-xl lg:text-2xl drop-shadow-lg text-shine">
+                          {image.alt_text}
+                        </div>
+                      )}
                       </div>
                   </CarouselItem>
                   )) : (
