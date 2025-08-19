@@ -9,6 +9,7 @@ import { Carousel, CarouselContent, CarouselItem, type CarouselApi } from "@/com
 import type { Product } from "@/lib/products";
 import { cn, unslugify } from "@/lib/utils";
 import { useState, useEffect } from "react";
+import { Loader } from "@/components/loader";
 
 interface ProductCardProps {
   product: Product;
@@ -31,6 +32,14 @@ export function ProductCard({ product }: ProductCardProps) {
 
   const hasDiscount = product.discount && product.discount > 0;
   const [api, setApi] = useState<CarouselApi>();
+  const [loaded, setLoaded] = useState<boolean[]>(() => Array(carouselImages.length).fill(false));
+  const [singleLoaded, setSingleLoaded] = useState<boolean>(false);
+
+  // Reset loaded states if the image list changes
+  useEffect(() => {
+    setLoaded(Array(carouselImages.length).fill(false));
+    setSingleLoaded(false);
+  }, [carouselImages.length]);
 
   // Lógica de precios:
   // 1. Aplicar primero el descuento propio del producto (si existe)
@@ -72,21 +81,41 @@ export function ProductCard({ product }: ProductCardProps) {
                       className="object-cover"
                       data-ai-hint="phone case"
                       unoptimized={true}
+                      onLoad={() =>
+                        setLoaded((prev) => {
+                          const next = [...prev];
+                          next[index] = true;
+                          return next;
+                        })
+                      }
                     />
+                    {!loaded[index] && (
+                      <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+                        <Loader />
+                      </div>
+                    )}
                   </div>
                 </CarouselItem>
               ))}
             </CarouselContent>
           </Carousel>
         ) : (
-          <Image
-            src={displayImage}
-            alt={product.name}
-            fill
-            className="object-cover"
-            data-ai-hint="phone case"
-            unoptimized={true}
-          />
+          <div className="relative w-full h-full">
+            <Image
+              src={displayImage}
+              alt={product.name}
+              fill
+              className="object-cover"
+              data-ai-hint="phone case"
+              unoptimized={true}
+              onLoad={() => setSingleLoaded(true)}
+            />
+            {!singleLoaded && (
+              <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+                <Loader />
+              </div>
+            )}
+          </div>
         )}
 
         {isSoldOut && (
