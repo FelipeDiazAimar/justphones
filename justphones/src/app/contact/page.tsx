@@ -23,6 +23,7 @@ import Link from 'next/link';
 import { InstagramIcon } from '@/components/icons/instagram';
 import { WhatsappIcon } from '@/components/icons/whatsapp';
 import { Logo } from '@/components/icons/logo';
+import emailjs from '@emailjs/browser'
 
 const formSchema = z.object({
   name: z.string().min(2, {
@@ -45,24 +46,34 @@ export default function ContactPage() {
   })
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    // This is a mock submission. In a real app, you would send this to your backend.
-    console.log(values)
-    toast({
-      className: "border-primary/10 shadow-lg shadow-primary/10",
-      title: (
-        <div className="flex w-full items-center gap-4">
-          <Logo className="h-12 w-auto flex-shrink-0" />
-          <div className="flex flex-col">
-            <h3 className="text-lg font-bold">¡Gracias, {values.name}!</h3>
-            <p className="text-sm text-muted-foreground">
-              Hemos recibido tu mensaje y te responderemos pronto.
-            </p>
-          </div>
-        </div>
-      ),
-      description: <></>,
-    })
-    form.reset();
+    try {
+      const SERVICE_ID = process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID as string
+      const TEMPLATE_ID = process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID as string
+      const PUBLIC_KEY = process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY as string
+
+      if (!SERVICE_ID || !TEMPLATE_ID || !PUBLIC_KEY) {
+        throw new Error('EmailJS no está configurado')
+      }
+
+      const params = {
+        name: values.name,
+        message: values.message,
+      }
+
+      await emailjs.send(SERVICE_ID, TEMPLATE_ID, params, { publicKey: PUBLIC_KEY })
+      toast({
+        className: "border-primary/10 shadow-lg shadow-primary/10",
+        title: `¡Gracias, ${values.name}!`,
+        description: 'Hemos recibido tu mensaje y te responderemos pronto.',
+      })
+      form.reset()
+  } catch (e: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Error al enviar',
+        description: e?.message || 'Inténtalo nuevamente más tarde.',
+      })
+    }
   }
 
   return (
@@ -111,7 +122,9 @@ export default function ContactPage() {
                                 </FormItem>
                               )}
                             />
-                            <Button type="submit">Enviar Mensaje</Button>
+                            <Button type="submit" disabled={form.formState.isSubmitting}>
+                              {form.formState.isSubmitting ? 'Enviando…' : 'Enviar Mensaje'}
+                            </Button>
                           </form>
                         </Form>
                     </CardContent>
