@@ -6,7 +6,7 @@ import { useProducts } from '@/hooks/use-products';
 import { useProductViews } from '@/hooks/use-product-views';
 import { useCustomerRequests } from '@/hooks/use-customer-requests';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { DollarSign, ShoppingCart, Package, TrendingUp, AlertTriangle, Eye, HelpCircle, ArrowDownUp, TrendingDown, ChevronsUpDown, Percent, BarChart, PackageSearch, Activity, Coins, Goal, History, PlusCircle, Trash, ChevronDown, Edit, Wallet, Banknote, Building, CreditCard, Calculator, PiggyBank } from 'lucide-react';
+import { DollarSign, ShoppingCart, Package, TrendingUp, AlertTriangle, Eye, HelpCircle, ArrowDownUp, TrendingDown, ChevronsUpDown, Percent, BarChart, PackageSearch, Activity, Coins, Goal, History, PlusCircle, Trash, ChevronDown, Edit, Wallet, Banknote, Building, CreditCard, Calculator, PiggyBank, Loader2 } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend, Tooltip as RechartsTooltip, XAxis, YAxis, CartesianGrid, BarChart as RechartsBarChart, Bar } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
 import { unslugify, cn } from '@/lib/utils';
@@ -140,35 +140,94 @@ export default function AdminFinancePage() {
   const [salesChartView, setSalesChartView] = useState<'daily' | 'monthly' | 'yearly'>('daily');
   const [profitChartView, setProfitChartView] = useState<'daily' | 'weekly' | 'monthly' | 'by_order'>('daily');
 
-  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  });
+  // Cierres de caja manuales (persistidos en localStorage)
+  type ClosureEntry = { month: string; startDate: string };
+  const [closures, setClosures] = useState<ClosureEntry[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState<string>("");
 
-  // Generar meses disponibles desde julio 2025 hasta el mes actual
-  const getAvailableMonths = () => {
-    const months = [];
-    const startDate = new Date(2025, 6, 3); // 3 de julio 2025 (mes 6 porque enero es 0)
-    const currentDate = new Date();
-    
-    let currentMonth = new Date(startDate);
-    
-    while (currentMonth <= currentDate) {
-      const year = currentMonth.getFullYear();
-      const month = currentMonth.getMonth() + 1;
-      const monthValue = `${year}-${String(month).padStart(2, '0')}`;
-      const monthLabel = currentMonth.toLocaleDateString('es-ES', { 
-        month: 'long', 
-        year: 'numeric' 
-      });
-      
-      months.push({ value: monthValue, label: monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1) });
-      
-      // Avanzar al siguiente mes
-      currentMonth.setMonth(currentMonth.getMonth() + 1);
+  // Cargar cierres al iniciar (seed/migración: 2025-07-03, 2025-08-03 y 2025-09-01)
+  useEffect(() => {
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('financeClosures') : null;
+      let parsed: ClosureEntry[] | null = raw ? JSON.parse(raw) : null;
+      const defaultClosures: ClosureEntry[] = [
+        { month: '2025-07', startDate: new Date(2025, 6, 3, 0, 0, 0, 0).toISOString() }, // Jul 3 starts July period
+        { month: '2025-08', startDate: new Date(2025, 7, 3, 0, 0, 0, 0).toISOString() }, // Aug 3 closes July, starts Aug
+        { month: '2025-09', startDate: new Date(2025, 8, 1, 0, 0, 0, 0).toISOString() }, // Sep 1 closes Aug, starts Sep
+      ];
+      if (!parsed || !Array.isArray(parsed) || parsed.length === 0) {
+        parsed = [...defaultClosures];
+      }
+      // Migración: asegurar que existan y tengan las fechas correctas los cierres de ago-03 y sep-01
+      const upsertClosure = (arr: ClosureEntry[], month: string, startISO: string) => {
+        const idx = arr.findIndex(c => c.month === month);
+        if (idx === -1) arr.push({ month, startDate: startISO });
+        else arr[idx] = { ...arr[idx], startDate: startISO };
+      };
+      defaultClosures.forEach(c => upsertClosure(parsed!, c.month, c.startDate));
+      // Ordenar por fecha ascendente
+      parsed.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+      setClosures(parsed);
+      // Seleccionar último mes cerrado por defecto
+      const last = parsed[parsed.length - 1];
+      setSelectedMonth(last.month);
+    } catch {
+      const fallback = [
+        { month: '2025-07', startDate: new Date(2025, 6, 3, 0, 0, 0, 0).toISOString() },
+        { month: '2025-08', startDate: new Date(2025, 7, 3, 0, 0, 0, 0).toISOString() },
+        { month: '2025-09', startDate: new Date(2025, 8, 1, 0, 0, 0, 0).toISOString() },
+      ];
+      setClosures(fallback);
+      setSelectedMonth('2025-09');
     }
-    
-    return months.reverse(); // Mostrar el más reciente primero
+  }, []);
+
+  // Persistir cierres ante cambios
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('financeClosures', JSON.stringify(closures));
+      }
+    } catch {}
+  }, [closures]);
+
+  // Helpers de cierres
+  const getLatestClosedMonth = useMemo(() => {
+    if (closures.length === 0) return '';
+    const sorted = [...closures].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+    return sorted[sorted.length - 1].month;
+  }, [closures]);
+
+  const getClosureForMonth = (month: string) => closures.find(c => c.month === month);
+  const getNextClosureAfter = (month: string) => {
+    const current = getClosureForMonth(month);
+    if (!current) return undefined;
+    const currentStart = new Date(current.startDate).getTime();
+    const later = closures
+      .filter(c => new Date(c.startDate).getTime() > currentStart)
+      .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+    return later[0];
+  };
+
+  const getPeriodBounds = (month: string) => {
+    const closure = getClosureForMonth(month);
+    if (!closure) return null;
+    const start = new Date(closure.startDate);
+    const next = getNextClosureAfter(month);
+    const end = next ? new Date(new Date(next.startDate).getTime() - 1) : new Date();
+    return { start, end };
+  };
+
+  // Meses disponibles basados en cierres
+  const getAvailableMonths = () => {
+    return [...closures]
+      .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())
+      .map(c => {
+        const [year, month] = c.month.split('-').map(Number);
+        const tmp = new Date(year, (month || 1) - 1, 1);
+        const label = tmp.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+        return { value: c.month, label: label.charAt(0).toUpperCase() + label.slice(1) };
+      });
   };
 
   // Estado para controlar la expansión de cada card
@@ -199,6 +258,10 @@ export default function AdminFinancePage() {
   const [isRevenueBreakdownDialogOpen, setIsRevenueBreakdownDialogOpen] = useState(false);
 
   const { toast } = useToast();
+
+  // UI loading states for actions
+  const [isClosing, setIsClosing] = useState(false);
+  const [isReverting, setIsReverting] = useState(false);
 
   const {
       register: registerFixedCost,
@@ -340,16 +403,11 @@ export default function AdminFinancePage() {
 
   // Función helper para filtrar por mes específico (del día 3 del mes al día 2 del siguiente)
   const isInSelectedMonth = (dateString: string) => {
+    if (!selectedMonth) return false;
+    const bounds = getPeriodBounds(selectedMonth);
+    if (!bounds) return false;
     const date = parseISO(dateString);
-    const [year, month] = selectedMonth.split('-').map(Number);
-    
-    // Inicio del período: día 3 del mes seleccionado
-    const periodStart = new Date(year, month - 1, 3); // month - 1 porque los meses en Date son 0-indexed
-    
-    // Fin del período: día 2 del mes siguiente (incluyendo todo el día 2)
-    const periodEnd = new Date(year, month, 2, 23, 59, 59, 999); // Día 2 del mes siguiente hasta las 23:59:59
-    
-    return date >= periodStart && date <= periodEnd;
+    return date >= bounds.start && date <= bounds.end;
   };
 
   // Función helper para filtrar desde julio 2025 en adelante (comenzando el día 3)
@@ -756,7 +814,8 @@ export default function AdminFinancePage() {
       <div className="mt-8 mb-6 flex flex-col md:flex-row justify-between md:items-center gap-4">
         <h2 className="text-2xl font-bold">Análisis Financiero</h2>
         <div className="w-full md:w-auto">
-            <Select onValueChange={(value) => setSelectedMonth(value)} defaultValue={selectedMonth}>
+          <div className="flex items-center gap-2">
+            <Select onValueChange={(value) => setSelectedMonth(value)} value={selectedMonth}>
                 <SelectTrigger>
                     <SelectValue placeholder="Seleccionar mes" />
                 </SelectTrigger>
@@ -768,6 +827,65 @@ export default function AdminFinancePage() {
                     ))}
                 </SelectContent>
             </Select>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isClosing || isReverting}
+              onClick={() => {
+                if (isClosing || isReverting) return;
+                setIsClosing(true);
+                try {
+                  const today = new Date();
+                  // Evitar duplicar si ya hay un cierre con fecha de hoy
+                  const already = closures.some(c => {
+                    const d = new Date(c.startDate);
+                    return d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
+                  });
+                  const newMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+                  const monthExists = closures.some(c => c.month === newMonth);
+                  if (already || monthExists) {
+                    toast({ title: 'Cierre ya registrado', description: 'Ya existe un cierre de caja hoy.' });
+                    return;
+                  }
+                  const newEntry = { month: newMonth, startDate: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0).toISOString() };
+                  const updated = [...closures, newEntry].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+                  setClosures(updated);
+                  setSelectedMonth(newMonth);
+                  toast({ title: 'Caja cerrada', description: `Se inició el período ${newMonth}.` });
+                } finally {
+                  setTimeout(() => setIsClosing(false), 300);
+                }
+              }}
+            >
+              {isClosing ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Cerrando…</>) : 'Cerrar caja hoy'}
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={isReverting || isClosing || closures.length <= 1}
+              onClick={() => {
+                if (isReverting || isClosing) return;
+                setIsReverting(true);
+                try {
+                  if (closures.length <= 1) {
+                    toast({ title: 'Nada para revertir', description: 'No hay cierres previos para revertir.' });
+                    return;
+                  }
+                  const sorted = [...closures].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+                  const removed = sorted.pop();
+                  const updated = sorted;
+                  setClosures(updated);
+                  const last = updated[updated.length - 1];
+                  setSelectedMonth(last?.month || '');
+                  toast({ title: 'Cierre revertido', description: `Se eliminó el cierre de ${removed?.month}.` });
+                } finally {
+                  setTimeout(() => setIsReverting(false), 300);
+                }
+              }}
+            >
+              {isReverting ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Revirtiendo…</>) : 'Revertir cierre'}
+            </Button>
+          </div>
         </div>
       </div>
       
@@ -1040,120 +1158,95 @@ export default function AdminFinancePage() {
             title: 'Capital Disponible',
             icon: <PiggyBank className="h-4 w-4" />,
             value: (() => {
-              // Capital disponible solo cuenta desde julio 2025 en adelante
-              const ingresosHistoricos = sales.filter(sale => isFromJulyOnwards(sale.created_at)).reduce((acc, sale) => acc + sale.total_price, 0) + 
-                                         monetaryIncome
-                                           .filter(income => isFromJulyOnwards(income.created_at) && !income.name.startsWith('[EGRESO]') && income.amount > 0)
-                                           .reduce((total, income) => total + income.amount, 0);
-              
-              // Calcular meses desde julio 2025 hasta ahora para costos fijos (comenzando el día 3)
-              const startDate = new Date(2025, 6, 3); // 3 de julio 2025
-              const currentDate = new Date();
-              const monthsFromJuly = ((currentDate.getFullYear() - startDate.getFullYear()) * 12) + (currentDate.getMonth() - startDate.getMonth()) + 1;
-              const costosHistoricos = fixedCosts.reduce((acc, cost) => acc + cost.amount, 0) * monthsFromJuly + // Costos fijos solo por meses desde julio
-                                     salaryWithdrawals.filter(w => isFromJulyOnwards(w.created_at)).reduce((sum, w) => sum + w.amount, 0) +
-                                     stockHistory.filter(entry => isFromJulyOnwards(entry.created_at)).reduce((acc, entry) => acc + ((entry.cost || 0) * entry.quantity_added), 0) +
-                                     monetaryIncome
-                                       .filter(income => isFromJulyOnwards(income.created_at) && (income.name.startsWith('[EGRESO]') || income.amount < 0))
-                                       .reduce((total, income) => total + Math.abs(income.amount), 0);
-              return ingresosHistoricos - costosHistoricos;
+              // Capital disponible basado en cierres: sumar todos los períodos cerrados completos y el período vigente hasta hoy
+              if (closures.length === 0) return 0;
+              const sorted = [...closures].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+              let totalIngresos = 0;
+              let totalCostos = 0;
+              for (let i = 0; i < sorted.length; i++) {
+                const current = sorted[i];
+                const next = sorted[i + 1];
+                const start = new Date(current.startDate);
+                const end = next ? new Date(new Date(next.startDate).getTime() - 1) : new Date();
+                // Ingresos: ventas + ingresos monetarios positivos
+                const ventas = sales.filter(s => {
+                  const d = parseISO(s.created_at);
+                  return d >= start && d <= end;
+                }).reduce((acc, s) => acc + s.total_price, 0);
+                const ingresosPositivos = monetaryIncome.filter(mi => {
+                  const d = parseISO(mi.created_at);
+                  return (!mi.name.startsWith('[EGRESO]') && mi.amount > 0) && d >= start && d <= end;
+                }).reduce((acc, mi) => acc + mi.amount, 0);
+                totalIngresos += ventas + ingresosPositivos;
+
+                // Costos: fijos (cada mes cuenta 1 vez), sueldos, costos de pedidos, egresos monetarios
+                const costosFijos = fixedCosts.reduce((acc, c) => acc + c.amount, 0);
+                const sueldos = salaryWithdrawals.filter(w => {
+                  const d = parseISO(w.created_at);
+                  return d >= start && d <= end;
+                }).reduce((acc, w) => acc + w.amount, 0);
+                const costosPedidos = stockHistory.filter(e => {
+                  const d = parseISO(e.created_at);
+                  return d >= start && d <= end;
+                }).reduce((acc, e) => acc + ((e.cost || 0) * e.quantity_added), 0);
+                const egresosMonetarios = monetaryIncome.filter(mi => {
+                  const d = parseISO(mi.created_at);
+                  return (mi.name.startsWith('[EGRESO]') || mi.amount < 0) && d >= start && d <= end;
+                }).reduce((acc, mi) => acc + Math.abs(mi.amount), 0);
+                totalCostos += costosFijos + sueldos + costosPedidos + egresosMonetarios;
+              }
+              return totalIngresos - totalCostos;
             })(),
             formula: 'Capital acumulado desde julio 2025 (fecha de inicio del negocio)',
             calculations: (() => {
-              // Calcular meses desde julio 2025 hasta ahora para mostrar en calculations (comenzando el día 3)
-              const startDate = new Date(2025, 6, 3); // 3 de julio 2025
-              const currentDate = new Date();
-              const monthsFromJuly = ((currentDate.getFullYear() - startDate.getFullYear()) * 12) + (currentDate.getMonth() - startDate.getMonth()) + 1;
-              
-              // Generar todos los meses desde julio 2025 hasta ahora
-              const months = [];
-              let currentMonth = new Date(startDate);
-              while (currentMonth <= currentDate) {
-                const year = currentMonth.getFullYear();
-                const month = currentMonth.getMonth() + 1;
-                const monthValue = `${year}-${String(month).padStart(2, '0')}`;
-                const monthLabel = currentMonth.toLocaleDateString('es-ES', { 
-                  month: 'long', 
-                  year: 'numeric' 
-                });
-                months.push({ value: monthValue, label: monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1) });
-                currentMonth.setMonth(currentMonth.getMonth() + 1);
-              }
-
-              const calculations = [] as Array<{ label: string; value: number; isNegative: boolean; hideValue?: boolean }>;
+              const out = [] as Array<{ label: string; value: number; isNegative: boolean; hideValue?: boolean }>;
+              if (closures.length === 0) return out;
+              const sorted = [...closures].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
               let totalIngresos = 0;
               let totalCostos = 0;
-              const monthlyIngresoBreakdown: string[] = [];
-              const monthlyCostoBreakdown: string[] = [];
-              
-              // Calcular totales históricos y guardar desglose por mes (períodos del 3 al 2)
-              months.forEach(month => {
-                const [year, monthNum] = month.value.split('-').map(Number);
-                
-                // Período del mes: del día 3 del mes al día 2 del siguiente
-                const periodStart = new Date(year, monthNum - 1, 3);
-                const periodEnd = new Date(year, monthNum, 2, 23, 59, 59, 999);
-                
-                const monthSales = sales.filter(sale => {
-                  const saleDate = parseISO(sale.created_at);
-                  return saleDate >= periodStart && saleDate <= periodEnd;
-                }).reduce((acc, sale) => acc + sale.total_price, 0);
-                
-                const monthMonetaryIncome = monetaryIncome.filter(income => {
-                  const incomeDate = parseISO(income.created_at);
-                  return (!income.name.startsWith('[EGRESO]') && income.amount > 0) && incomeDate >= periodStart && incomeDate <= periodEnd;
-                }).reduce((total, income) => total + income.amount, 0);
-                
-                const monthFixedCosts = fixedCosts.reduce((acc, cost) => acc + cost.amount, 0);
-                
-                const monthSalaryWithdrawals = salaryWithdrawals.filter(w => {
-                  const wDate = parseISO(w.created_at);
-                  return wDate >= periodStart && wDate <= periodEnd;
-                }).reduce((sum, w) => sum + w.amount, 0);
-                
-                const monthStockCosts = stockHistory.filter(entry => {
-                  const entryDate = parseISO(entry.created_at);
-                  return entryDate >= periodStart && entryDate <= periodEnd;
-                }).reduce((acc, entry) => acc + ((entry.cost || 0) * entry.quantity_added), 0);
-                
-                const monthEgresos = monetaryIncome.filter(income => {
-                  const incomeDate = parseISO(income.created_at);
-                  return (income.name.startsWith('[EGRESO]') || income.amount < 0) && incomeDate >= periodStart && incomeDate <= periodEnd;
-                }).reduce((total, income) => total + Math.abs(income.amount), 0);
-                
-                const monthIngresoTotal = monthSales + monthMonetaryIncome;
-                const monthCostoTotal = monthFixedCosts + monthSalaryWithdrawals + monthStockCosts + monthEgresos;
-                
-                totalIngresos += monthIngresoTotal;
-                totalCostos += monthCostoTotal;
-                
-                // Obtener nombre corto del mes (JULIO, AGOSTO, etc.)
-                const shortMonthName = month.label.split(' ')[0].toUpperCase();
-                
-                monthlyIngresoBreakdown.push(`${shortMonthName}: $${monthIngresoTotal.toLocaleString()}`);
-                monthlyCostoBreakdown.push(`${shortMonthName}: $${monthCostoTotal.toLocaleString()}`);
+              sorted.forEach((c, idx) => {
+                const start = new Date(c.startDate);
+                const next = sorted[idx + 1];
+                const end = next ? new Date(new Date(next.startDate).getTime() - 1) : new Date();
+                const labelDate = new Date(Number(c.month.split('-')[0]), Number(c.month.split('-')[1]) - 1, 1);
+                const label = labelDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+
+                const ventas = sales.filter(s => {
+                  const d = parseISO(s.created_at);
+                  return d >= start && d <= end;
+                }).reduce((acc, s) => acc + s.total_price, 0);
+                const ingresosPositivos = monetaryIncome.filter(mi => {
+                  const d = parseISO(mi.created_at);
+                  return (!mi.name.startsWith('[EGRESO]') && mi.amount > 0) && d >= start && d <= end;
+                }).reduce((acc, mi) => acc + mi.amount, 0);
+                const ingresosMes = ventas + ingresosPositivos;
+
+                const costosFijos = fixedCosts.reduce((acc, c2) => acc + c2.amount, 0);
+                const sueldos = salaryWithdrawals.filter(w => {
+                  const d = parseISO(w.created_at);
+                  return d >= start && d <= end;
+                }).reduce((acc, w) => acc + w.amount, 0);
+                const costosPedidos = stockHistory.filter(e => {
+                  const d = parseISO(e.created_at);
+                  return d >= start && d <= end;
+                }).reduce((acc, e) => acc + ((e.cost || 0) * e.quantity_added), 0);
+                const egresosMonetarios = monetaryIncome.filter(mi => {
+                  const d = parseISO(mi.created_at);
+                  return (mi.name.startsWith('[EGRESO]') || mi.amount < 0) && d >= start && d <= end;
+                }).reduce((acc, mi) => acc + Math.abs(mi.amount), 0);
+                const costosMes = costosFijos + sueldos + costosPedidos + egresosMonetarios;
+
+                totalIngresos += ingresosMes;
+                totalCostos += costosMes;
+                const monthLabel = `${label.charAt(0).toUpperCase() + label.slice(1)}`;
+                out.push({ label: `${monthLabel} ingresos`, value: ingresosMes, isNegative: false });
+                out.push({ label: `${monthLabel} costos`, value: costosMes, isNegative: true });
               });
-              
-              // Mostrar totales con desglose
-              calculations.push({ label: `Total Ingresos Históricos:`, value: totalIngresos, isNegative: false });
-              // Agregar cada mes en líneas separadas
-              monthlyIngresoBreakdown.forEach(monthBreakdown => {
-                calculations.push({ label: monthBreakdown.toLowerCase(), value: 0, isNegative: false, hideValue: true });
-              });
-              
-              calculations.push({ label: `Total Costos Históricos:`, value: totalCostos, isNegative: true });
-              // Agregar cada mes en líneas separadas
-              monthlyCostoBreakdown.forEach(monthBreakdown => {
-                calculations.push({ label: monthBreakdown.toLowerCase(), value: 0, isNegative: true, hideValue: true });
-              });
-              
-              calculations.push({ 
-                label: `Capital Disponible (${monthsFromJuly} meses):`, 
-                value: totalIngresos - totalCostos, 
-                isNegative: totalIngresos - totalCostos < 0 
-              });
-              
-              return calculations;
+
+              out.push({ label: `Total Ingresos Históricos:`, value: totalIngresos, isNegative: false });
+              out.push({ label: `Total Costos Históricos:`, value: totalCostos, isNegative: true });
+              out.push({ label: `Capital Disponible:`, value: totalIngresos - totalCostos, isNegative: (totalIngresos - totalCostos) < 0 });
+              return out;
             })(),
             isExpanded: expandedCards['capital-disponible'] || false
           }
@@ -2105,7 +2198,7 @@ export default function AdminFinancePage() {
                   <div className="mt-4 p-4 bg-muted/50 rounded-lg">
                     <div className="flex justify-between items-center font-semibold text-lg">
                       <span>Total de Ingresos:</span>
-                      <span className="text-green-600">${sales.reduce((acc, sale) => acc + sale.total_price, 0).toLocaleString()}</span>
+                      <span className="text-green-600">${sales.filter(sale => isInSelectedMonth(sale.created_at)).reduce((acc, sale) => acc + sale.total_price, 0).toLocaleString()}</span>
                     </div>
                   </div>
               </ScrollArea>
