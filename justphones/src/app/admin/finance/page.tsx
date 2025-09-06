@@ -1569,7 +1569,7 @@ export default function AdminFinancePage() {
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6 mt-6">
-        <div id="fixed-costs-section" className="scroll-mt-24">
+  <div id="fixed-costs-section" className="scroll-mt-24 w-full mx-auto max-w-xs sm:max-w-md lg:max-w-md xl:max-w-2xl">
           <Card>
               <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -1581,7 +1581,7 @@ export default function AdminFinancePage() {
                   </CardDescription>
               </CardHeader>
               <CardContent>
-                  <form onSubmit={handleSubmitFixedCost(onFixedCostSubmit)} className="flex flex-col sm:flex-row items-end gap-4 mb-6">
+                  <form onSubmit={handleSubmitFixedCost(onFixedCostSubmit)} className="flex flex-col gap-4 mb-6">
                       <div className="flex-grow w-full space-y-2">
                           <Label htmlFor="cost-name">Nombre del Costo</Label>
                           <Input id="cost-name" {...registerFixedCost('name')} placeholder="Ej: Gasolina, Bolsas" />
@@ -1650,7 +1650,7 @@ export default function AdminFinancePage() {
               </CardContent>
           </Card>
         </div>
-        <div id="salary-section" className="scroll-mt-24">
+  <div id="salary-section" className="scroll-mt-24 w-full mx-auto max-w-xs sm:max-w-md lg:max-w-md xl:max-w-2xl">
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -1662,7 +1662,7 @@ export default function AdminFinancePage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <form onSubmit={handleSubmitSalary(onSalarySubmit)} className="flex flex-col sm:flex-row items-end gap-4 mb-6">
+                    <form onSubmit={handleSubmitSalary(onSalarySubmit)} className="flex flex-col gap-4 mb-6">
                         <div className="flex-grow w-full space-y-2">
                             <Label htmlFor="salary-amount">Monto</Label>
                             <Input id="salary-amount" type="number" {...registerSalary('amount')} placeholder="50000" />
