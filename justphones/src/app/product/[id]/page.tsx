@@ -271,7 +271,8 @@ export default function ProductDetailPage() {
   const finalCashPrice = priceAfterProductDiscount * (1 - cashDiscountPercent / 100); // precio principal
 
   return (
-    <MainLayout noPaddingTop>
+    <>
+      <MainLayout noPaddingTop>
         <MessageBanner />
         <div className="max-w-xs sm:max-w-lg lg:max-w-6xl mx-auto px-4 lg:grid lg:grid-cols-2 lg:gap-12">
              <div className="block lg:hidden text-center mb-4">
@@ -390,32 +391,80 @@ export default function ProductDetailPage() {
 
                     <div className="mb-6">
                         <h3 className="text-lg font-medium mb-2">Color: <span className="font-normal text-foreground">{selectedColor?.name}</span></h3>
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center gap-2">
+                          {/* Flecha izquierda */}
+                          {product.colors.length > 5 && (
+                            <button
+                              className="bg-card/80 rounded-full p-1 shadow"
+                              style={{ marginRight: 4 }}
+                              onClick={() => {
+                                const container = document.getElementById('color-scroll');
+                                if (container) container.scrollBy({ left: -60, behavior: 'smooth' });
+                              }}
+                              aria-label="Deslizar colores a la izquierda"
+                            >
+                              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M15 6L9 12L15 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            </button>
+                          )}
+                          <div
+                            id="color-scroll"
+                            className="flex overflow-x-auto scrollbar-hide gap-2 px-1 items-center"
+                            style={{ WebkitOverflowScrolling: 'touch', maxWidth: '260px', minHeight: '56px' }}
+                            tabIndex={0}
+                            role="listbox"
+                          >
                             {product.colors.map((color, index) => {
-                                const colorImageIndex = coverImagesCount + index;
-                                
-                                return (
-                                    <button
-                                        key={index}
-                                        onClick={() => {
-                                            setSelectedColor(color);
-                                            setIsViewingCoverImages(false);
-                                            setHasUserSelectedColor(true);
-                                            api?.scrollTo(colorImageIndex);
-                                        }}
-                                        className={cn(
-                                            "h-8 w-8 rounded-full border-2 transition-all",
-                                            selectedColor?.hex === color.hex && !isViewingCoverImages 
-                                                ? 'border-primary ring-2 ring-primary ring-offset-2' 
-                                                : 'border-border',
-                                            color.stock === 0 && 'opacity-50'
-                                        )}
-                                        style={{ backgroundColor: color.hex }}
-                                        title={color.name}
-                                        aria-label={`Select color ${color.name}`}
-                                    />
-                                );
+                              const colorImageIndex = coverImagesCount + index;
+                              return (
+                                <button
+                                  key={index}
+                                  onClick={() => {
+                                    setSelectedColor(color);
+                                    setIsViewingCoverImages(false);
+                                    setHasUserSelectedColor(true);
+                                    api?.scrollTo(colorImageIndex);
+                                    // Centrar el scroll en el color seleccionado
+                                    setTimeout(() => {
+                                      const container = document.getElementById('color-scroll');
+                                      const btn = container?.children[index] as HTMLElement;
+                                      if (container && btn) {
+                                        const containerRect = container.getBoundingClientRect();
+                                        const btnRect = btn.getBoundingClientRect();
+                                        const scrollLeft = btn.offsetLeft - container.offsetLeft - (containerRect.width / 2) + (btnRect.width / 2);
+                                        container.scrollTo({ left: scrollLeft, behavior: 'smooth' });
+                                      }
+                                    }, 0);
+                                  }}
+                                  className={cn(
+                                    "h-10 w-10 min-w-[2.5rem] rounded-full border-2 transition-all flex-shrink-0 my-2",
+                                    selectedColor?.hex === color.hex && !isViewingCoverImages
+                                      ? 'border-primary ring-2 ring-primary ring-offset-2'
+                                      : 'border-border',
+                                    color.stock === 0 && 'opacity-50'
+                                  )}
+                                  style={{ backgroundColor: color.hex }}
+                                  title={color.name}
+                                  aria-label={`Select color ${color.name}`}
+                                  role="option"
+                                  aria-selected={selectedColor?.hex === color.hex}
+                                />
+                              );
                             })}
+                          </div>
+                          {/* Flecha derecha */}
+                          {product.colors.length > 5 && (
+                            <button
+                              className="bg-card/80 rounded-full p-1 shadow"
+                              style={{ marginLeft: 4 }}
+                              onClick={() => {
+                                const container = document.getElementById('color-scroll');
+                                if (container) container.scrollBy({ left: 60, behavior: 'smooth' });
+                              }}
+                              aria-label="Deslizar colores a la derecha"
+                            >
+                              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 6L15 12L9 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            </button>
+                          )}
                         </div>
                     </div>
 
@@ -505,6 +554,7 @@ export default function ProductDetailPage() {
                 </div>
             </div>
       </div>
-    </MainLayout>
+      </MainLayout>
+    </>
   );
 }
