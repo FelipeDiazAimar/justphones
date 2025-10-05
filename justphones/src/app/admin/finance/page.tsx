@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { useSales } from '@/hooks/use-sales';
 import { useProducts } from '@/hooks/use-products';
 import { useProductViews } from '@/hooks/use-product-views';
@@ -140,87 +140,129 @@ export default function AdminFinancePage() {
   const [salesChartView, setSalesChartView] = useState<'daily' | 'monthly' | 'yearly'>('daily');
   const [profitChartView, setProfitChartView] = useState<'daily' | 'weekly' | 'monthly' | 'by_order'>('daily');
 
-  // Cierres de caja manuales (persistidos en localStorage)
-  type ClosureEntry = { month: string; startDate: string };
+  // Cierres de caja manuales (persistidos en Supabase)
+  type ClosureEntry = { id: string; month: string; startDate: string; createdAt?: string | null };
   const [closures, setClosures] = useState<ClosureEntry[]>([]);
+  const [isLoadingClosures, setIsLoadingClosures] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState<string>("");
+  const { toast } = useToast();
 
-  // Cargar cierres al iniciar (seed/migración: 2025-07-03, 2025-08-03 y 2025-09-01)
-  useEffect(() => {
+  const refreshClosures = useCallback(async (preferredMonth?: string) => {
+    setIsLoadingClosures(true);
     try {
-      const raw = typeof window !== 'undefined' ? localStorage.getItem('financeClosures') : null;
-      let parsed: ClosureEntry[] | null = raw ? JSON.parse(raw) : null;
-      const defaultClosures: ClosureEntry[] = [
-        { month: '2025-07', startDate: new Date(2025, 6, 3, 0, 0, 0, 0).toISOString() }, // Jul 3 starts July period
-        { month: '2025-08', startDate: new Date(2025, 7, 3, 0, 0, 0, 0).toISOString() }, // Aug 3 closes July, starts Aug
-        { month: '2025-09', startDate: new Date(2025, 8, 1, 0, 0, 0, 0).toISOString() }, // Sep 1 closes Aug, starts Sep
-      ];
-      if (!parsed || !Array.isArray(parsed) || parsed.length === 0) {
-        parsed = [...defaultClosures];
+      const response = await fetch('/api/admin/finance-closures', {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.success || !Array.isArray(result.data)) {
+        throw new Error(result?.error ?? 'No se pudieron cargar los cierres de caja.');
       }
-      // Migración: asegurar que existan y tengan las fechas correctas los cierres de ago-03 y sep-01
-      const upsertClosure = (arr: ClosureEntry[], month: string, startISO: string) => {
-        const idx = arr.findIndex(c => c.month === month);
-        if (idx === -1) arr.push({ month, startDate: startISO });
-        else arr[idx] = { ...arr[idx], startDate: startISO };
-      };
-      defaultClosures.forEach(c => upsertClosure(parsed!, c.month, c.startDate));
-      // Ordenar por fecha ascendente
-      parsed.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-      setClosures(parsed);
-      // Seleccionar último mes cerrado por defecto
-      const last = parsed[parsed.length - 1];
-      setSelectedMonth(last.month);
-    } catch {
-      const fallback = [
-        { month: '2025-07', startDate: new Date(2025, 6, 3, 0, 0, 0, 0).toISOString() },
-        { month: '2025-08', startDate: new Date(2025, 7, 3, 0, 0, 0, 0).toISOString() },
-        { month: '2025-09', startDate: new Date(2025, 8, 1, 0, 0, 0, 0).toISOString() },
-      ];
-      setClosures(fallback);
-      setSelectedMonth('2025-09');
+
+      const normalized: ClosureEntry[] = (result.data as Array<Record<string, unknown>>)
+        .map(record => {
+          const id = typeof record['id'] === 'string' ? (record['id'] as string) : null;
+          const month = typeof record['month'] === 'string' ? (record['month'] as string) : null;
+          const startDateRaw =
+            typeof record['start_date'] === 'string'
+              ? (record['start_date'] as string)
+              : typeof record['startDate'] === 'string'
+                ? (record['startDate'] as string)
+                : null;
+          const createdAt =
+            typeof record['created_at'] === 'string'
+              ? (record['created_at'] as string)
+              : typeof record['createdAt'] === 'string'
+                ? (record['createdAt'] as string)
+                : null;
+
+          if (!id || !month || !startDateRaw) {
+            return null;
+          }
+
+          return {
+            id,
+            month,
+            startDate: startDateRaw,
+            createdAt,
+          } as ClosureEntry;
+        })
+        .filter((item): item is ClosureEntry => item !== null);
+
+  normalized.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+  setClosures(normalized);
+
+      if (normalized.length === 0) {
+        setSelectedMonth('');
+        return;
+      }
+
+      setSelectedMonth(prev => {
+        if (preferredMonth && normalized.some(c => c.month === preferredMonth)) {
+          return preferredMonth;
+        }
+        if (prev && normalized.some(c => c.month === prev)) {
+          return prev;
+        }
+        return normalized[normalized.length - 1].month;
+      });
+    } catch (error) {
+      console.error('[Finance] Error fetching closures:', error);
+      const message = error instanceof Error ? error.message : 'No se pudieron cargar los cierres de caja.';
+      toast({ variant: 'destructive', title: 'Error de cierres', description: message });
+      setClosures([]);
+      setSelectedMonth('');
+    } finally {
+      setIsLoadingClosures(false);
     }
-  }, []);
+  }, [toast]);
 
-  // Persistir cierres ante cambios
   useEffect(() => {
-    try {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('financeClosures', JSON.stringify(closures));
-      }
-    } catch {}
+    refreshClosures();
+  }, [refreshClosures]);
+
+  const sortedClosures = useMemo(() => {
+    return [...closures].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
   }, [closures]);
 
   // Helpers de cierres
   const getLatestClosedMonth = useMemo(() => {
-    if (closures.length === 0) return '';
-    const sorted = [...closures].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-    return sorted[sorted.length - 1].month;
-  }, [closures]);
+    if (sortedClosures.length === 0) return '';
+    return sortedClosures[sortedClosures.length - 1].month;
+  }, [sortedClosures]);
 
-  const getClosureForMonth = (month: string) => closures.find(c => c.month === month);
+  const getClosureForMonth = (month: string) => sortedClosures.find(c => c.month === month);
+
   const getNextClosureAfter = (month: string) => {
-    const current = getClosureForMonth(month);
-    if (!current) return undefined;
-    const currentStart = new Date(current.startDate).getTime();
-    const later = closures
-      .filter(c => new Date(c.startDate).getTime() > currentStart)
-      .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-    return later[0];
+    const index = sortedClosures.findIndex(c => c.month === month);
+    if (index === -1 || index === sortedClosures.length - 1) return undefined;
+    return sortedClosures[index + 1];
   };
 
   const getPeriodBounds = (month: string) => {
     const closure = getClosureForMonth(month);
     if (!closure) return null;
-    const start = new Date(closure.startDate);
+
     const next = getNextClosureAfter(month);
+
+    const start = new Date(closure.startDate);
     const end = next ? new Date(new Date(next.startDate).getTime() - 1) : new Date();
+
+    console.log('[Finance][PeriodBounds]', {
+      month,
+      closureStart: closure.startDate,
+      nextStart: next?.startDate ?? null,
+      start: start.toISOString(),
+      end: end.toISOString(),
+    });
+
     return { start, end };
   };
 
   // Meses disponibles basados en cierres
   const getAvailableMonths = () => {
-    return [...closures]
+    return [...sortedClosures]
       .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())
       .map(c => {
         const [year, month] = c.month.split('-').map(Number);
@@ -256,8 +298,6 @@ export default function AdminFinancePage() {
 
   // Estado para el diálogo de desglose de ingresos
   const [isRevenueBreakdownDialogOpen, setIsRevenueBreakdownDialogOpen] = useState(false);
-
-  const { toast } = useToast();
 
   // UI loading states for actions
   const [isClosing, setIsClosing] = useState(false);
@@ -418,6 +458,28 @@ export default function AdminFinancePage() {
   };
 
   const isLoading = isLoadingSales || isLoadingProducts || isLoadingViews || isLoadingStockHistory || isLoadingRequests || isLoadingFixedCosts || isLoadingSalaryWithdrawals || isLoadingMonetaryIncome;
+
+  const selectedClosure = useMemo(() => {
+    if (!selectedMonth) return null;
+    return getClosureForMonth(selectedMonth) ?? null;
+  }, [selectedMonth, sortedClosures]);
+
+  const selectedClosureLabel = useMemo(() => {
+    if (!selectedClosure) return null;
+    const parsed = parseISO(selectedClosure.startDate);
+    if (Number.isNaN(parsed.getTime())) {
+      try {
+        return new Date(selectedClosure.startDate).toLocaleDateString('es-ES', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+        });
+      } catch {
+        return selectedClosure.startDate;
+      }
+    }
+    return format(parsed, "d 'de' MMMM yyyy", { locale: es });
+  }, [selectedClosure]);
 
   // Listas filtradas por el mes seleccionado para secciones de gestión
   const monthlySalaryWithdrawals = useMemo(() => {
@@ -812,7 +874,14 @@ export default function AdminFinancePage() {
   return (
     <React.Fragment>
       <div className="mt-8 mb-6 flex flex-col md:flex-row justify-between md:items-center gap-4">
-        <h2 className="text-2xl font-bold">Análisis Financiero</h2>
+        <h2 className="text-2xl font-bold flex flex-wrap items-center gap-3">
+          Análisis Financiero
+          {selectedClosureLabel && (
+            <span className="text-base font-normal text-muted-foreground">
+              Cierre vigente: {selectedClosureLabel}
+            </span>
+          )}
+        </h2>
         <div className="w-full md:w-auto">
           <div className="flex items-center gap-2">
             <Select onValueChange={(value) => setSelectedMonth(value)} value={selectedMonth}>
@@ -830,8 +899,8 @@ export default function AdminFinancePage() {
             <Button
               variant="outline"
               size="sm"
-              disabled={isClosing || isReverting}
-              onClick={() => {
+              disabled={isClosing || isReverting || isLoadingClosures}
+              onClick={async () => {
                 if (isClosing || isReverting) return;
                 setIsClosing(true);
                 try {
@@ -847,11 +916,25 @@ export default function AdminFinancePage() {
                     toast({ title: 'Cierre ya registrado', description: 'Ya existe un cierre de caja hoy.' });
                     return;
                   }
-                  const newEntry = { month: newMonth, startDate: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0).toISOString() };
-                  const updated = [...closures, newEntry].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-                  setClosures(updated);
-                  setSelectedMonth(newMonth);
-                  toast({ title: 'Caja cerrada', description: `Se inició el período ${newMonth}.` });
+
+                  const startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0).toISOString();
+                  const response = await fetch('/api/admin/finance-closures', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ month: newMonth, startDate }),
+                  });
+                  const result = await response.json().catch(() => null);
+                  if (!response.ok || !result?.success) {
+                    throw new Error(result?.error ?? 'No se pudo registrar el cierre de caja.');
+                  }
+
+                  const createdMonth: string = result?.data?.month ?? newMonth;
+                  await refreshClosures(createdMonth);
+                  toast({ title: 'Caja cerrada', description: `Se inició el período ${createdMonth}.` });
+                } catch (error) {
+                  console.error('[Finance] Error creando cierre:', error);
+                  const message = error instanceof Error ? error.message : 'No se pudo registrar el cierre de caja.';
+                  toast({ variant: 'destructive', title: 'Error', description: message });
                 } finally {
                   setTimeout(() => setIsClosing(false), 300);
                 }
@@ -862,8 +945,8 @@ export default function AdminFinancePage() {
             <Button
               variant="destructive"
               size="sm"
-              disabled={isReverting || isClosing || closures.length <= 1}
-              onClick={() => {
+              disabled={isReverting || isClosing || closures.length <= 1 || isLoadingClosures}
+              onClick={async () => {
                 if (isReverting || isClosing) return;
                 setIsReverting(true);
                 try {
@@ -872,12 +955,28 @@ export default function AdminFinancePage() {
                     return;
                   }
                   const sorted = [...closures].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-                  const removed = sorted.pop();
-                  const updated = sorted;
-                  setClosures(updated);
-                  const last = updated[updated.length - 1];
-                  setSelectedMonth(last?.month || '');
-                  toast({ title: 'Cierre revertido', description: `Se eliminó el cierre de ${removed?.month}.` });
+                  const lastEntry = sorted[sorted.length - 1];
+                  if (!lastEntry) {
+                    toast({ title: 'Nada para revertir', description: 'No hay cierres previos para revertir.' });
+                    return;
+                  }
+
+                  const response = await fetch('/api/admin/finance-closures', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: lastEntry.id }),
+                  });
+                  const result = await response.json().catch(() => null);
+                  if (!response.ok || !result?.success) {
+                    throw new Error(result?.error ?? 'No se pudo revertir el cierre.');
+                  }
+
+                  await refreshClosures();
+                  toast({ title: 'Cierre revertido', description: `Se eliminó el cierre de ${lastEntry.month}.` });
+                } catch (error) {
+                  console.error('[Finance] Error revirtiendo cierre:', error);
+                  const message = error instanceof Error ? error.message : 'No se pudo revertir el último cierre.';
+                  toast({ variant: 'destructive', title: 'Error', description: message });
                 } finally {
                   setTimeout(() => setIsReverting(false), 300);
                 }
