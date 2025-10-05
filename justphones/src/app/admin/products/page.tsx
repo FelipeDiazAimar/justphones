@@ -304,6 +304,7 @@ export default function AdminProductsPage() {
   const [pedidoEditingId, setPedidoEditingId] = useState<string | null>(null);
   const [pedidoEditingEntries, setPedidoEditingEntries] = useState<StockHistory[]>([]);
   const [pedidoQuantities, setPedidoQuantities] = useState<Record<string, number>>({}); // key: stock_history.id -> new qty
+  const [pedidoCosts, setPedidoCosts] = useState<Record<string, string>>({}); // key: stock_history.id -> new cost (string for controlled input)
   const [isSavingPedidoEdit, setIsSavingPedidoEdit] = useState(false);
   const [isDeletingPedido, setIsDeletingPedido] = useState(false);
 
@@ -1252,8 +1253,11 @@ export default function AdminProductsPage() {
     setPedidoEditingId(pedidoId);
     setPedidoEditingEntries(entries);
     const initial: Record<string, number> = {};
+    const initialCosts: Record<string, string> = {};
     entries.forEach(e => { initial[e.id] = e.quantity_added; });
+    entries.forEach(e => { initialCosts[e.id] = e.cost !== undefined && e.cost !== null ? e.cost.toString() : ''; });
     setPedidoQuantities(initial);
+    setPedidoCosts(initialCosts);
     setIsEditPedidoOpen(true);
   };
 
@@ -1262,9 +1266,9 @@ export default function AdminProductsPage() {
     setIsSavingPedidoEdit(true);
 
     try {
-      // Preflight checks and build deltas
-      const deltas: { entry: StockHistory; delta: number }[] = [];
+      // Preflight checks and build update payloads
       const issues: string[] = [];
+      const updates: { entry: StockHistory; delta: number; newQty: number; newCost: number }[] = [];
 
       for (const entry of pedidoEditingEntries) {
         const newQty = Number(pedidoQuantities[entry.id] ?? entry.quantity_added);
@@ -1272,8 +1276,26 @@ export default function AdminProductsPage() {
           issues.push(`${unslugify(entry.product_name)} (${entry.color_name}): cantidad inválida`);
           continue;
         }
+
+        const rawCost = pedidoCosts[entry.id];
+        let newCost = entry.cost ?? 0;
+        if (rawCost !== undefined) {
+          const normalized = rawCost.replace(',', '.');
+          if (normalized.trim() === '') {
+            newCost = 0;
+          } else {
+            const parsed = Number(normalized);
+            if (!Number.isFinite(parsed) || parsed < 0) {
+              issues.push(`${unslugify(entry.product_name)} (${entry.color_name}): costo inválido`);
+              continue;
+            }
+            newCost = Math.round(parsed * 100) / 100;
+          }
+        } else {
+          newCost = Math.round(newCost * 100) / 100;
+        }
+
         const delta = newQty - entry.quantity_added;
-        if (delta === 0) continue;
 
         const product = productsRef.current.find(p => p.id === entry.product_id);
         if (!product) {
@@ -1289,7 +1311,8 @@ export default function AdminProductsPage() {
           issues.push(`${unslugify(entry.product_name)} (${entry.color_name}): stock insuficiente para restar ${Math.abs(delta)} (actual ${color.stock})`);
           continue;
         }
-        deltas.push({ entry, delta });
+
+        updates.push({ entry, delta, newQty, newCost });
       }
 
       if (issues.length > 0) {
@@ -1302,9 +1325,12 @@ export default function AdminProductsPage() {
         return;
       }
 
+      const deltas = updates.filter(update => update.delta !== 0);
+      const costChanges = updates.filter(update => update.newCost !== (update.entry.cost ?? 0));
+
       // Nothing to change
-      if (deltas.length === 0) {
-        toast({ title: 'Sin cambios', description: 'No se modificó ninguna cantidad.' });
+      if (deltas.length === 0 && costChanges.length === 0) {
+        toast({ title: 'Sin cambios', description: 'No se modificó ninguna cantidad ni costo.' });
         setIsSavingPedidoEdit(false);
         setIsEditPedidoOpen(false);
         return;
@@ -1327,14 +1353,31 @@ export default function AdminProductsPage() {
         if (!ok) throw new Error(`Error actualizando producto ${productId}`);
       }
 
-      // Update stock_history rows
-      for (const { entry } of deltas) {
-        const newQty = Number(pedidoQuantities[entry.id] ?? entry.quantity_added);
-        const { error } = await supabase
-          .from('stock_history')
-          .update({ quantity_added: newQty })
-          .eq('id', entry.id);
-        if (error) throw new Error(`Error actualizando historial: ${error.message}`);
+      // Update stock_history rows (quantities and/or costs) using admin API
+      const stockHistoryUpdates = updates
+        .map(update => {
+          const quantityChanged = update.delta !== 0;
+          const costChanged = update.newCost !== (update.entry.cost ?? 0);
+          if (!quantityChanged && !costChanged) return null;
+          const payload: { id: string; quantity_added?: number; cost?: number } = { id: update.entry.id };
+          if (quantityChanged) payload.quantity_added = update.newQty;
+          if (costChanged) payload.cost = update.newCost;
+          return payload;
+        })
+        .filter((payload): payload is { id: string; quantity_added?: number; cost?: number } => Boolean(payload));
+
+      if (stockHistoryUpdates.length > 0) {
+        const response = await fetch('/api/admin/stock-history/update', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ updates: stockHistoryUpdates }),
+        });
+
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result?.success) {
+          const message = typeof result?.error === 'string' ? result.error : 'No se pudieron actualizar los registros del historial.';
+          throw new Error(message);
+        }
       }
 
       await fetchProducts();
@@ -2753,6 +2796,9 @@ export default function AdminProductsPage() {
                   const color = product?.colors.find(c => c.name === e.color_name);
                   const currentStock = color?.stock ?? 0;
                   const newQty = pedidoQuantities[e.id] ?? e.quantity_added;
+                  const costValue = pedidoCosts[e.id] ?? (e.cost !== undefined && e.cost !== null ? e.cost.toString() : '0');
+                  const quantityInputId = `pedido-qty-${e.id}`;
+                  const costInputId = `pedido-cost-${e.id}`;
                   return (
                     <div key={e.id} className="grid grid-cols-1 md:grid-cols-5 items-center gap-2 border rounded-md p-2">
                       <div className="md:col-span-2">
@@ -2760,8 +2806,9 @@ export default function AdminProductsPage() {
                         <p className="text-xs text-muted-foreground">{e.product_model} • {e.color_name}</p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Label className="text-xs text-muted-foreground">Cantidad</Label>
+                        <Label htmlFor={quantityInputId} className="text-xs text-muted-foreground">Cantidad</Label>
                         <Input
+                          id={quantityInputId}
                           type="number"
                           min={0}
                           value={newQty}
@@ -2772,8 +2819,17 @@ export default function AdminProductsPage() {
                       <div className="text-xs text-muted-foreground">
                         Stock actual: <span className="font-medium">{currentStock}</span>
                       </div>
-                      <div className="text-xs">
-                        Costo: ${e.cost || 0}
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor={costInputId} className="text-xs text-muted-foreground">Costo</Label>
+                        <Input
+                          id={costInputId}
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={costValue}
+                          onChange={(ev) => setPedidoCosts(prev => ({ ...prev, [e.id]: ev.target.value }))}
+                          className="w-28"
+                        />
                       </div>
                     </div>
                   );

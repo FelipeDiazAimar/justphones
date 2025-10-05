@@ -60,3 +60,55 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ success: false, error: e?.message || 'Unexpected error' }, { status: 500 })
   }
 }
+
+interface UpdateRequestBody {
+  id?: string
+  payload?: Record<string, unknown>
+}
+
+export async function PATCH(req: Request) {
+  try {
+    const body = (await req.json().catch(() => null)) as UpdateRequestBody | null
+
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json({ success: false, error: 'Cuerpo inválido' }, { status: 400 })
+    }
+
+    const { id, payload } = body
+
+    if (!id || typeof id !== 'string') {
+      return NextResponse.json({ success: false, error: 'ID requerido' }, { status: 400 })
+    }
+
+    if (!payload || typeof payload !== 'object' || Object.keys(payload).length === 0) {
+      return NextResponse.json({ success: false, error: 'Datos para actualizar requeridos' }, { status: 400 })
+    }
+
+    const { client: supabase, isAdmin } = getServerClient()
+    if (!isAdmin) {
+      console.warn('[API] PATCH /customer-requests usando ANON key; posibles restricciones RLS')
+    }
+
+    const { error, data, count } = await supabase
+      .from('customer_requests')
+      .update(payload, { count: 'exact' })
+      .eq('id', id)
+      .select()
+
+    if (error) {
+      console.error('[API] Error actualizando pedido', { id, error: error.message })
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    }
+
+    if (typeof count === 'number' && count === 0) {
+      const msg = isAdmin ? 'No se encontró el pedido' : 'No se encontró el pedido o RLS bloqueó la actualización'
+      console.warn('[API] PATCH sin filas actualizadas', { id, isAdmin })
+      return NextResponse.json({ success: false, error: msg }, { status: isAdmin ? 404 : 403 })
+    }
+
+    return NextResponse.json({ success: true, data: data?.[0] ?? null })
+  } catch (e: any) {
+    console.error('[API] Error inesperado en PATCH', e)
+    return NextResponse.json({ success: false, error: e?.message || 'Unexpected error' }, { status: 500 })
+  }
+}

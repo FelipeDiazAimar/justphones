@@ -254,6 +254,7 @@ export default function AdminPedidosPage() {
     const success = await updateCustomerRequest(editingRequest.id, updateData);
     if (success) {
       toast({ title: 'Pedido de cliente actualizado'});
+      setLocalCustomerRequests((prev) => prev.map(r => r.id === editingRequest.id ? { ...r, ...updateData } : r));
       setIsEditRequestDialogOpen(false);
       setEditingRequest(null);
     }
@@ -434,7 +435,7 @@ export default function AdminPedidosPage() {
 
   const unfulfilledDemand = useMemo(() => {
     const requestedQuantities: Record<string, { data: any, requested: number }> = {};
-    customerRequests.forEach(req => {
+    localCustomerRequests.forEach(req => {
         const key = `${req.product_id}-${req.color_hex}`;
         if (!requestedQuantities[key]) {
             requestedQuantities[key] = {
@@ -472,7 +473,7 @@ export default function AdminPedidosPage() {
         })
         .filter(item => item !== null)
         .sort((a,b) => b!.pending - a!.pending);
-  }, [customerRequests, sales]);
+  }, [localCustomerRequests, sales]);
 
   const getPageNumbers = (totalPages: number, currentPage: number) => {
     if (totalPages <= 5) {

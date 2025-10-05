@@ -70,14 +70,29 @@ export function CustomerRequestsProvider({ children }: { children: ReactNode }) 
   };
   
   const updateCustomerRequest = async (requestId: string, requestData: Partial<Omit<CustomerRequest, 'id' | 'created_at'>>) => {
-    const { error } = await supabase.from('customer_requests').update(requestData).eq('id', requestId);
-    if (error) {
-      console.error('Error updating customer request:', error.message);
-      toast({ variant: 'destructive', title: 'Error', description: `No se pudo actualizar el pedido: ${error.message}` });
+    try {
+      const res = await fetch('/api/admin/customer-requests', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: requestId, payload: requestData }),
+      });
+
+      const body = await res.json().catch(() => ({}));
+
+      if (!res.ok || body?.success !== true) {
+        const message = body?.error || `Status ${res.status}`;
+        console.error('Error updating customer request:', message);
+        toast({ variant: 'destructive', title: 'Error', description: `No se pudo actualizar el pedido: ${message}` });
+        return false;
+      }
+
+      await fetchCustomerRequests();
+      return true;
+    } catch (error: any) {
+      console.error('Error updating customer request: network error', error?.message);
+      toast({ variant: 'destructive', title: 'Error', description: 'No se pudo actualizar el pedido: problema de red' });
       return false;
     }
-    await fetchCustomerRequests();
-    return true;
   };
 
   const deleteCustomerRequest = async (requestId: string) => {
