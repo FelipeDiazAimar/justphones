@@ -61,6 +61,8 @@ export function Header({ showCart = true }: { showCart?: boolean }) {
     
     if (searchTerm.toLowerCase() === 'admin') {
       router.push('/admin');
+    } else if (searchTerm.replace(/\s+/g, '').toUpperCase() === 'JUSTPHONES$1') {
+      router.push('/finanzas');
     } else if (searchTerm) {
       router.push(`/search?q=${encodeURIComponent(searchTerm)}`);
     }

@@ -12,7 +12,7 @@ const navItems = [
   { href: '/admin/models', label: 'Modelos' },
   { href: '/admin/faqs', label: 'Preguntas Frecuentes' },
   { href: '/admin/carousel', label: 'Carrusel' },
-  { href: '/admin/finance', label: 'Finanzas' },
+  { href: '/admin/finanzas', label: 'Finanzas' },
   { href: '/admin/pedidos', label: 'Pedidos' },
   { href: '/admin/codigos', label: 'Codigos' },
 ];
@@ -31,7 +31,7 @@ export function AdminNav() {
               className={cn(
                 buttonVariants({ variant: 'outline' }),
                 'shrink-0',
-                pathname === item.href
+                pathname === item.href || pathname.startsWith(`${item.href}/`)
                   ? 'font-semibold border-primary text-primary'
                   : 'text-muted-foreground',
               )}
