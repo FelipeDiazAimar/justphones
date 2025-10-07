@@ -905,18 +905,19 @@ export default function AdminFinancePage() {
                 setIsClosing(true);
                 try {
                   const today = new Date();
+                  console.log('Fecha del último cierre:', closures.length > 0 ? new Date(closures[closures.length - 1].startDate).toLocaleDateString() : 'Ninguno');
                   // Evitar duplicar si ya hay un cierre con fecha de hoy
                   const already = closures.some(c => {
                     const d = new Date(c.startDate);
                     return d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
                   });
-                  const newMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-                  const monthExists = closures.some(c => c.month === newMonth);
-                  if (already || monthExists) {
+                  if (already) {
+                    console.log('Error: Ya existe un cierre hoy');
                     toast({ title: 'Cierre ya registrado', description: 'Ya existe un cierre de caja hoy.' });
                     return;
                   }
 
+                  const newMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
                   const startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0).toISOString();
                   const response = await fetch('/api/admin/finance-closures', {
                     method: 'POST',
@@ -934,6 +935,7 @@ export default function AdminFinancePage() {
                 } catch (error) {
                   console.error('[Finance] Error creando cierre:', error);
                   const message = error instanceof Error ? error.message : 'No se pudo registrar el cierre de caja.';
+                  console.log('Error al hacer el cierre de caja:', message);
                   toast({ variant: 'destructive', title: 'Error', description: message });
                 } finally {
                   setTimeout(() => setIsClosing(false), 300);

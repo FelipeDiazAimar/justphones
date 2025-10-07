@@ -112,8 +112,8 @@ export async function POST(req: Request) {
 
     const { data: existing, error: existingError } = await supabase
       .from(TABLE_NAME)
-      .select('id, month')
-      .eq('month', month)
+      .select('id, start_date')
+      .eq('start_date', startDate)
       .maybeSingle()
 
     if (existingError && existingError.code !== 'PGRST116') {
@@ -122,7 +122,7 @@ export async function POST(req: Request) {
     }
 
     if (existing) {
-      return NextResponse.json({ success: false, error: 'Ya existe un cierre para ese mes.' }, { status: 409 })
+      return NextResponse.json({ success: false, error: 'Ya existe un cierre para esa fecha.' }, { status: 409 })
     }
 
     const { data, error } = await supabase

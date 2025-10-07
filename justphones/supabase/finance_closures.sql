@@ -3,7 +3,7 @@ create extension if not exists "pgcrypto";
 
 create table if not exists public.finance_closures (
     id uuid primary key default gen_random_uuid(),
-    month text not null unique check (month ~ '^\d{4}-(0[1-9]|1[0-2])$'),
+    month text not null check (month ~ '^\d{4}-(0[1-9]|1[0-2])$'),
     start_date timestamptz not null,
     created_at timestamptz not null default timezone('utc', now())
 );
