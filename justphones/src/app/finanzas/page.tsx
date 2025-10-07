@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   format,
   subDays,
@@ -61,6 +61,7 @@ import {
   ShoppingBag,
   Loader2,
   PiggyBank,
+  Menu,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -123,6 +124,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import type { Product } from '@/lib/products';
 import type { SalaryWithdrawal } from '@/lib/salary-withdrawals';
 import type { MonetaryIncome } from '@/lib/monetary-income';
@@ -170,7 +172,7 @@ const monetaryIncomeSchema = z.object({
 });
 
 const ITEMS_PER_PAGE_RENTABILIDAD = 8;
-type StatsPeriod = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'all';
+type StatsPeriod = string; // 'all' or closure ID
 
 type ClosureEntry = {
   id: string;
@@ -354,35 +356,37 @@ function FinanceDashboard() {
     direction: 'asc' | 'desc';
   }>({ column: 'profit', direction: 'desc' });
   const [rentabilidadCurrentPage, setRentabilidadCurrentPage] = useState(1);
-  const [statsPeriod, setStatsPeriod] = useState<StatsPeriod>('all');
+  const [statsPeriod, setStatsPeriod] = useState<StatsPeriod>('');
   const [activeSection, setActiveSection] = useState('resumen');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
 
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+  const touchStartX = useRef<number | null>(null);
+  const touchEndX = useRef<number | null>(null);
 
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setActiveSection(entry.target.id);
-          }
-        });
-      },
-      { rootMargin: '-40% 0px -60% 0px' },
-    );
-
-    const refs = Object.values(sectionRefs.current);
-    refs.forEach((section) => {
-      if (section) observer.observe(section);
-    });
-
-    return () => {
-      refs.forEach((section) => {
-        if (section) observer.unobserve(section);
-      });
-      observer.disconnect();
+    const checkMobile = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      setIsSidebarOpen(!mobile);
     };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  // Set default to last closure when closures are loaded
+  useEffect(() => {
+    if (closures.length > 0) {
+      const sortedClosures = [...closures].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+      const lastClosure = sortedClosures[sortedClosures.length - 1];
+      setStatsPeriod(lastClosure.id);
+    } else if (closures.length === 0) {
+      setStatsPeriod('all');
+    }
+  }, [closures]);
 
   const { toast } = useToast();
 
@@ -515,11 +519,11 @@ function FinanceDashboard() {
     isLoadingStock;
 
   const financialSummaryDetails = useMemo(() => {
-    const lastClosure = closures.length > 0 ? closures[closures.length - 1] : null;
+    const selectedClosure = statsPeriod === 'all' ? null : closures.find(c => c.id === statsPeriod);
 
     const filterByClosure = <T extends { created_at: string }>(items: T[]): T[] => {
-      if (!lastClosure) return items;
-      return items.filter(item => new Date(item.created_at) >= new Date(lastClosure.startDate));
+      if (!selectedClosure) return items;
+      return items.filter(item => new Date(item.created_at) >= new Date(selectedClosure.startDate));
     };
 
     const filteredSales = filterByClosure(sales);
@@ -671,12 +675,13 @@ function FinanceDashboard() {
     const capitalBreakdown = (() => {
       const out = [] as Array<{ month: string; income: number; costs: number; net: number; cumulative: number }>;
       if (closures.length === 0) return out;
-      const sorted = [...closures].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()).slice(-6);
+      const sorted = [...closures].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+      const relevantClosures = statsPeriod === 'all' ? sorted.slice(-6) : (selectedClosure ? sorted.filter(c => new Date(c.startDate) <= new Date(selectedClosure.startDate)).slice(-6) : sorted.slice(-6));
       let totalIngresos = 0;
       let totalCostos = 0;
-      sorted.forEach((c, idx) => {
+      relevantClosures.forEach((c, idx) => {
         const start = new Date(c.startDate);
-        const next = sorted[idx + 1];
+        const next = relevantClosures[idx + 1];
         const end = next ? new Date(new Date(next.startDate).getTime() - 1) : new Date();
         const labelDate = new Date(Number(c.month.split('-')[0]), Number(c.month.split('-')[1]) - 1, 1);
         const label = labelDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
@@ -755,6 +760,7 @@ function FinanceDashboard() {
     stockHistory,
     customerRequests,
     closures,
+    statsPeriod,
   ]);
 
   const salesChartData = useMemo(() => {
@@ -994,6 +1000,30 @@ function FinanceDashboard() {
     return [1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages] as const;
   };
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStartX.current) return;
+    touchEndX.current = e.changedTouches[0].clientX;
+    const deltaX = touchEndX.current - touchStartX.current;
+    const threshold = 100;
+
+    if (isMobile) {
+      if (touchStartX.current < 50 && deltaX > threshold) {
+        // Swipe from left edge to right
+        setIsSidebarOpen(true);
+      } else if (isSidebarOpen && touchStartX.current > window.innerWidth - 50 && deltaX < -threshold) {
+        // Swipe from right edge to left
+        setIsSidebarOpen(false);
+      }
+    }
+
+    touchStartX.current = null;
+    touchEndX.current = null;
+  };
+
   const scrollToSection = (id: string) => {
     sectionRefs.current[id]?.scrollIntoView({
       behavior: 'smooth',
@@ -1004,55 +1034,253 @@ function FinanceDashboard() {
   const lastClosure = closures.length > 0 ? closures[closures.length - 1] : null;
 
   return (
-    <div className="bg-muted/40 min-h-screen">
-      <div className="flex">
-        <aside className="fixed top-0 left-0 h-full w-20 bg-background border-r flex flex-col items-center py-8 space-y-6 z-20">
-          <h1 className="font-bold text-primary">JP</h1>
-          <nav className="flex flex-col items-center space-y-4">
-            {navigationItems.map((item) => (
-              <Button
-                key={item.id}
-                variant={activeSection === item.id ? 'secondary' : 'ghost'}
-                size="icon"
-                className="rounded-lg"
-                onClick={() => scrollToSection(item.id)}
-              >
-                <item.icon className="h-5 w-5" />
-              </Button>
-            ))}
-          </nav>
-        </aside>
+    <div
+      className="bg-muted/40 min-h-screen w-full"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
+      <div className="flex w-full">
+        <AnimatePresence>
+          {isSidebarOpen && (
+            <motion.aside
+              initial={{ x: -80 }}
+              animate={{ x: 0 }}
+              exit={{ x: -80 }}
+              transition={{ duration: 0.3, ease: 'easeInOut' }}
+              className="fixed top-0 left-0 h-full w-20 bg-background border-r flex flex-col items-center py-8 space-y-6 z-20 hidden md:flex"
+            >
+              <h1 className="font-bold text-primary">JP</h1>
+              <nav className="flex flex-col items-center space-y-4">
+                {navigationItems.map((item) => (
+                  <Button
+                    key={item.id}
+                    variant={activeSection === item.id ? 'secondary' : 'ghost'}
+                    size="icon"
+                    className="rounded-lg"
+                    onClick={() => scrollToSection(item.id)}
+                  >
+                    <item.icon className="h-5 w-5" />
+                  </Button>
+                ))}
+              </nav>
+            </motion.aside>
+          )}
+        </AnimatePresence>
 
-        <div className="flex-1 ml-20">
-          <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm border-b py-4 px-8 flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold">Panel Financiero</h1>
-              <p className="text-sm text-muted-foreground">
-                {format(new Date(), "d 'de' MMMM, yyyy", { locale: es })}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Último cierre: {lastClosure ? format(new Date(lastClosure.startDate), "d 'de' MMMM, yyyy", { locale: es }) : 'Ninguno'}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center justify-end gap-3">
-              <div className="w-full md:w-auto md:min-w-[230px]">
-                <Select
-                  onValueChange={(value) => setStatsPeriod(value as StatsPeriod)}
-                  defaultValue={statsPeriod}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar período" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="daily">Hoy</SelectItem>
-                    <SelectItem value="weekly">Esta Semana</SelectItem>
-                    <SelectItem value="monthly">Este Mes</SelectItem>
-                    <SelectItem value="yearly">Este Año</SelectItem>
-                    <SelectItem value="all">Total Histórico</SelectItem>
-                  </SelectContent>
-                </Select>
+        <div className={`flex-1 w-full ${isSidebarOpen ? 'ml-0 md:ml-20' : 'ml-0'}`}>
+          <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm border-b py-3 md:py-4 px-0 md:px-8 flex justify-center md:justify-between items-center w-full">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="hidden md:inline-flex absolute left-0 top-0 h-full w-16 md:mr-4"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+            <div className="flex items-center gap-3 px-4 md:px-0 justify-center md:justify-start w-full md:w-auto ml-[36px]">
+              <div className="text-center md:text-left">
+                <h1 className="text-xl md:text-2xl font-bold mt-2">Dashboard Financiero</h1>
+                <p className="text-sm text-muted-foreground">
+                  {format(new Date(), "d 'de' MMMM, yyyy", { locale: es })}
+                </p>
+                <p className="text-xs md:text-sm text-muted-foreground">
+                  Último cierre: {lastClosure ? format(new Date(lastClosure.startDate), "d 'de' MMMM, yyyy", { locale: es }) : 'Ninguno'}
+                </p>
               </div>
-              <div className="flex flex-wrap items-center justify-end gap-2">
+            </div>
+            <div className="flex flex-wrap items-center justify-center md:justify-end gap-2 md:gap-3 px-4 md:px-0">
+              <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="icon" className="md:hidden">
+                    <Menu className="h-5 w-5" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="right" className="w-80">
+                  <SheetHeader>
+                    <SheetTitle>Opciones</SheetTitle>
+                  </SheetHeader>
+                  <div className="flex flex-col gap-4 mt-6">
+                    <div className="w-full">
+                      <Select
+                        onValueChange={(value) => setStatsPeriod(value as StatsPeriod)}
+                        defaultValue={statsPeriod}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar período" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Total Histórico</SelectItem>
+                          {closures.map((closure) => (
+                            <SelectItem key={closure.id} value={closure.id}>
+                              {closure.month}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={isClosing || isReverting || isLoadingClosures}
+                      onClick={async () => {
+                        if (isClosing || isReverting) return;
+                        setIsClosing(true);
+                        try {
+                          const today = new Date();
+                          console.log('Fecha del último cierre:', closures.length > 0 ? new Date(closures[closures.length - 1].startDate).toLocaleDateString() : 'Ninguno');
+                          const already = closures.some((closure) => {
+                            const date = new Date(closure.startDate);
+                            return (
+                              date.getFullYear() === today.getFullYear() &&
+                              date.getMonth() === today.getMonth() &&
+                              date.getDate() === today.getDate()
+                            );
+                          });
+                          if (already) {
+                            console.log('Error: Ya existe un cierre hoy');
+                            toast({
+                              title: 'Cierre ya registrado',
+                              description: 'Ya existe un cierre de caja hoy.',
+                            });
+                            return;
+                          }
+
+                          const newMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+                          const startDate = new Date(
+                            today.getFullYear(),
+                            today.getMonth(),
+                            today.getDate(),
+                            0,
+                            0,
+                            0,
+                            0,
+                          ).toISOString();
+                          const response = await fetch('/api/admin/finance-closures', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ month: newMonth, startDate }),
+                          });
+                          const result = await response.json().catch(() => null);
+                          if (!response.ok || !result?.success) {
+                            throw new Error(result?.error ?? 'No se pudo registrar el cierre de caja.');
+                          }
+
+                          const createdMonth =
+                            typeof result?.data?.month === 'string' ? (result.data.month as string) : newMonth;
+                          await refreshClosures();
+                          toast({
+                            title: 'Caja cerrada',
+                            description: `Se inició el período ${createdMonth}.`,
+                          });
+                        } catch (error) {
+                          console.error('[Finanzas] Error creando cierre:', error);
+                          const message =
+                            error instanceof Error
+                              ? error.message
+                              : 'No se pudo registrar el cierre de caja.';
+                          console.log('Error al hacer el cierre de caja:', message);
+                          toast({ variant: 'destructive', title: 'Error', description: message });
+                        } finally {
+                          setTimeout(() => setIsClosing(false), 300);
+                        }
+                      }}
+                    >
+                      {isClosing ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Cerrando…
+                        </>
+                      ) : (
+                        'Cerrar caja hoy'
+                      )}
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      disabled={isReverting || isClosing || closures.length <= 1 || isLoadingClosures}
+                      onClick={async () => {
+                        if (isReverting || isClosing) return;
+                        setIsReverting(true);
+                        try {
+                          if (closures.length <= 1) {
+                            toast({
+                              title: 'Nada para revertir',
+                              description: 'No hay cierres previos para revertir.',
+                            });
+                            return;
+                          }
+
+                          const sortedClosures = [...closures].sort(
+                            (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime(),
+                          );
+                          const lastEntry = sortedClosures[sortedClosures.length - 1];
+                          if (!lastEntry) {
+                            toast({
+                              title: 'Nada para revertir',
+                              description: 'No hay cierres previos para revertir.',
+                            });
+                            return;
+                          }
+
+                          const response = await fetch('/api/admin/finance-closures', {
+                            method: 'DELETE',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: lastEntry.id }),
+                          });
+                          const result = await response.json().catch(() => null);
+                          if (!response.ok || !result?.success) {
+                            throw new Error(result?.error ?? 'No se pudo revertir el cierre.');
+                          }
+
+                          await refreshClosures();
+                          toast({
+                            title: 'Cierre revertido',
+                            description: `Se eliminó el cierre de ${lastEntry.month}.`,
+                          });
+                        } catch (error) {
+                          console.error('[Finanzas] Error revirtiendo cierre:', error);
+                          const message =
+                            error instanceof Error
+                              ? error.message
+                              : 'No se pudo revertir el último cierre.';
+                          toast({ variant: 'destructive', title: 'Error', description: message });
+                        } finally {
+                          setTimeout(() => setIsReverting(false), 300);
+                        }
+                      }}
+                    >
+                      {isReverting ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Revirtiendo…
+                        </>
+                      ) : (
+                        'Revertir cierre'
+                      )}
+                    </Button>
+                    <ThemeToggle />
+                  </div>
+                </SheetContent>
+              </Sheet>
+              <div className="hidden md:flex flex-wrap items-center gap-2 md:gap-3">
+                <div className="w-full md:w-auto md:min-w-[230px]">
+                  <Select
+                    onValueChange={(value) => setStatsPeriod(value as StatsPeriod)}
+                    value={statsPeriod}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar período" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Total Histórico</SelectItem>
+                      {closures.map((closure) => (
+                        <SelectItem key={closure.id} value={closure.id}>
+                          {closure.month}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
@@ -1081,7 +1309,6 @@ function FinanceDashboard() {
                       }
 
                       const newMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-
                       const startDate = new Date(
                         today.getFullYear(),
                         today.getMonth(),
@@ -1194,12 +1421,12 @@ function FinanceDashboard() {
                     'Revertir cierre'
                   )}
                 </Button>
+                <ThemeToggle />
               </div>
-              <ThemeToggle />
             </div>
           </header>
 
-          <main className="p-8 space-y-8">
+          <main className="px-4 md:px-8 py-4 md:py-8 space-y-8">
             <motion.section
               id="resumen"
               ref={(el) => {
@@ -1208,10 +1435,10 @@ function FinanceDashboard() {
               variants={sectionVariants}
               initial="hidden"
               animate="visible"
-              className="scroll-mt-24"
+              className="scroll-mt-32"
             >
               <h2 className="text-2xl font-bold mb-4">Resumen Financiero</h2>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+              <div className="grid gap-3 md:gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                 <FinancialKpiCard
                   title="Ingreso por Productos"
                   value={`$${financialSummaryDetails.totalSales.toLocaleString()}`}
@@ -1456,10 +1683,10 @@ function FinanceDashboard() {
               initial="hidden"
               whileInView="visible"
               viewport={{ once: true, amount: 0.2 }}
-              className="scroll-mt-24"
+              className="scroll-mt-32"
             >
               <h2 className="text-2xl font-bold mb-4">Acciones Rápidas</h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
                 <Button variant="outline" className="h-20 flex-col" onClick={() => scrollToSection('costos')}>
                   <PlusCircle className="h-6 w-6 mb-1" />
                   <span>Agregar Costo</span>
@@ -1497,10 +1724,10 @@ function FinanceDashboard() {
               initial="hidden"
               whileInView="visible"
               viewport={{ once: true, amount: 0.2 }}
-              className="scroll-mt-24"
+              className="scroll-mt-32"
             >
               <h2 className="text-2xl font-bold mb-4">Insights Automáticos</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
                 {mostSoldProduct && (
                   <Card className="bg-primary/10 border-primary/20">
                     <CardHeader className="flex-row items-center gap-4 space-y-0">
@@ -1570,7 +1797,7 @@ function FinanceDashboard() {
               initial="hidden"
               whileInView="visible"
               viewport={{ once: true, amount: 0.2 }}
-              className="scroll-mt-24"
+              className="scroll-mt-32"
             >
               <h2 className="text-2xl font-bold mb-4">Gráficos de Evolución</h2>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -1646,7 +1873,7 @@ function FinanceDashboard() {
               initial="hidden"
               whileInView="visible"
               viewport={{ once: true, amount: 0.2 }}
-              className="scroll-mt-24"
+              className="scroll-mt-32"
             >
               <h2 className="text-2xl font-bold mb-4">Análisis de Categorías y Productos</h2>
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -1738,7 +1965,7 @@ function FinanceDashboard() {
               initial="hidden"
               whileInView="visible"
               viewport={{ once: true, amount: 0.2 }}
-              className="scroll-mt-24"
+              className="scroll-mt-32"
             >
               <h2 className="text-2xl font-bold mb-4">Rentabilidad por Producto</h2>
               <Card className="shadow-lg rounded-2xl">
@@ -1913,7 +2140,7 @@ function FinanceDashboard() {
               initial="hidden"
               whileInView="visible"
               viewport={{ once: true, amount: 0.2 }}
-              className="scroll-mt-24"
+              className="scroll-mt-32"
             >
               <h2 className="text-2xl font-bold mb-4">Gestión de Costos y Sueldos</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -2082,7 +2309,7 @@ function FinanceDashboard() {
               initial="hidden"
               whileInView="visible"
               viewport={{ once: true, amount: 0.2 }}
-              className="scroll-mt-24"
+              className="scroll-mt-32"
             >
               <h2 className="text-2xl font-bold mb-4">Análisis de Pedidos</h2>
               <Card className="shadow-lg rounded-2xl">
