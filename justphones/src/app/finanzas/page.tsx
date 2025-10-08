@@ -141,6 +141,7 @@ import type { MonetaryIncome } from '@/lib/monetary-income';
 import type { FixedCost } from '@/lib/fixed-costs';
 import type { StockHistory } from '@/lib/stock-history';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { Logo } from '@/components/icons/logo';
 
 const GastosIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
@@ -1311,7 +1312,7 @@ function FinanceDashboard() {
               transition={{ duration: 0.3, ease: 'easeInOut' }}
               className="fixed top-0 left-0 h-full w-20 bg-background border-r flex flex-col items-center py-8 space-y-6 z-20 hidden md:flex"
             >
-              <h1 className="font-bold text-primary">JP</h1>
+              <Logo className="w-12 h-12" />
               <nav className="flex flex-col items-center space-y-4">
                 {navigationItems.map((item) => (
                   <TooltipProvider key={item.id}>
