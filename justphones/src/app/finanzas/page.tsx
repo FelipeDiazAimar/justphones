@@ -162,6 +162,32 @@ const GastosIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+const VentasIcon = (props: React.SVGProps<SVGSVGElement>) => {
+  const { className, ...restProps } = props;
+  return (
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 48 48"
+      xmlns="http://www.w3.org/2000/svg"
+      className={`fill-black dark:fill-white ${className || ''}`}
+      {...restProps}
+    >
+    <g id="Layer_2" data-name="Layer 2">
+      <g id="invisible_box" data-name="invisible box">
+        <rect width="48" height="48" fill="none" />
+      </g>
+      <g id="Icons">
+        <g>
+          <path fill="currentColor" d="M42.2,31.7a4.6,4.6,0,0,0-4-1.1l-9.9,1.7A4.7,4.7,0,0,0,26.9,29l-7.1-7H5a2,2,0,0,0,0,4H18.2l5.9,5.9a.8.8,0,0,1,0,1.1.9.9,0,0,1-1.2,0l-3.5-3.5a2.1,2.1,0,0,0-2.8,0,2.1,2.1,0,0,0,0,2.9l3.5,3.4a4.5,4.5,0,0,0,3.4,1.4,5.7,5.7,0,0,0,1.8-.3h0l13.6-2.4a1,1,0,0,1,.8.2,1.1,1.1,0,0,1,.3.7,1,1,0,0,1-.8,1L20.6,39.8,9.7,30.9H5a2,2,0,0,0,0,4H8.3L19.4,44l20.5-3.7A4.9,4.9,0,0,0,44,35.4,4.6,4.6,0,0,0,42.2,31.7Z" />
+          <path fill="currentColor" d="M34.3,20.1h0a6.7,6.7,0,0,1-4.1-1.3,2,2,0,0,0-2.8.6,1.8,1.8,0,0,0,.3,2.6A10.9,10.9,0,0,0,32,23.8V26a2,2,0,0,0,4,0V23.8a6.3,6.3,0,0,0,3-1.3,4.9,4.9,0,0,0,2-4h0c0-3.7-3.4-4.9-6.3-5.5s-3.5-1.3-3.5-1.8.2-.6.5-.9a3.4,3.4,0,0,1,1.8-.4,6.3,6.3,0,0,1,3.3.9,1.8,1.8,0,0,0,2.7-.5,1.9,1.9,0,0,0-.4-2.8A9.1,9.1,0,0,0,36,6.3V4a2,2,0,0,0-4,0V6.2c-3,.5-5,2.5-5,5.2s3.3,4.9,6.5,5.5,3.3,1.3,3.3,1.8S35.7,20.1,34.3,20.1Z" />
+        </g>
+      </g>
+    </g>
+  </svg>
+  );
+};
+
 const sectionVariants = {
   hidden: { opacity: 0, y: 20 },
   visible: {
@@ -181,9 +207,10 @@ const navigationItems = [
   { id: 'graficos', label: 'Gráficos', icon: BarChart },
   { id: 'categorias', label: 'Categorías', icon: PieIcon },
   { id: 'rentabilidad', label: 'Rentabilidad', icon: TrendingUp },
+  { id: 'popularidad', label: 'Popularidad', icon: TrendingUp },
   { id: 'costos', label: 'Gastos', icon: GastosIcon },
   { id: 'pedidos', label: 'Pedidos', icon: PackageSearch },
-  { id: 'ventas-historial', label: 'Ventas', icon: ShoppingBag },
+  { id: 'ventas-historial', label: 'Ventas', icon: VentasIcon },
 ];
 
 const fixedCostSchema = z.object({
@@ -394,6 +421,7 @@ function FinanceDashboard() {
   const [rentabilidadCurrentPage, setRentabilidadCurrentPage] = useState(1);
   const [lowRotationCurrentPage, setLowRotationCurrentPage] = useState(1);
   const [stockRecommendationsCurrentPage, setStockRecommendationsCurrentPage] = useState(1);
+  const [popularityCurrentPage, setPopularityCurrentPage] = useState(1);
   const [expandedStockProducts, setExpandedStockProducts] = useState<Set<string>>(new Set());
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [statsPeriod, setStatsPeriod] = useState<StatsPeriod>('');
@@ -927,6 +955,22 @@ function FinanceDashboard() {
   const handleRentabilidadPageChange = (page: number) => {
     if (page < 1 || page > rentabilidadTotalPages) return;
     setRentabilidadCurrentPage(page);
+  };
+
+  const paginatedPopularity = useMemo(() => {
+    return productPopularityData.slice(
+      (popularityCurrentPage - 1) * ITEMS_PER_PAGE_RENTABILIDAD,
+      popularityCurrentPage * ITEMS_PER_PAGE_RENTABILIDAD,
+    );
+  }, [productPopularityData, popularityCurrentPage]);
+
+  const popularityTotalPages = Math.ceil(
+    productPopularityData.length / ITEMS_PER_PAGE_RENTABILIDAD,
+  );
+
+  const handlePopularityPageChange = (page: number) => {
+    if (page < 1 || page > popularityTotalPages) return;
+    setPopularityCurrentPage(page);
   };
 
   const handleRentabilidadSort = (
@@ -1970,18 +2014,9 @@ function FinanceDashboard() {
                   <Package className="h-6 w-6 mb-1" />
                   <span>Ver Pedidos</span>
                 </Button>
-                <Button
-                  variant="outline"
-                  className="h-20 flex-col"
-                  onClick={() => {
-                    if (mostSoldProduct) {
-                      const rentabilidadSection = document.getElementById('rentabilidad');
-                      rentabilidadSection?.scrollIntoView({ behavior: 'smooth' });
-                    }
-                  }}
-                >
-                  <TrendingUp className="h-6 w-6 mb-1" />
-                  <span>Analizar Rentabilidad</span>
+                <Button variant="outline" className="h-20 flex-col" onClick={() => scrollToSection('ventas-historial')}>
+                  <VentasIcon className="h-6 w-6 mb-1" />
+                  <span>Visualizar ventas</span>
                 </Button>
               </div>
             </motion.section>
@@ -2002,7 +2037,7 @@ function FinanceDashboard() {
                 {mostSoldProduct && (
                   <Card className="bg-primary/10 border-primary/20">
                     <CardHeader className="flex-row items-center gap-4 space-y-0">
-                      <ShoppingBag className="h-8 w-8 text-primary" />
+                      <VentasIcon className="h-8 w-8" />
                       <div>
                         <CardTitle>Producto Estrella</CardTitle>
                         <CardDescription>El más vendido</CardDescription>
@@ -2695,6 +2730,114 @@ function FinanceDashboard() {
                             <PaginationNext
                               onClick={() => handleRentabilidadPageChange(rentabilidadCurrentPage + 1)}
                               disabled={rentabilidadCurrentPage === rentabilidadTotalPages}
+                            />
+                          </PaginationItem>
+                        </PaginationContent>
+                      </Pagination>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </motion.section>
+
+            <motion.section
+              id="popularidad"
+              ref={(el) => {
+                sectionRefs.current['popularidad'] = el;
+              }}
+              variants={sectionVariants}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, amount: 0.2 }}
+              className="scroll-mt-32"
+            >
+              <h2 className="text-2xl font-bold mb-4">Análisis de Popularidad de Productos</h2>
+              <Card className="shadow-lg rounded-2xl">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-primary" />
+                    Análisis de Popularidad de Productos
+                  </CardTitle>
+                  <CardDescription>
+                    Compara vistas, pedidos y ventas para identificar tendencias y oportunidades.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center gap-2 mb-4">
+                    <span className="text-sm font-medium">Ordenar por:</span>
+                    <Button variant={popularitySort === 'sales' ? 'default' : 'outline'} size="sm" onClick={() => setPopularitySort('sales')}>Ventas</Button>
+                    <Button variant={popularitySort === 'requests' ? 'default' : 'outline'} size="sm" onClick={() => setPopularitySort('requests')}>Pedidos</Button>
+                    <Button variant={popularitySort === 'views' ? 'default' : 'outline'} size="sm" onClick={() => setPopularitySort('views')}>Vistas</Button>
+                  </div>
+                  <div className="border rounded-lg">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Producto</TableHead>
+                          <TableHead className="text-center">Vistas</TableHead>
+                          <TableHead className="text-center">Pedidos</TableHead>
+                          <TableHead className="text-center">Ventas</TableHead>
+                          <TableHead className="text-center">Stock</TableHead>
+                          <TableHead className="text-center">Conversión (Venta/Pedido)</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paginatedPopularity.map((product) => (
+                          <TableRow key={product.id}>
+                            <TableCell>
+                              <p className="font-medium">{product.name}</p>
+                              <p className="text-xs text-muted-foreground">{product.model}</p>
+                            </TableCell>
+                            <TableCell className="text-center font-medium">{product.views}</TableCell>
+                            <TableCell className="text-center font-medium">{product.requests}</TableCell>
+                            <TableCell className="text-center font-bold text-primary">{product.sales}</TableCell>
+                            <TableCell className="text-center font-medium">{product.stock}</TableCell>
+                            <TableCell className="text-center font-medium">
+                              {product.requests > 0 ? `${((product.sales / product.requests) * 100).toFixed(0)}%` : '0%'}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {popularityTotalPages > 1 && (
+                    <div className="mt-6">
+                      <Pagination>
+                        <PaginationContent>
+                          <PaginationItem>
+                            <PaginationPrevious
+                              onClick={() => handlePopularityPageChange(popularityCurrentPage - 1)}
+                              disabled={popularityCurrentPage === 1}
+                            />
+                          </PaginationItem>
+
+                          <div className="hidden sm:flex items-center gap-1">
+                            {getPageNumbers(popularityTotalPages, popularityCurrentPage).map((page, index) => (
+                              <PaginationItem key={index}>
+                                {typeof page === 'number' ? (
+                                  <PaginationLink
+                                    onClick={() => handlePopularityPageChange(page)}
+                                    isActive={popularityCurrentPage === page}
+                                  >
+                                    {page}
+                                  </PaginationLink>
+                                ) : (
+                                  <PaginationEllipsis />
+                                )}
+                              </PaginationItem>
+                            ))}
+                          </div>
+
+                          <PaginationItem className="sm:hidden flex items-center gap-2">
+                            <span className="font-medium text-sm">
+                              Página {popularityCurrentPage} de {popularityTotalPages}
+                            </span>
+                          </PaginationItem>
+
+                          <PaginationItem>
+                            <PaginationNext
+                              onClick={() => handlePopularityPageChange(popularityCurrentPage + 1)}
+                              disabled={popularityCurrentPage === popularityTotalPages}
                             />
                           </PaginationItem>
                         </PaginationContent>
