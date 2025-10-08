@@ -48,6 +48,7 @@ import {
   PackageSearch,
   PlusCircle,
   Trash,
+  Edit,
   Wallet,
   ChevronDown,
   BarChart,
@@ -62,6 +63,7 @@ import {
   Loader2,
   PiggyBank,
   Menu,
+  Brain,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -105,6 +107,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -125,12 +128,37 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import type { Product } from '@/lib/products';
 import type { SalaryWithdrawal } from '@/lib/salary-withdrawals';
 import type { MonetaryIncome } from '@/lib/monetary-income';
 import type { FixedCost } from '@/lib/fixed-costs';
 import type { StockHistory } from '@/lib/stock-history';
 import { ThemeToggle } from '@/components/theme-toggle';
+
+const GastosIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    {...props}
+  >
+    <path
+      d="M12 3V9M12 3L9.5 5.5M12 3L14.5 5.5M5.82333 9.00037C6.2383 9.36683 6.5 9.90285 6.5 10.5C6.5 11.6046 5.60457 12.5 4.5 12.5C3.90285 12.5 3.36683 12.2383 3.00037 11.8233M5.82333 9.00037C5.94144 9 6.06676 9 6.2 9H8M5.82333 9.00037C4.94852 9.00308 4.46895 9.02593 4.09202 9.21799C3.71569 9.40973 3.40973 9.71569 3.21799 10.092C3.02593 10.469 3.00308 10.9485 3.00037 11.8233M3.00037 11.8233C3 11.9414 3 12.0668 3 12.2V17.8C3 17.9332 3 18.0586 3.00037 18.1767M3.00037 18.1767C3.36683 17.7617 3.90285 17.5 4.5 17.5C5.60457 17.5 6.5 18.3954 6.5 19.5C6.5 20.0971 6.2383 20.6332 5.82333 20.9996M3.00037 18.1767C3.00308 19.0515 3.02593 19.5311 3.21799 19.908C3.40973 20.2843 3.71569 20.5903 4.09202 20.782C4.46895 20.9741 4.94852 20.9969 5.82333 20.9996M5.82333 20.9996C5.94144 21 6.06676 21 6.2 21H17.8C17.9332 21 18.0586 21 18.1767 20.9996M21 18.1771C20.6335 17.7619 20.0973 17.5 19.5 17.5C18.3954 17.5 17.5 18.3954 17.5 19.5C17.5 20.0971 17.7617 20.6332 18.1767 20.9996M21 18.1771C21.0004 18.0589 21 17.9334 21 17.8V12.2C21 12.0668 21 11.9414 20.9996 11.8233M21 18.1771C20.9973 19.0516 20.974 19.5311 20.782 19.908C20.5903 20.2843 20.2843 20.5903 19.908 20.782C19.5311 20.9741 19.0515 20.9969 18.1767 20.9996M20.9996 11.8233C20.6332 12.2383 20.0971 12.5 19.5 12.5C18.3954 12.5 17.5 11.6046 17.5 10.5C17.5 9.90285 17.7617 9.36683 18.1767 9.00037M20.9996 11.8233C20.9969 10.9485 20.9741 10.469 20.782 10.092C20.5903 9.71569 20.2843 9.40973 19.908 9.21799C19.5311 9.02593 19.0515 9.00308 18.1767 9.00037M18.1767 9.00037C18.0586 9 17.9332 9 17.8 9H16M14 15C14 16.1046 13.1046 17 12 17C10.8954 17 10 16.1046 10 15C10 13.8954 10.8954 13 12 13C13.1046 13 14 13.8954 14 15Z"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
 
 const sectionVariants = {
   hidden: { opacity: 0, y: 20 },
@@ -151,7 +179,7 @@ const navigationItems = [
   { id: 'graficos', label: 'Gráficos', icon: BarChart },
   { id: 'categorias', label: 'Categorías', icon: PieIcon },
   { id: 'rentabilidad', label: 'Rentabilidad', icon: TrendingUp },
-  { id: 'costos', label: 'Costos', icon: Settings },
+  { id: 'costos', label: 'Gastos', icon: GastosIcon },
   { id: 'pedidos', label: 'Pedidos', icon: PackageSearch },
 ];
 
@@ -167,11 +195,13 @@ const salaryWithdrawalSchema = z.object({
 
 const monetaryIncomeSchema = z.object({
   name: z.string().min(1, 'El nombre es requerido.'),
-  amount: z.coerce.number().min(1, 'El monto debe ser mayor a 1.'),
+  amount: z.coerce.number().min(-999999, 'El monto debe ser mayor a -999999.').max(999999, 'El monto debe ser menor a 999999.'),
   description: z.string().optional(),
 });
 
 const ITEMS_PER_PAGE_RENTABILIDAD = 8;
+const ITEMS_PER_PAGE_LOW_ROTATION = 5;
+const ITEMS_PER_PAGE_STOCK_RECOMMENDATIONS = 3;
 type StatsPeriod = string; // 'all' or closure ID
 
 type ClosureEntry = {
@@ -338,13 +368,14 @@ function FinanceDashboard() {
   const { customerRequests, isLoading: isLoadingRequests } = useCustomerRequests();
   const { productViews, isLoading: isLoadingViews } = useProductViews();
   const { stockHistory, isLoading: isLoadingStock } = useStockHistory();
-  const { fixedCosts, addFixedCost, deleteFixedCost } = useFixedCosts();
+  const { fixedCosts, addFixedCost, updateFixedCost, deleteFixedCost } = useFixedCosts();
   const {
     salaryWithdrawals,
     addSalaryWithdrawal,
+    updateSalaryWithdrawal,
     deleteSalaryWithdrawal,
   } = useSalaryWithdrawals();
-  const { monetaryIncome, addMonetaryIncome, deleteMonetaryIncome } = useMonetaryIncome();
+  const { monetaryIncome, addMonetaryIncome, updateMonetaryIncome, deleteMonetaryIncome } = useMonetaryIncome();
 
   const [closures, setClosures] = useState<ClosureEntry[]>([]);
   const [isLoadingClosures, setIsLoadingClosures] = useState(true);
@@ -356,11 +387,21 @@ function FinanceDashboard() {
     direction: 'asc' | 'desc';
   }>({ column: 'profit', direction: 'desc' });
   const [rentabilidadCurrentPage, setRentabilidadCurrentPage] = useState(1);
+  const [lowRotationCurrentPage, setLowRotationCurrentPage] = useState(1);
+  const [stockRecommendationsCurrentPage, setStockRecommendationsCurrentPage] = useState(1);
+  const [expandedStockProducts, setExpandedStockProducts] = useState<Set<string>>(new Set());
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [statsPeriod, setStatsPeriod] = useState<StatsPeriod>('');
   const [activeSection, setActiveSection] = useState('resumen');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [editingFixedCostId, setEditingFixedCostId] = useState<string | null>(null);
+  const [editingSalaryId, setEditingSalaryId] = useState<string | null>(null);
+  const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
+  const [editingFixedCostValues, setEditingFixedCostValues] = useState<{ name: string; amount: number } | null>(null);
+  const [editingSalaryValues, setEditingSalaryValues] = useState<{ description: string; amount: number } | null>(null);
+  const [editingIncomeValues, setEditingIncomeValues] = useState<{ name: string; amount: number } | null>(null);
 
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const touchStartX = useRef<number | null>(null);
@@ -949,8 +990,82 @@ function FinanceDashboard() {
   const lowStockPopularProducts = useMemo(() => {
     return productPopularityData
       .filter((p) => p.stock <= 5 && p.sales > 0)
-      .sort((a, b) => b.sales - a.sales);
+      .sort((a, b) => {
+        // Primero ordenar por stock ascendente (menos stock primero)
+        if (a.stock !== b.stock) {
+          return a.stock - b.stock;
+        }
+        // Si tienen el mismo stock, ordenar por ventas descendentes
+        return b.sales - a.sales;
+      });
   }, [productPopularityData]);
+
+  const lowRotationProducts = useMemo(() => {
+    const thirtyDaysAgo = subDays(new Date(), 30);
+    const productsWithRecentSales = new Set(
+      sales
+        .filter(sale => new Date(sale.created_at) >= thirtyDaysAgo)
+        .map(sale => sale.product_id)
+    );
+    return products
+      .filter(product => {
+        const hasStock = product.colors.some(color => color.stock > 0);
+        const hasRecentSale = productsWithRecentSales.has(product.id);
+        return hasStock && !hasRecentSale;
+      })
+      .map(product => ({
+        ...product,
+        totalStock: product.colors.reduce((sum, c) => sum + c.stock, 0)
+      }));
+  }, [products, sales]);
+
+  const paginatedLowRotation = useMemo(() => {
+    return lowRotationProducts.slice(
+      (lowRotationCurrentPage - 1) * ITEMS_PER_PAGE_LOW_ROTATION,
+      lowRotationCurrentPage * ITEMS_PER_PAGE_LOW_ROTATION,
+    );
+  }, [lowRotationProducts, lowRotationCurrentPage]);
+
+  const lowRotationTotalPages = useMemo(() => {
+    return Math.ceil(lowRotationProducts.length / ITEMS_PER_PAGE_LOW_ROTATION);
+  }, [lowRotationProducts.length]);
+
+  const handleLowRotationPageChange = useCallback((page: number) => {
+    if (page < 1 || page > lowRotationTotalPages) return;
+    setLowRotationCurrentPage(page);
+  }, [lowRotationTotalPages]);
+
+  const growingCategoriesData = useMemo(() => {
+    return categoryRevenueData
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5); // Top 5 categorías
+  }, [categoryRevenueData]);
+
+  const topProductsByCategory = useMemo(() => {
+    if (!selectedCategory) return [];
+    
+    const categoryProducts = products.filter(product => 
+      unslugify(product.category) === selectedCategory
+    );
+    
+    const productSales = categoryProducts.map(product => {
+      const salesCount = sales
+        .filter(sale => sale.product_id === product.id)
+        .reduce((sum, sale) => sum + sale.quantity, 0);
+      
+      return {
+        ...product,
+        salesCount,
+        totalRevenue: sales
+          .filter(sale => sale.product_id === product.id)
+          .reduce((sum, sale) => sum + sale.total_price, 0)
+      };
+    });
+    
+    return productSales
+      .sort((a, b) => b.salesCount - a.salesCount)
+      .slice(0, 3);
+  }, [selectedCategory, products, sales]);
 
   const COLORS = [
     'hsl(var(--chart-1))',
@@ -959,6 +1074,118 @@ function FinanceDashboard() {
     'hsl(var(--chart-4))',
     'hsl(var(--chart-5))',
   ];
+
+  const lowStockRecommendations = useMemo(() => {
+    // Agrupar productos por nombre
+    const groupedByName = products.reduce((acc, product) => {
+      const name = unslugify(product.name);
+      if (!acc[name]) {
+        acc[name] = [];
+      }
+      acc[name].push(product);
+      return acc;
+    }, {} as Record<string, typeof products>);
+
+    // Para cada grupo, calcular recomendaciones
+    const recommendations = Object.entries(groupedByName).map(([productName, productVariants]) => {
+      // Ordenar por modelo
+      const sortedVariants = productVariants.sort((a, b) => a.model.localeCompare(b.model));
+      
+      // Calcular stock total por variante
+      const variantsWithStock = sortedVariants.map(variant => {
+        const totalStock = variant.colors.reduce((sum, color) => sum + color.stock, 0);
+        const recommendedQuantity = Math.max(0, 5 - totalStock);
+        
+        return {
+          ...variant,
+          totalStock,
+          recommendedQuantity,
+          needsRestock: totalStock < 5
+        };
+      }).filter(variant => variant.needsRestock);
+
+      if (variantsWithStock.length === 0) return null;
+
+      return {
+        productName,
+        variants: variantsWithStock,
+        totalRecommended: variantsWithStock.reduce((sum, v) => sum + v.recommendedQuantity, 0)
+      };
+    }).filter(Boolean) as Array<{
+      productName: string;
+      variants: Array<{
+        id: string;
+        name: string;
+        model: string;
+        totalStock: number;
+        recommendedQuantity: number;
+        needsRestock: boolean;
+      }>;
+      totalRecommended: number;
+    }>;
+
+    return recommendations.sort((a, b) => a.productName.localeCompare(b.productName));
+  }, [products]);
+
+  const paginatedStockRecommendations = useMemo(() => {
+    // Separar productos grandes (> 4 modelos) y pequeños (≤ 4 modelos)
+    const largeProducts = lowStockRecommendations.filter(r => r.variants.length > 4);
+    const smallProducts = lowStockRecommendations.filter(r => r.variants.length <= 4);
+
+    // Calcular páginas dedicadas para productos grandes
+    const largeProductPages = largeProducts.length;
+
+    // Si estamos en una página dedicada a un producto grande
+    if (stockRecommendationsCurrentPage <= largeProductPages) {
+      const largeProductIndex = stockRecommendationsCurrentPage - 1;
+      return [largeProducts[largeProductIndex]];
+    }
+
+    // Para páginas con productos pequeños, agrupar de 3 en 3
+    const smallProductsStartPage = largeProductPages + 1;
+    const smallProductPageIndex = stockRecommendationsCurrentPage - smallProductsStartPage;
+    const startIndex = smallProductPageIndex * ITEMS_PER_PAGE_STOCK_RECOMMENDATIONS;
+    const endIndex = startIndex + ITEMS_PER_PAGE_STOCK_RECOMMENDATIONS;
+
+    return smallProducts.slice(startIndex, endIndex);
+  }, [lowStockRecommendations, stockRecommendationsCurrentPage]);
+
+  const stockRecommendationsTotalPages = useMemo(() => {
+    const largeProducts = lowStockRecommendations.filter(r => r.variants.length > 4);
+    const smallProducts = lowStockRecommendations.filter(r => r.variants.length <= 4);
+
+    // Páginas dedicadas para productos grandes (1 página por producto grande)
+    const largeProductPages = largeProducts.length;
+
+    // Páginas para productos pequeños (agrupados de 3 en 3)
+    const smallProductPages = Math.ceil(smallProducts.length / ITEMS_PER_PAGE_STOCK_RECOMMENDATIONS);
+
+    return largeProductPages + smallProductPages;
+  }, [lowStockRecommendations.length]);
+
+  const handleStockRecommendationsPageChange = useCallback((page: number) => {
+    if (page < 1 || page > stockRecommendationsTotalPages) return;
+    setStockRecommendationsCurrentPage(page);
+  }, [stockRecommendationsTotalPages]);
+
+  const toggleProductExpansion = useCallback((productName: string) => {
+    setExpandedStockProducts(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(productName)) {
+        newSet.delete(productName);
+      } else {
+        newSet.add(productName);
+      }
+      return newSet;
+    });
+  }, []);
+
+  // Set default category when growing categories data is loaded
+  useEffect(() => {
+    if (growingCategoriesData.length > 0 && !selectedCategory) {
+      setSelectedCategory(growingCategoriesData[0].name);
+    }
+  }, [growingCategoriesData, selectedCategory]);
 
   if (isLoading) {
     return (
@@ -1052,15 +1279,23 @@ function FinanceDashboard() {
               <h1 className="font-bold text-primary">JP</h1>
               <nav className="flex flex-col items-center space-y-4">
                 {navigationItems.map((item) => (
-                  <Button
-                    key={item.id}
-                    variant={activeSection === item.id ? 'secondary' : 'ghost'}
-                    size="icon"
-                    className="rounded-lg"
-                    onClick={() => scrollToSection(item.id)}
-                  >
-                    <item.icon className="h-5 w-5" />
-                  </Button>
+                  <TooltipProvider key={item.id}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant={activeSection === item.id ? 'secondary' : 'ghost'}
+                          size="icon"
+                          className="rounded-lg"
+                          onClick={() => scrollToSection(item.id)}
+                        >
+                          <item.icon className="h-5 w-5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>{item.label}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 ))}
               </nav>
             </motion.aside>
@@ -1447,18 +1682,18 @@ function FinanceDashboard() {
                   colorClass="text-green-500"
                   custom={0}
                 >
-                  <p className="font-semibold">Fórmula: SUMA(Cantidad vendida × Precio de venta)</p>
+                  <p className="font-semibold mt-4">Fórmula: SUMA(Cantidad vendida × Precio de venta)</p>
                   <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
                     {financialSummaryDetails.revenueBreakdown.map((item, index) => (
                       <div key={index} className="text-sm flex justify-between">
                         <span>{item.label}</span>
-                        <span className={item.isNegative ? 'text-red-600' : ''}>
+                        <span className={item.isNegative ? 'text-red-600' : 'text-green-600'}>
                           {item.isNegative ? '-' : ''}${item.value.toLocaleString()}
                         </span>
                       </div>
                     ))}
                   </div>
-                  <p className="mt-2 font-semibold">Total: ${financialSummaryDetails.totalSales.toLocaleString()}</p>
+                  <p className="mt-2 font-semibold">Total: <span className="text-green-600">${financialSummaryDetails.totalSales.toLocaleString()}</span></p>
                 </FinancialKpiCard>
                 <FinancialKpiCard
                   title="Movimientos Monetarios"
@@ -1470,7 +1705,7 @@ function FinanceDashboard() {
                   colorClass={financialSummaryDetails.totalMonetaryIncome >= 0 ? 'text-green-500' : 'text-red-500'}
                   custom={1}
                 >
-                  <p className="font-semibold">Fórmula: SUMA(Ingresos) - SUMA(Egresos)</p>
+                  <p className="font-semibold mt-4">Fórmula: SUMA(Ingresos) - SUMA(Egresos)</p>
                   <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
                     {financialSummaryDetails.monetaryMovementsBreakdown.map((item, index) => (
                       <div key={index} className="text-sm flex justify-between">
@@ -1481,7 +1716,7 @@ function FinanceDashboard() {
                       </div>
                     ))}
                   </div>
-                  <p className="mt-2 font-semibold">Total: ${financialSummaryDetails.totalMonetaryIncome.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                  <p className="mt-2 font-semibold">Total: <span className={financialSummaryDetails.totalMonetaryIncome >= 0 ? 'text-green-600' : 'text-red-600'}>${financialSummaryDetails.totalMonetaryIncome.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
                 </FinancialKpiCard>
                 <FinancialKpiCard
                   title="Ingresos Totales"
@@ -1491,10 +1726,10 @@ function FinanceDashboard() {
                   colorClass="text-green-500"
                   custom={2}
                 >
-                  <p className="font-semibold">Fórmula: Ingreso por Productos + Movimientos Monetarios</p>
-                  <p>Ingreso por Productos: ${financialSummaryDetails.totalSales.toLocaleString()}</p>
-                  <p>Movimientos Monetarios: ${financialSummaryDetails.totalMonetaryIncome.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                  <p className="mt-2 font-semibold">Total: ${financialSummaryDetails.totalRevenue.toLocaleString()}</p>
+                  <p className="font-semibold mt-4">Fórmula: Ingreso por Productos + Movimientos Monetarios</p>
+                  <p>Ingreso por Productos: <span className="text-green-600">${financialSummaryDetails.totalSales.toLocaleString()}</span></p>
+                  <p>Movimientos Monetarios: <span className={financialSummaryDetails.totalMonetaryIncome >= 0 ? 'text-green-600' : 'text-red-600'}>${financialSummaryDetails.totalMonetaryIncome.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
+                  <p className="mt-2 font-semibold">Total: <span className="text-green-600">${financialSummaryDetails.totalRevenue.toLocaleString()}</span></p>
                 </FinancialKpiCard>
                 <FinancialKpiCard
                   title="Costos de Pedidos"
@@ -1506,7 +1741,7 @@ function FinanceDashboard() {
                   colorClass="text-orange-500"
                   custom={3}
                 >
-                  <p className="font-semibold">Fórmula: SUMA(Costos por pedido)</p>
+                  <p className="font-semibold mt-4">Fórmula: SUMA(Costos por pedido)</p>
                   <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
                     {financialSummaryDetails.pedidoCostsBreakdown.map((item, index) => (
                       <div key={index} className="text-sm flex justify-between">
@@ -1517,7 +1752,7 @@ function FinanceDashboard() {
                       </div>
                     ))}
                   </div>
-                  <p className="mt-2 font-semibold">Total: ${financialSummaryDetails.totalStockInvestment.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                  <p className="mt-2 font-semibold">Total: <span className="text-red-600">${financialSummaryDetails.totalStockInvestment.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
                 </FinancialKpiCard>
                 <FinancialKpiCard
                   title="Costos Fijos"
@@ -1529,7 +1764,7 @@ function FinanceDashboard() {
                   colorClass="text-slate-500"
                   custom={4}
                 >
-                  <p className="font-semibold">Fórmula: SUMA(Costos fijos en período)</p>
+                  <p className="font-semibold mt-4">Fórmula: SUMA(Costos fijos en período)</p>
                   <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
                     {financialSummaryDetails.fixedCostsBreakdown.map((item, index) => (
                       <div key={index} className="text-sm flex justify-between">
@@ -1540,7 +1775,7 @@ function FinanceDashboard() {
                       </div>
                     ))}
                   </div>
-                  <p className="mt-2 font-semibold">Total: ${financialSummaryDetails.totalFixedCostsForPeriod.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                  <p className="mt-2 font-semibold">Total: <span className="text-red-600">${financialSummaryDetails.totalFixedCostsForPeriod.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
                 </FinancialKpiCard>
                 <FinancialKpiCard
                   title="Extracción de Sueldos"
@@ -1552,7 +1787,7 @@ function FinanceDashboard() {
                   colorClass="text-blue-500"
                   custom={5}
                 >
-                  <p className="font-semibold">Fórmula: SUMA(Extracciones registradas)</p>
+                  <p className="font-semibold mt-4">Fórmula: SUMA(Extracciones registradas)</p>
                   <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
                     {financialSummaryDetails.salaryWithdrawalsBreakdown.map((item, index) => (
                       <div key={index} className="text-sm flex justify-between">
@@ -1563,7 +1798,7 @@ function FinanceDashboard() {
                       </div>
                     ))}
                   </div>
-                  <p className="mt-2 font-semibold">Total: ${financialSummaryDetails.totalSalaryWithdrawn.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                  <p className="mt-2 font-semibold">Total: <span className="text-red-600">${financialSummaryDetails.totalSalaryWithdrawn.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
                 </FinancialKpiCard>
                 <FinancialKpiCard
                   title="Costos Totales"
@@ -1575,11 +1810,11 @@ function FinanceDashboard() {
                   colorClass="text-red-500"
                   custom={6}
                 >
-                  <p className="font-semibold">Fórmula: Costos de Pedidos + Costos Fijos + Extracción de Sueldos</p>
-                  <p>Costos de Pedidos: ${financialSummaryDetails.totalStockInvestment.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                  <p>Costos Fijos: ${financialSummaryDetails.totalFixedCostsForPeriod.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                  <p>Extracción de Sueldos: ${financialSummaryDetails.totalSalaryWithdrawn.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                  <p className="mt-2 font-semibold">Total: ${financialSummaryDetails.totalCosts.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                  <p className="font-semibold mt-4">Fórmula: Costos de Pedidos + Costos Fijos + Extracción de Sueldos</p>
+                  <p>Costos de Pedidos: <span className="text-red-600">${financialSummaryDetails.totalStockInvestment.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
+                  <p>Costos Fijos: <span className="text-red-600">${financialSummaryDetails.totalFixedCostsForPeriod.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
+                  <p>Extracción de Sueldos: <span className="text-red-600">${financialSummaryDetails.totalSalaryWithdrawn.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
+                  <p className="mt-2 font-semibold">Total: <span className="text-red-600">${financialSummaryDetails.totalCosts.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
                 </FinancialKpiCard>
                 <FinancialKpiCard
                   title="Ganancia"
@@ -1591,10 +1826,10 @@ function FinanceDashboard() {
                   colorClass={financialSummaryDetails.netProfit >= 0 ? 'text-green-500' : 'text-red-500'}
                   custom={7}
                 >
-                  <p className="font-semibold">Fórmula: Ingresos Totales - Costos Totales</p>
-                  <p>Ingresos Totales: ${financialSummaryDetails.totalRevenue.toLocaleString()}</p>
-                  <p>Costos Totales: ${financialSummaryDetails.totalCosts.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                  <p className="mt-2 font-semibold">Total: ${financialSummaryDetails.netProfit.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                  <p className="font-semibold mt-4">Fórmula: Ingresos Totales - Costos Totales</p>
+                  <p>Ingresos Totales: <span className="text-green-600">${financialSummaryDetails.totalRevenue.toLocaleString()}</span></p>
+                  <p>Costos Totales: <span className="text-red-600">${financialSummaryDetails.totalCosts.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
+                  <p className="mt-2 font-semibold">Total: <span className={financialSummaryDetails.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}>${financialSummaryDetails.netProfit.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
                 </FinancialKpiCard>
                 <FinancialKpiCard
                   title="Patrimonio Total"
@@ -1605,7 +1840,7 @@ function FinanceDashboard() {
                   detail="Valor de productos en stock"
                   custom={8}
                 >
-                  <p className="font-semibold">Fórmula: SUMA(Costo del producto × Stock)</p>
+                  <p className="font-semibold mt-4">Fórmula: SUMA(Costo del producto × Stock)</p>
                   <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
                     {financialSummaryDetails.stockValueBreakdown.map((item, index) => (
                       <div key={index} className="text-sm flex justify-between">
@@ -1616,7 +1851,7 @@ function FinanceDashboard() {
                       </div>
                     ))}
                   </div>
-                  <p className="mt-2 font-semibold">Total: ${financialSummaryDetails.netWorth.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                  <p className="mt-2 font-semibold">Total: <span className="text-green-600">${financialSummaryDetails.netWorth.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
                 </FinancialKpiCard>
                 <FinancialKpiCard
                   title="Capital Disponible"
@@ -1627,14 +1862,14 @@ function FinanceDashboard() {
                   detail="Dinero líquido histórico"
                   custom={9}
                 >
-                  <p className="font-semibold">Fórmula: Capital acumulado desde julio 2025 (fecha de inicio del negocio)</p>
+                  <p className="font-semibold mt-4">Fórmula: Capital acumulado desde julio 2025 (fecha de inicio del negocio)</p>
                   <p className="font-semibold">Cálculos:</p>
                   <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
                     {financialSummaryDetails.capitalBreakdown.map((item, index) => (
                       <div key={index} className="text-sm space-y-1">
                         <div className="flex justify-between">
                           <span>{item.month} ingresos</span>
-                          <span>${item.income.toLocaleString()}</span>
+                          <span className="text-green-600">${item.income.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>{item.month} costos</span>
@@ -1643,10 +1878,10 @@ function FinanceDashboard() {
                       </div>
                     ))}
                   </div>
-                  <p className="mt-2 font-semibold">Total Ingresos Históricos: ${financialSummaryDetails.totalHistoricalIncome.toLocaleString()}</p>
-                  <p className="mt-2 font-semibold">Total Costos Históricos: -${financialSummaryDetails.totalHistoricalCosts.toLocaleString()}</p>
-                  <p className="mt-2 font-semibold">Capital Disponible: ${financialSummaryDetails.availableCapital.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                  <p className="mt-2 font-semibold">Total: ${financialSummaryDetails.availableCapital.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                  <p className="mt-2 font-semibold">Total Ingresos Históricos: <span className="text-green-600">${financialSummaryDetails.totalHistoricalIncome.toLocaleString()}</span></p>
+                  <p className="mt-2 font-semibold">Total Costos Históricos: <span className="text-red-600">-${financialSummaryDetails.totalHistoricalCosts.toLocaleString()}</span></p>
+                  <p className="mt-2 font-semibold">Capital Disponible: <span className="text-green-600">${financialSummaryDetails.availableCapital.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
+                  <p className="mt-2 font-semibold">Total: <span className="text-green-600">${financialSummaryDetails.availableCapital.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
                 </FinancialKpiCard>
                 <FinancialKpiCard
                   title="Items Vendidos"
@@ -1656,7 +1891,7 @@ function FinanceDashboard() {
                   colorClass="text-amber-500"
                   custom={10}
                 >
-                  <p className="font-semibold">Fórmula: SUMA(Cantidades vendidas)</p>
+                  <p className="font-semibold mt-4">Fórmula: SUMA(Cantidades vendidas)</p>
                   <p>Total de unidades vendidas en el período.</p>
                 </FinancialKpiCard>
                 <FinancialKpiCard
@@ -1666,10 +1901,10 @@ function FinanceDashboard() {
                   detail="De pedidos a ventas"
                   custom={11}
                 >
-                  <p className="font-semibold">Fórmula: (Items Vendidos / Pedidos Totales) × 100</p>
-                  <p>Items Vendidos: {financialSummaryDetails.soldItemsCount}</p>
-                  <p>Pedidos Totales: {financialSummaryDetails.requestsCount}</p>
-                  <p className="mt-2 font-semibold">Total: {financialSummaryDetails.conversionRate.toFixed(1)}%</p>
+                  <p className="font-semibold mt-4">Fórmula: (Items Vendidos / Pedidos Totales) × 100</p>
+                  <p>Items Vendidos: <span className="text-amber-600">{financialSummaryDetails.soldItemsCount}</span></p>
+                  <p>Pedidos Totales: <span className="text-blue-600">{financialSummaryDetails.requestsCount}</span></p>
+                  <p className="mt-2 font-semibold">Total: <span className="text-green-600">{financialSummaryDetails.conversionRate.toFixed(1)}%</span></p>
                 </FinancialKpiCard>
               </div>
             </motion.section>
@@ -1784,6 +2019,236 @@ function FinanceDashboard() {
                       </p>
                     </CardContent>
                   </Card>
+                )}
+                {lowRotationProducts.length > 0 && (
+                  <motion.div
+                    variants={sectionVariants}
+                    initial="hidden"
+                    animate="visible"
+                    whileHover={{ scale: 1.02 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300 rounded-2xl bg-blue-500/10 border-blue-500/20">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Brain className="h-5 w-5" />
+                          Productos con baja rotación o sin venta
+                        </CardTitle>
+                        <CardDescription>
+                          Productos con stock disponible pero sin ventas en los últimos 30 días
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
+                          {paginatedLowRotation.map(product => (
+                            <div key={product.id} className="flex items-center justify-between p-2 bg-muted/50 rounded">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium">{unslugify(product.name)} ({product.model})</span>
+                                <Badge variant="secondary">Sin venta</Badge>
+                              </div>
+                              <span className="text-sm text-muted-foreground">Stock: {product.totalStock}</span>
+                            </div>
+                          ))}
+                        </div>
+                        {lowRotationTotalPages > 1 && (
+                          <div className="flex items-center justify-between mt-4">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleLowRotationPageChange(lowRotationCurrentPage - 1)}
+                              disabled={lowRotationCurrentPage === 1}
+                            >
+                              Anterior
+                            </Button>
+                            <span className="text-sm text-muted-foreground">
+                              Página {lowRotationCurrentPage} de {lowRotationTotalPages}
+                            </span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleLowRotationPageChange(lowRotationCurrentPage + 1)}
+                              disabled={lowRotationCurrentPage === lowRotationTotalPages}
+                            >
+                              Siguiente
+                            </Button>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                )}
+                {growingCategoriesData.length > 0 && (
+                  <motion.div
+                    variants={sectionVariants}
+                    initial="hidden"
+                    animate="visible"
+                    whileHover={{ scale: 1.02 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300 rounded-2xl bg-violet-500/10 border-violet-500/20">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <TrendingUp className="h-5 w-5" />
+                          Categorías en crecimiento
+                        </CardTitle>
+                        <CardDescription>
+                          Tendencias de ventas por categoría - selecciona una para ver los productos más vendidos
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          <div className="flex flex-col gap-2">
+                            <label className="text-sm font-medium">Seleccionar categoría:</label>
+                            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Elige una categoría" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {growingCategoriesData.map((category) => (
+                                  <SelectItem key={category.name} value={category.name}>
+                                    {category.name} - ${category.value.toLocaleString()}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          
+                          {selectedCategory && topProductsByCategory.length > 0 && (
+                            <div className="space-y-2">
+                              <h4 className="text-sm font-semibold">Top 3 productos en {selectedCategory}:</h4>
+                              {topProductsByCategory.map((product, index) => (
+                                <div key={product.id} className="flex items-center justify-between p-2 bg-muted/50 rounded">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full font-medium">
+                                      #{index + 1}
+                                    </span>
+                                    <span className="text-sm font-medium">{unslugify(product.name)} ({product.model})</span>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="text-sm font-semibold">${product.totalRevenue.toLocaleString()}</div>
+                                    <div className="text-xs text-muted-foreground">{product.salesCount} unidades</div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          
+                          {selectedCategory && topProductsByCategory.length === 0 && (
+                            <p className="text-sm text-muted-foreground text-center py-4">
+                              No hay productos vendidos en esta categoría
+                            </p>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                )}
+                {lowStockRecommendations.length > 0 && (
+                  <motion.div
+                    variants={sectionVariants}
+                    initial="hidden"
+                    animate="visible"
+                    whileHover={{ scale: 1.02 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300 rounded-2xl bg-white/10 border-white/20">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Package className="h-5 w-5" />
+                          Recomendaciones de Stock
+                        </CardTitle>
+                        <CardDescription>
+                          Productos con bajo inventario - sugerencias para mantener stock mínimo de 5 unidades
+                        </CardDescription>
+                        {stockRecommendationsTotalPages > 1 && (
+                          <div className="flex items-center justify-between mt-4">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleStockRecommendationsPageChange(stockRecommendationsCurrentPage - 1)}
+                              disabled={stockRecommendationsCurrentPage === 1}
+                            >
+                              Anterior
+                            </Button>
+                            <span className="text-sm text-muted-foreground">
+                              Página {stockRecommendationsCurrentPage} de {stockRecommendationsTotalPages}
+                            </span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleStockRecommendationsPageChange(stockRecommendationsCurrentPage + 1)}
+                              disabled={stockRecommendationsCurrentPage === stockRecommendationsTotalPages}
+                            >
+                              Siguiente
+                            </Button>
+                          </div>
+                        )}
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          {paginatedStockRecommendations.map((recommendation, index) => {
+                            const isExpanded = expandedStockProducts.has(recommendation.productName);
+                            const hasManyModels = recommendation.variants.length > 4;
+                            
+                            return (
+                              <div key={recommendation.productName} className="border rounded-lg p-4 bg-gray-50/50">
+                                <div className="flex items-center justify-between mb-3">
+                                  <h4 className="font-semibold text-sm">{recommendation.productName}</h4>
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className="text-xs">
+                                      Total recomendado: {recommendation.totalRecommended} unidades
+                                    </Badge>
+                                    {hasManyModels && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => toggleProductExpansion(recommendation.productName)}
+                                        className="h-6 w-6 p-0"
+                                      >
+                                        <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="space-y-2">
+                                  {(!hasManyModels || isExpanded) && recommendation.variants.map((variant) => (
+                                    <div key={variant.id} className="flex items-center justify-between text-sm bg-orange-500/10 p-2 rounded border">
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-medium">{variant.model}</span>
+                                        <Badge variant="secondary" className="text-xs">
+                                          Stock actual: {variant.totalStock}
+                                        </Badge>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-muted-foreground">Pedir:</span>
+                                        <Badge variant="destructive" className="text-xs">
+                                          {variant.recommendedQuantity} unidades
+                                        </Badge>
+                                      </div>
+                                    </div>
+                                  ))}
+                                  {hasManyModels && !isExpanded && (
+                                    <div className="flex items-center justify-center text-sm bg-orange-500/10 p-3 rounded border">
+                                      <div className="text-center">
+                                        <span className="font-medium text-muted-foreground">
+                                          {recommendation.variants.length} modelos requieren reposición
+                                        </span>
+                                        <div className="mt-1">
+                                          <Badge variant="destructive" className="text-xs">
+                                            Total a pedir: {recommendation.totalRecommended} unidades
+                                          </Badge>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
                 )}
               </div>
             </motion.section>
@@ -2142,7 +2607,7 @@ function FinanceDashboard() {
               viewport={{ once: true, amount: 0.2 }}
               className="scroll-mt-32"
             >
-              <h2 className="text-2xl font-bold mb-4">Gestión de Costos y Sueldos</h2>
+              <h2 className="text-2xl font-bold mb-4">Gestión de Gastos y Sueldos</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 <Card className="shadow-lg rounded-2xl">
                   <CardHeader>
@@ -2162,27 +2627,82 @@ function FinanceDashboard() {
                     <ul className="space-y-2">
                       {fixedCosts.map((cost) => (
                         <li key={cost.id} className="flex justify-between items-center text-sm">
-                          <span>{cost.name}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">${cost.amount.toLocaleString()}</span>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive rounded-full">
-                                  <Trash className="h-3 w-3" />
+                          {editingFixedCostId === cost.id ? (
+                            <div className="flex items-center gap-2 flex-1">
+                              <Input
+                                value={editingFixedCostValues?.name || cost.name}
+                                onChange={(e) => setEditingFixedCostValues(prev => ({ ...prev!, name: e.target.value }))}
+                                className="h-8 text-sm"
+                                placeholder="Nombre del costo"
+                              />
+                              <Input
+                                type="number"
+                                value={editingFixedCostValues?.amount || cost.amount}
+                                onChange={(e) => setEditingFixedCostValues(prev => ({ ...prev!, amount: parseFloat(e.target.value) || 0 }))}
+                                className="h-8 w-20 text-sm"
+                                placeholder="$"
+                              />
+                              <Button
+                                size="sm"
+                                onClick={async () => {
+                                  if (editingFixedCostValues) {
+                                    await updateFixedCost(cost.id, editingFixedCostValues);
+                                    setEditingFixedCostId(null);
+                                    setEditingFixedCostValues(null);
+                                  }
+                                }}
+                                className="h-8"
+                              >
+                                Guardar
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingFixedCostId(null);
+                                  setEditingFixedCostValues(null);
+                                }}
+                                className="h-8"
+                              >
+                                Cancelar
+                              </Button>
+                            </div>
+                          ) : (
+                            <>
+                              <span>{cost.name}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">${cost.amount.toLocaleString()}</span>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 rounded-full"
+                                  onClick={() => {
+                                    setEditingFixedCostId(cost.id);
+                                    setEditingFixedCostValues({ name: cost.name, amount: cost.amount });
+                                  }}
+                                >
+                                  <Edit className="h-3 w-3" />
                                 </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>¿Eliminar costo fijo?</AlertDialogTitle>
-                                  <AlertDialogDescription>Esta acción no se puede deshacer.</AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => deleteFixedCost(cost.id)}>Eliminar</AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </div>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive rounded-full">
+                                      <Trash className="h-3 w-3" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>¿Eliminar costo fijo?</AlertDialogTitle>
+                                      <AlertDialogDescription>Esta acción no se puede deshacer.</AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => deleteFixedCost(cost.id)}>Eliminar</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </div>
+                            </>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -2216,32 +2736,87 @@ function FinanceDashboard() {
                     <ul className="space-y-2">
                       {salaryWithdrawals.slice(0, 5).map((s) => (
                         <li key={s.id} className="flex justify-between items-center text-sm">
-                          <div>
-                            <span>{s.description || 'Sin descripción'}</span>
-                            <p className="text-xs text-muted-foreground">
-                              {format(parseISO(s.created_at), 'dd/MM/yy')}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">${s.amount.toLocaleString()}</span>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive rounded-full">
-                                  <Trash className="h-3 w-3" />
+                          {editingSalaryId === s.id ? (
+                            <div className="flex items-center gap-2 flex-1">
+                              <Input
+                                value={editingSalaryValues?.description || s.description || ''}
+                                onChange={(e) => setEditingSalaryValues(prev => ({ ...prev!, description: e.target.value }))}
+                                className="h-8 text-sm"
+                                placeholder="Descripción"
+                              />
+                              <Input
+                                type="number"
+                                value={editingSalaryValues?.amount || s.amount}
+                                onChange={(e) => setEditingSalaryValues(prev => ({ ...prev!, amount: parseFloat(e.target.value) || 0 }))}
+                                className="h-8 w-20 text-sm"
+                                placeholder="$"
+                              />
+                              <Button
+                                size="sm"
+                                onClick={async () => {
+                                  if (editingSalaryValues) {
+                                    await updateSalaryWithdrawal(s.id, editingSalaryValues);
+                                    setEditingSalaryId(null);
+                                    setEditingSalaryValues(null);
+                                  }
+                                }}
+                                className="h-8"
+                              >
+                                Guardar
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingSalaryId(null);
+                                  setEditingSalaryValues(null);
+                                }}
+                                className="h-8"
+                              >
+                                Cancelar
+                              </Button>
+                            </div>
+                          ) : (
+                            <>
+                              <div>
+                                <span>{s.description || 'Sin descripción'}</span>
+                                <p className="text-xs text-muted-foreground">
+                                  {format(parseISO(s.created_at), 'dd/MM/yy')}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">${s.amount.toLocaleString()}</span>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 rounded-full"
+                                  onClick={() => {
+                                    setEditingSalaryId(s.id);
+                                    setEditingSalaryValues({ description: s.description || '', amount: s.amount });
+                                  }}
+                                >
+                                  <Edit className="h-3 w-3" />
                                 </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>¿Eliminar extracción?</AlertDialogTitle>
-                                  <AlertDialogDescription>Esta acción no se puede deshacer.</AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => deleteSalaryWithdrawal(s.id)}>Eliminar</AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </div>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive rounded-full">
+                                      <Trash className="h-3 w-3" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>¿Eliminar extracción?</AlertDialogTitle>
+                                      <AlertDialogDescription>Esta acción no se puede deshacer.</AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => deleteSalaryWithdrawal(s.id)}>Eliminar</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </div>
+                            </>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -2250,15 +2825,15 @@ function FinanceDashboard() {
 
                 <Card className="shadow-lg rounded-2xl">
                   <CardHeader>
-                    <CardTitle>Ingresos Monetarios Extra</CardTitle>
+                    <CardTitle>Ingresos/Extracciones</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <form
                       onSubmit={handleSubmitIncome(onIncomeSubmit)}
                       className="flex items-start gap-2 mb-4"
                     >
-                      <Input {...registerIncome('name')} placeholder="Nombre del ingreso" className="h-9" />
-                      <Input {...registerIncome('amount', { valueAsNumber: true })} type="number" placeholder="$" className="h-9 w-24" />
+                      <Input {...registerIncome('name')} placeholder="Nombre del ingreso/egreso" className="h-9" />
+                      <Input {...registerIncome('amount', { valueAsNumber: true })} type="number" placeholder="±$" className="h-9 w-24" />
                       <Button type="submit" size="icon" className="h-9 w-9 flex-shrink-0">
                         <PlusCircle />
                       </Button>
@@ -2266,32 +2841,87 @@ function FinanceDashboard() {
                     <ul className="space-y-2">
                       {monetaryIncome.slice(0, 5).map((income) => (
                         <li key={income.id} className="flex justify-between items-center text-sm">
-                          <div>
-                            <span>{income.name}</span>
-                            <p className="text-xs text-muted-foreground">
-                              {format(parseISO(income.created_at), 'dd/MM/yy')}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">${income.amount.toLocaleString()}</span>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive rounded-full">
-                                  <Trash className="h-3 w-3" />
+                          {editingIncomeId === income.id ? (
+                            <div className="flex items-center gap-2 flex-1">
+                              <Input
+                                value={editingIncomeValues?.name || income.name}
+                                onChange={(e) => setEditingIncomeValues(prev => ({ ...prev!, name: e.target.value }))}
+                                className="h-8 text-sm"
+                                placeholder="Nombre del ingreso"
+                              />
+                              <Input
+                                type="number"
+                                value={editingIncomeValues?.amount || income.amount}
+                                onChange={(e) => setEditingIncomeValues(prev => ({ ...prev!, amount: parseFloat(e.target.value) || 0 }))}
+                                className="h-8 w-20 text-sm"
+                                placeholder="±$"
+                              />
+                              <Button
+                                size="sm"
+                                onClick={async () => {
+                                  if (editingIncomeValues) {
+                                    await updateMonetaryIncome(income.id, editingIncomeValues);
+                                    setEditingIncomeId(null);
+                                    setEditingIncomeValues(null);
+                                  }
+                                }}
+                                className="h-8"
+                              >
+                                Guardar
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingIncomeId(null);
+                                  setEditingIncomeValues(null);
+                                }}
+                                className="h-8"
+                              >
+                                Cancelar
+                              </Button>
+                            </div>
+                          ) : (
+                            <>
+                              <div>
+                                <span>{income.name}</span>
+                                <p className="text-xs text-muted-foreground">
+                                  {format(parseISO(income.created_at), 'dd/MM/yy')}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">${income.amount.toLocaleString()}</span>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 rounded-full"
+                                  onClick={() => {
+                                    setEditingIncomeId(income.id);
+                                    setEditingIncomeValues({ name: income.name, amount: income.amount });
+                                  }}
+                                >
+                                  <Edit className="h-3 w-3" />
                                 </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>¿Eliminar ingreso?</AlertDialogTitle>
-                                  <AlertDialogDescription>Esta acción no se puede deshacer.</AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => deleteMonetaryIncome(income.id)}>Eliminar</AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </div>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive rounded-full">
+                                      <Trash className="h-3 w-3" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>¿Eliminar ingreso?</AlertDialogTitle>
+                                      <AlertDialogDescription>Esta acción no se puede deshacer.</AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => deleteMonetaryIncome(income.id)}>Eliminar</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </div>
+                            </>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -2333,9 +2963,18 @@ function FinanceDashboard() {
                             </span>
                           </div>
                           <div className="grid grid-cols-4 gap-4 text-center min-w-[400px] items-center">
-                            <div className="font-normal text-red-500">-${pedido.totalCost.toLocaleString()}</div>
-                            <div className="font-normal text-green-500">+${pedido.profit.toLocaleString()}</div>
-                            <div className="font-normal text-primary">{pedido.margin.toFixed(1)}%</div>
+                            <div className="font-normal text-red-500">
+                              -${pedido.totalCost.toLocaleString()}
+                              <div className="text-xs text-muted-foreground">Costo</div>
+                            </div>
+                            <div className="font-normal text-green-500">
+                              +${pedido.profit.toLocaleString()}
+                              <div className="text-xs text-muted-foreground">Ganancia posible</div>
+                            </div>
+                            <div className="font-normal text-primary">
+                              {pedido.margin.toFixed(1)}%
+                              <div className="text-xs text-muted-foreground">Margen</div>
+                            </div>
                           </div>
                           <ChevronDown className="h-5 w-5 transition-transform data-[state=open]:rotate-180 ml-4" />
                         </CollapsibleTrigger>
