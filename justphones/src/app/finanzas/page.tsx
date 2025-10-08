@@ -394,6 +394,99 @@ const CustomTooltip = ({ active, payload, label }: TooltipProps<number, string>)
   return null;
 };
 
+const AUTH_KEY = 'JUSTPHONES$1';
+const AUTH_STORAGE_KEY = 'finanzas_authenticated';
+
+const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    // Verificar si ya está autenticado en localStorage
+    const storedAuth = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (storedAuth === 'true') {
+      setIsAuthenticated(true);
+    }
+    setIsLoading(false);
+  }, []);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password === AUTH_KEY) {
+      setIsAuthenticated(true);
+      localStorage.setItem(AUTH_STORAGE_KEY, 'true');
+      setError('');
+    } else {
+      setError('Clave incorrecta. Inténtalo de nuevo.');
+      setPassword('');
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Verificando acceso...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="w-full max-w-md"
+        >
+          <Card className="shadow-lg">
+            <CardHeader className="text-center">
+              <div className="mx-auto mb-4 w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+                <PackageSearch className="h-8 w-8 text-primary" />
+              </div>
+              <CardTitle className="text-2xl">Acceso Restringido</CardTitle>
+              <CardDescription>
+                Ingresa la clave de acceso para continuar al panel financiero de JustPhones
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Input
+                    type="password"
+                    placeholder="Ingresa la clave de acceso"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="text-center text-lg"
+                    autoFocus
+                  />
+                  {error && (
+                    <p className="text-sm text-destructive text-center">{error}</p>
+                  )}
+                </div>
+                <Button type="submit" className="w-full" size="lg">
+                  Acceder al Panel Financiero
+                </Button>
+              </form>
+              <div className="mt-6 text-center text-xs text-muted-foreground">
+                <p>Sistema de gestión financiera JustPhones</p>
+                <p>Acceso autorizado únicamente</p>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+};
+
 function FinanceDashboard() {
   const { sales, isLoading: isLoadingSales } = useSales();
   const { products, isLoading: isLoadingProducts } = useProducts();
@@ -3384,7 +3477,9 @@ export default function FinanzasPage() {
   return (
     <SalaryWithdrawalsProvider>
       <MonetaryIncomeProvider>
-        <FinanceDashboard />
+        <ProtectedRoute>
+          <FinanceDashboard />
+        </ProtectedRoute>
       </MonetaryIncomeProvider>
     </SalaryWithdrawalsProvider>
   );
