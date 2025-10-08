@@ -13,6 +13,7 @@ import {
   isAfter,
   getDaysInMonth,
   getMonth,
+  formatDistanceToNow,
 } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -181,6 +182,7 @@ const navigationItems = [
   { id: 'rentabilidad', label: 'Rentabilidad', icon: TrendingUp },
   { id: 'costos', label: 'Gastos', icon: GastosIcon },
   { id: 'pedidos', label: 'Pedidos', icon: PackageSearch },
+  { id: 'ventas-historial', label: 'Ventas', icon: ShoppingBag },
 ];
 
 const fixedCostSchema = z.object({
@@ -203,6 +205,8 @@ const ITEMS_PER_PAGE_RENTABILIDAD = 8;
 const ITEMS_PER_PAGE_LOW_ROTATION = 5;
 const ITEMS_PER_PAGE_STOCK_RECOMMENDATIONS = 3;
 type StatsPeriod = string; // 'all' or closure ID
+
+type SalesFilter = 'all' | 'today' | 'yesterday' | 'dayBeforeYesterday';
 
 type ClosureEntry = {
   id: string;
@@ -393,6 +397,7 @@ function FinanceDashboard() {
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [statsPeriod, setStatsPeriod] = useState<StatsPeriod>('');
   const [activeSection, setActiveSection] = useState('resumen');
+  const [activeSalesFilter, setActiveSalesFilter] = useState<SalesFilter>('all');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
@@ -1179,6 +1184,36 @@ function FinanceDashboard() {
       return newSet;
     });
   }, []);
+
+  const filteredSales = useMemo(() => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const dayBeforeYesterday = new Date(today);
+    dayBeforeYesterday.setDate(dayBeforeYesterday.getDate() - 2);
+    const sevenDaysAgo = new Date(today);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    return sales.filter(sale => {
+      const saleDate = new Date(sale.created_at);
+      const saleDay = new Date(saleDate.getFullYear(), saleDate.getMonth(), saleDate.getDate());
+
+      switch (activeSalesFilter) {
+        case 'today':
+          return saleDay.getTime() === today.getTime();
+        case 'yesterday':
+          return saleDay.getTime() === yesterday.getTime();
+        case 'dayBeforeYesterday':
+          return saleDay.getTime() === dayBeforeYesterday.getTime();
+        case 'all':
+        default:
+          return saleDate >= sevenDaysAgo;
+      }
+    }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [sales, activeSalesFilter]);
+
+  const productsMap = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
 
   // Set default category when growing categories data is loaded
   useEffect(() => {
@@ -2265,7 +2300,8 @@ function FinanceDashboard() {
               className="scroll-mt-32"
             >
               <h2 className="text-2xl font-bold mb-4">Gráficos de Evolución</h2>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <div className="space-y-8">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <Card className="shadow-lg rounded-2xl">
                   <CardHeader>
                     <CardTitle>Evolución de Ventas</CardTitle>
@@ -2326,7 +2362,79 @@ function FinanceDashboard() {
                     </ResponsiveContainer>
                   </CardContent>
                 </Card>
+                </div>
+                <div className="grid grid-cols-1">
+                  <Card className="shadow-lg rounded-2xl">
+                    <CardHeader>
+                      <CardTitle>Ganancia por Cierre de Caja</CardTitle>
+                      <CardDescription>Evolución mensual de ganancias netas</CardDescription>
+                    </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <LineChart data={financialSummaryDetails.capitalBreakdown}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis 
+                          dataKey="month" 
+                          tick={{ fontSize: 12 }}
+                          angle={-45}
+                          textAnchor="end"
+                          height={80}
+                        />
+                        <YAxis
+                          tickFormatter={(value) => `$${Number(value) / 1000}k`}
+                          tick={{ fontSize: 12 }}
+                        />
+                        <RechartsTooltip 
+                          content={({ active, payload, label }) => {
+                            if (active && payload && payload.length) {
+                              const data = payload[0]?.payload;
+                              return (
+                                <div className="rounded-lg border bg-background/80 backdrop-blur-sm p-3 shadow-sm">
+                                  <div className="grid grid-cols-1 gap-2">
+                                    <div className="flex flex-col">
+                                      <span className="text-[0.70rem] uppercase text-muted-foreground">Mes</span>
+                                      <span className="font-bold text-muted-foreground">{label}</span>
+                                    </div>
+                                    <div className="flex flex-col">
+                                      <span className="text-[0.70rem] uppercase text-muted-foreground">Ganancia Neta</span>
+                                      <span className="font-bold" style={{ color: data?.net >= 0 ? 'hsl(var(--primary))' : 'hsl(var(--destructive))' }}>
+                                        ${data?.net?.toLocaleString() || 0}
+                                      </span>
+                                    </div>
+                                    <div className="flex flex-col">
+                                      <span className="text-[0.70rem] uppercase text-muted-foreground">Ingresos</span>
+                                      <span className="font-bold text-green-600">
+                                        ${data?.income?.toLocaleString() || 0}
+                                      </span>
+                                    </div>
+                                    <div className="flex flex-col">
+                                      <span className="text-[0.70rem] uppercase text-muted-foreground">Costos</span>
+                                      <span className="font-bold text-red-600">
+                                        ${data?.costs?.toLocaleString() || 0}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return null;
+                          }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="net"
+                          name="Ganancia Neta"
+                          stroke="hsl(var(--primary))"
+                          strokeWidth={3}
+                          dot={{ r: 5 }}
+                          activeDot={{ r: 7 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
               </div>
+            </div>
             </motion.section>
 
             <motion.section
@@ -3008,6 +3116,116 @@ function FinanceDashboard() {
                       </Collapsible>
                     ))}
                   </div>
+                </CardContent>
+              </Card>
+            </motion.section>
+
+            <motion.section
+              id="ventas-historial"
+              ref={(el) => {
+                sectionRefs.current['ventas-historial'] = el;
+              }}
+              variants={sectionVariants}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, amount: 0.2 }}
+              className="scroll-mt-32"
+            >
+              <h2 className="text-2xl font-bold mb-4">Historial de Ventas</h2>
+              <Card className="shadow-lg rounded-2xl">
+                <CardHeader>
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <CardTitle>Ventas Registradas</CardTitle>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { key: 'all', label: 'Últimos 7 días' },
+                        { key: 'today', label: 'Hoy' },
+                        { key: 'yesterday', label: 'Ayer' },
+                        { key: 'dayBeforeYesterday', label: 'Anteayer' },
+                      ].map((filter) => (
+                        <Button
+                          key={filter.key}
+                          variant={activeSalesFilter === filter.key ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setActiveSalesFilter(filter.key as SalesFilter)}
+                        >
+                          {filter.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Producto</TableHead>
+                          <TableHead>Cantidad</TableHead>
+                          <TableHead>Precio Unit.</TableHead>
+                          <TableHead>Descuento</TableHead>
+                          <TableHead className="text-right">Total</TableHead>
+                          <TableHead>Fecha</TableHead>
+                          <TableHead>Hace</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredSales.map((sale) => {
+                          const product = productsMap.get(sale.product_id);
+                          const saleDate = new Date(sale.created_at);
+                          const timeAgo = formatDistanceToNow(saleDate, { addSuffix: true, locale: es });
+
+                          return (
+                            <TableRow key={sale.id}>
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{unslugify(sale.product_name)}</span>
+                                  <span className="text-sm text-muted-foreground">
+                                    {sale.product_model} - {sale.color_name}
+                                  </span>
+                                </div>
+                              </TableCell>
+                              <TableCell>{sale.quantity}</TableCell>
+                              <TableCell>${sale.price_per_unit.toLocaleString()}</TableCell>
+                              <TableCell>
+                                {sale.discount_code ? (
+                                  <div className="flex flex-col">
+                                    <Badge variant="secondary" className="w-fit">
+                                      {sale.discount_code}
+                                    </Badge>
+                                    <span className="text-xs text-muted-foreground">
+                                      -{sale.discount_percentage}%
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground">-</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right font-medium">
+                                ${sale.total_price.toLocaleString()}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span>{format(saleDate, 'dd/MM/yyyy')}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {format(saleDate, 'HH:mm')}
+                                  </span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {timeAgo}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {filteredSales.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No hay ventas registradas para el período seleccionado.
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </motion.section>
