@@ -188,6 +188,21 @@ const VentasIcon = (props: React.SVGProps<SVGSVGElement>) => {
   );
 };
 
+const SidebarToggleIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
+    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+    <line x1="9" y1="3" x2="9" y2="21" />
+  </svg>
+);
+
 const sectionVariants = {
   hidden: { opacity: 0, y: 20 },
   visible: {
@@ -1441,13 +1456,33 @@ function FinanceDashboard() {
     >
       <div className="flex w-full">
         <AnimatePresence>
+          {isSidebarOpen && isMobile && (
+            <motion.div
+              key="sidebar-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.5 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 z-20 bg-background/80 backdrop-blur-sm md:hidden"
+              onClick={() => setIsSidebarOpen(false)}
+            />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
           {isSidebarOpen && (
             <motion.aside
+              key="sidebar"
               initial={{ x: -80 }}
               animate={{ x: 0 }}
               exit={{ x: -80 }}
               transition={{ duration: 0.3, ease: 'easeInOut' }}
-              className="fixed top-0 left-0 h-full w-20 bg-background border-r flex flex-col items-center py-8 space-y-6 z-20 hidden md:flex"
+              className={cn(
+                'fixed top-0 left-0 h-full border-r py-8 space-y-6 flex-col items-center',
+                isMobile
+                  ? 'flex w-[79px] shadow-lg z-30 md:hidden bg-background/70'
+                  : 'hidden w-20 md:flex z-20 bg-background'
+              )}
             >
               <Logo className="w-12 h-12" />
               <nav className="flex flex-col items-center space-y-4">
@@ -1476,30 +1511,32 @@ function FinanceDashboard() {
         </AnimatePresence>
 
         <div className={`flex-1 w-full ${isSidebarOpen ? 'ml-0 md:ml-20' : 'ml-0'}`}>
-          <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm border-b py-3 md:py-4 px-0 md:px-8 flex justify-center md:justify-between items-center w-full">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="hidden md:inline-flex absolute left-0 top-0 h-full w-16 md:mr-4"
-            >
-              <Menu className="h-5 w-5" />
-            </Button>
-            <div className="flex items-center gap-3 px-4 md:px-0 justify-center md:justify-start w-full md:w-auto ml-[36px]">
-              <div className="text-center md:text-left">
-                <h1 className="text-xl md:text-2xl font-bold mt-2">Dashboard Financiero</h1>
-                <p className="text-sm text-muted-foreground">
+          <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm border-b py-3 md:py-4 px-4 md:px-8 flex items-center gap-4 w-full">
+            <div className="flex flex-1 items-center justify-start">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsSidebarOpen((prev) => !prev)}
+                className="h-10 w-10"
+              >
+                <SidebarToggleIcon className="h-5 w-5" />
+              </Button>
+            </div>
+            <div className="flex flex-1 justify-center">
+              <div className="text-center space-y-1">
+                <h1 className="text-xl md:text-2xl font-bold mt-2 whitespace-nowrap">Dashboard Financiero</h1>
+                <p className="text-sm text-muted-foreground whitespace-nowrap">
                   {format(new Date(), "d 'de' MMMM, yyyy", { locale: es })}
                 </p>
-                <p className="text-xs md:text-sm text-muted-foreground">
+                <p className="text-xs md:text-sm text-muted-foreground whitespace-nowrap">
                   Último cierre: {lastClosure ? format(new Date(lastClosure.startDate), "d 'de' MMMM, yyyy", { locale: es }) : 'Ninguno'}
                 </p>
               </div>
             </div>
-            <div className="flex flex-wrap items-center justify-center md:justify-end gap-2 md:gap-3 px-4 md:px-0">
+            <div className="flex flex-1 items-center justify-end gap-2 md:gap-4">
               <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
                 <SheetTrigger asChild>
-                  <Button variant="ghost" size="icon" className="md:hidden">
+                  <Button variant="ghost" size="icon" className="md:hidden h-10 w-10">
                     <Menu className="h-5 w-5" />
                   </Button>
                 </SheetTrigger>
@@ -1670,8 +1707,8 @@ function FinanceDashboard() {
                   </div>
                 </SheetContent>
               </Sheet>
-              <div className="hidden md:flex flex-wrap items-center gap-2 md:gap-3">
-                <div className="w-full md:w-auto md:min-w-[230px]">
+              <div className="hidden md:flex items-center gap-3">
+                <div className="w-full md:w-auto md:min-w-[230px] flex items-center">
                   <Select
                     onValueChange={(value) => setStatsPeriod(value as StatsPeriod)}
                     value={statsPeriod}
@@ -1692,6 +1729,7 @@ function FinanceDashboard() {
                 <Button
                   variant="outline"
                   size="sm"
+                  className="h-10"
                   disabled={isClosing || isReverting || isLoadingClosures}
                   onClick={async () => {
                     if (isClosing || isReverting) return;
@@ -1768,6 +1806,7 @@ function FinanceDashboard() {
                 <Button
                   variant="destructive"
                   size="sm"
+                  className="h-10"
                   disabled={isReverting || isClosing || closures.length <= 1 || isLoadingClosures}
                   onClick={async () => {
                     if (isReverting || isClosing) return;
@@ -1829,6 +1868,8 @@ function FinanceDashboard() {
                     'Revertir cierre'
                   )}
                 </Button>
+              </div>
+              <div className="hidden md:flex items-center">
                 <ThemeToggle />
               </div>
             </div>
