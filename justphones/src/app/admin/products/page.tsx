@@ -45,7 +45,7 @@ import type { Product, ProductColor } from '@/lib/products';
 import { useForm, useFieldArray, Controller, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Trash, Edit, PlusCircle, ShoppingBag, Search, PartyPopper, Star, UploadCloud, X, Tag, History, ChevronDown, Plus, Minus, PackagePlus, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Trash, Edit, PlusCircle, ShoppingBag, Search, PartyPopper, Star, UploadCloud, X, Tag, History, ChevronDown, Plus, Minus, PackagePlus, Loader2, CheckCircle, AlertCircle, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useProductsR2 as useProducts } from '@/hooks/use-products-r2';
@@ -157,6 +157,21 @@ function getCroppedImg(image: HTMLImageElement, crop: Crop, fileName: string): P
           resolve(file);
       }, 'image/png', 1);
   });
+}
+
+function calculateSalePricing(product: Product) {
+  let finalPrice = product.price;
+  let discountPercentage = product.discount || 0;
+
+  if (product.discount && product.discount > 0) {
+      finalPrice = finalPrice * (1 - product.discount / 100);
+  }
+
+  const cashDiscount = 0.2;
+  finalPrice = finalPrice * (1 - cashDiscount);
+  discountPercentage += cashDiscount * 100;
+
+  return { finalPrice, discountPercentage };
 }
 
 const ColorImageInput = ({ control, index, errors, onFileSelect, setPreviewDialogUrl, setValue }: { control: any; index: number; errors: any; onFileSelect: (file: File, fieldIndex: number) => void; setPreviewDialogUrl: (url: string) => void; setValue: any }) => {
@@ -289,6 +304,10 @@ export default function AdminProductsPage() {
     isApplied: boolean;
   } | null>(null);
   const [isValidatingDiscount, setIsValidatingDiscount] = useState(false);
+  const [saleDialogStep, setSaleDialogStep] = useState<'type' | 'unit' | 'group'>('type');
+  const [groupSaleSearchQuery, setGroupSaleSearchQuery] = useState('');
+  const [groupSaleSelections, setGroupSaleSelections] = useState<Record<string, number>>({});
+  const [isProcessingGroupSale, setIsProcessingGroupSale] = useState(false);
   
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
   const [coverImageUrlInput, setCoverImageUrlInput] = useState('');
@@ -803,6 +822,9 @@ export default function AdminProductsPage() {
     resetSale({ productId: '', colorHex: '', quantity: 1, discount_code: '' });
     setSaleFilters({ category: 'all', name: 'all', model: 'all' });
     setAppliedDiscount(null);
+    setSaleDialogStep('type');
+    setGroupSaleSelections({});
+    setGroupSaleSearchQuery('');
     setIsSaleDialogOpen(true);
   };
 
@@ -819,6 +841,9 @@ export default function AdminProductsPage() {
       name: product.name,
       model: product.model,
     });
+    setSaleDialogStep('unit');
+    setGroupSaleSelections({});
+    setGroupSaleSearchQuery('');
     setIsSaleDialogOpen(true);
   };
 
@@ -886,6 +911,163 @@ export default function AdminProductsPage() {
     toast({ description: "Descuento eliminado." });
   };
 
+  const setGroupSaleQuantity = (productId: string, colorHex: string, quantity: number) => {
+    const product = productsRef.current.find(p => p.id === productId);
+    if (!product) {
+      return;
+    }
+    const color = product.colors.find(c => c.hex === colorHex);
+    if (!color) {
+      return;
+    }
+
+    const clamped = Math.max(0, Math.min(quantity, color.stock));
+    const key = `${productId}-${colorHex}`;
+
+    setGroupSaleSelections(prev => {
+      if (clamped === 0) {
+        if (prev[key] === undefined) {
+          return prev;
+        }
+        const { [key]: _removed, ...rest } = prev;
+        return rest;
+      }
+
+      if (prev[key] === clamped) {
+        return prev;
+      }
+
+      return { ...prev, [key]: clamped };
+    });
+  };
+
+  const handleGroupSaleSubmit = async () => {
+    const entries = Object.entries(groupSaleSelections).filter(([, quantity]) => quantity > 0);
+
+    if (entries.length === 0) {
+      toast({
+        variant: 'destructive',
+        title: 'Sin productos seleccionados',
+        description: 'Selecciona al menos un producto y color con cantidad mayor a cero.',
+      });
+      return;
+    }
+
+    const issues: string[] = [];
+    const productUpdates = new Map<string, Product>();
+    const salesPayload: Array<{ product: Product; color: ProductColor; quantity: number }> = [];
+
+    for (const [key, quantity] of entries) {
+      const lastHyphenIndex = key.lastIndexOf('-');
+      if (lastHyphenIndex === -1) {
+        issues.push('Selección inválida detectada.');
+        continue;
+      }
+
+      const productId = key.substring(0, lastHyphenIndex);
+      const colorHex = key.substring(lastHyphenIndex + 1);
+      const product = productsRef.current.find(p => p.id === productId);
+
+      if (!product) {
+        issues.push('Producto no encontrado para una de las selecciones.');
+        continue;
+      }
+
+      const color = product.colors.find(c => c.hex === colorHex);
+      if (!color) {
+        issues.push(`${unslugify(product.name)} (${product.model}): color no encontrado.`);
+        continue;
+      }
+
+      if (quantity > color.stock) {
+        issues.push(`${unslugify(product.name)} (${color.name}): stock insuficiente.`);
+        continue;
+      }
+
+      salesPayload.push({ product, color, quantity });
+
+      const clonedProduct = productUpdates.get(productId) || JSON.parse(JSON.stringify(product)) as Product;
+      const colorToUpdate = clonedProduct.colors.find(c => c.hex === colorHex);
+      if (colorToUpdate) {
+        colorToUpdate.stock = colorToUpdate.stock - quantity;
+      }
+      productUpdates.set(productId, clonedProduct);
+    }
+
+    if (issues.length > 0) {
+      toast({
+        variant: 'destructive',
+        title: 'No se puede registrar la venta en grupo',
+        description: issues.join(' | '),
+      });
+      return;
+    }
+
+    setIsProcessingGroupSale(true);
+
+    try {
+      for (const [productId, updatedProduct] of productUpdates.entries()) {
+        const success = await updateProduct(productId, { colors: updatedProduct.colors });
+        if (!success) {
+          throw new Error(`No se pudo actualizar el stock del producto ${productId}.`);
+        }
+      }
+
+      let failedSales = 0;
+
+      for (const entry of salesPayload) {
+        const { finalPrice, discountPercentage } = calculateSalePricing(entry.product);
+        const saleData: Omit<Sale, 'id' | 'created_at'> = {
+          product_id: entry.product.id,
+          product_name: entry.product.name,
+          product_model: entry.product.model,
+          color_name: entry.color.name,
+          color_hex: entry.color.hex,
+          quantity: entry.quantity,
+          price_per_unit: finalPrice,
+          total_price: finalPrice * entry.quantity,
+          discount_percentage,
+        };
+
+        const success = await addSale(saleData);
+        if (!success) {
+          failedSales += 1;
+        }
+      }
+
+      const totalUnits = salesPayload.reduce((sum, item) => sum + item.quantity, 0);
+      const affectedProducts = new Set(salesPayload.map(item => item.product.id)).size;
+
+      if (failedSales === 0) {
+        toast({
+          className: "border-primary/20 shadow-lg shadow-primary/10",
+          title: 'Ventas registradas',
+          description: `Se registraron ${totalUnits} unidades en ${affectedProducts} producto(s).`,
+        });
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Registro parcial',
+          description: `${failedSales} venta(s) no pudieron guardarse en el historial. Verifica el panel de ventas.`,
+        });
+      }
+
+      setGroupSaleSelections({});
+      setGroupSaleSearchQuery('');
+      setSaleDialogStep('type');
+      setIsSaleDialogOpen(false);
+    } catch (error: any) {
+      console.error('Error registrando venta en grupo:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error al registrar ventas',
+        description: error.message || 'Ocurrió un error inesperado al registrar la venta en grupo.',
+      });
+    } finally {
+      setIsProcessingGroupSale(false);
+    }
+  };
+
   const onSaleSubmit = async (data: z.infer<typeof saleSchema>) => {
     console.log('--- [DEBUG] INICIO onSaleSubmit ---');
     console.log('[DEBUG] Datos del formulario de venta:', data);
@@ -914,20 +1096,10 @@ export default function AdminProductsPage() {
         return;
     }
 
-    let finalPrice = productToUpdate.price;
-    let discountPercentage = productToUpdate.discount || 0;
-    
-    // Apply promo discount
-    if (productToUpdate.discount && productToUpdate.discount > 0) {
-      finalPrice = finalPrice * (1 - (productToUpdate.discount / 100));
-      console.log(`[DEBUG] Precio después de descuento por promo (${productToUpdate.discount}%): $${finalPrice}`);
-    }
-    
-    // Apply cash payment discount (always 20% OFF for cash/transfer)
-    const cashDiscount = 0.2; // 20% descuento fijo para efectivo
-    finalPrice = finalPrice * (1 - cashDiscount);
-    discountPercentage += cashDiscount * 100;
-    console.log(`[DEBUG] Precio después de descuento de efectivo (20%): $${finalPrice}`);
+    const pricing = calculateSalePricing(productToUpdate);
+    let finalPrice = pricing.finalPrice;
+    let discountPercentage = pricing.discountPercentage;
+    console.log(`[DEBUG] Precio base después de descuentos automáticos: $${finalPrice}`);
     
     // Apply discount code
     if (appliedDiscount && appliedDiscount.isApplied) {
@@ -1197,6 +1369,27 @@ export default function AdminProductsPage() {
       });
     }
   }, [products, stockUpdates]);
+
+  useEffect(() => {
+    if (products.length === 0) return;
+
+    const validKeys = new Set<string>();
+    products.forEach(product => {
+      product.colors.forEach(color => {
+        validKeys.add(`${product.id}-${color.hex}`);
+      });
+    });
+
+    const staleKeys = Object.keys(groupSaleSelections).filter(key => !validKeys.has(key));
+
+    if (staleKeys.length > 0) {
+      setGroupSaleSelections(prevSelections => {
+        const cleanedSelections = { ...prevSelections };
+        staleKeys.forEach(key => delete cleanedSelections[key]);
+        return cleanedSelections;
+      });
+    }
+  }, [products, groupSaleSelections]);
 
   const categories = productSchema.shape.category.options;
   
@@ -1565,6 +1758,25 @@ export default function AdminProductsPage() {
         product.model.toLowerCase().includes(query)
     );
   }, [products, stockUpdateSearchQuery]);
+
+  const filteredGroupSaleProducts = useMemo(() => {
+    if (!groupSaleSearchQuery) {
+        return products;
+    }
+    const query = groupSaleSearchQuery.toLowerCase();
+    return products.filter(product =>
+        unslugify(product.name).toLowerCase().includes(query) ||
+        product.model.toLowerCase().includes(query)
+    );
+  }, [products, groupSaleSearchQuery]);
+
+  const totalGroupSaleUnits = useMemo(() => {
+    return Object.values(groupSaleSelections).reduce((sum, qty) => sum + qty, 0);
+  }, [groupSaleSelections]);
+
+  const totalGroupSaleLines = useMemo(() => {
+    return Object.keys(groupSaleSelections).length;
+  }, [groupSaleSelections]);
 
   const isLoading = isLoadingProducts || isLoadingSubcategories || isLoadingModels || isLoadingSales || isLoadingProductHistory || isLoadingStockHistory;
 
@@ -2192,203 +2404,401 @@ export default function AdminProductsPage() {
           </form>
         </DialogContent>
       </Dialog>
-      <Dialog open={isSaleDialogOpen} onOpenChange={setIsSaleDialogOpen}>
-          <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                  <DialogTitle>Registrar Venta de Producto</DialogTitle>
-                  <DialogDescription>
-                      Filtra para encontrar el producto y luego registra la venta para actualizar el stock.
-                  </DialogDescription>
-              </DialogHeader>
-              <ScrollArea className="max-h-[60vh] -mx-6 px-6">
-                <form onSubmit={handleSubmitSale(onSaleSubmit)} className="space-y-4 py-4 px-1">
-                    <div className="space-y-2">
+      <Dialog open={isSaleDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setSaleDialogStep('type');
+          setGroupSaleSelections({});
+          setGroupSaleSearchQuery('');
+        }
+        setIsSaleDialogOpen(open);
+      }}>
+  <DialogContent className="sm:max-w-3xl max-h-[85vh] h-[85vh] flex flex-col overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>Registrar Venta de Producto</DialogTitle>
+            {saleDialogStep === 'type' && (
+              <DialogDescription>
+                Elige el tipo de venta que deseas registrar.
+              </DialogDescription>
+            )}
+            {saleDialogStep !== 'type' && (
+              <DialogDescription>
+                {saleDialogStep === 'unit'
+                  ? 'Filtra para encontrar el producto y registra la venta unitaria.'
+                  : 'Selecciona rápidamente varios productos y colores para registrar ventas en lote.'}
+              </DialogDescription>
+            )}
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden">
+            {saleDialogStep === 'type' && (
+              <ScrollArea className="h-full">
+                <div className="grid gap-4 py-6">
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <Card className="border-primary/20 hover:shadow-md transition-shadow">
+                      <CardContent className="p-6 space-y-4">
+                        <div>
+                          <h3 className="text-lg font-semibold">Venta unitaria</h3>
+                          <p className="text-sm text-muted-foreground">
+                            Registra la venta de un solo producto aplicando filtros por categoría, nombre y modelo.
+                          </p>
+                        </div>
+                        <Button className="w-full" onClick={() => setSaleDialogStep('unit')}>
+                          Continuar con venta unitaria
+                        </Button>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-primary/20 hover:shadow-md transition-shadow">
+                      <CardContent className="p-6 space-y-4">
+                        <div>
+                          <h3 className="text-lg font-semibold">Venta en grupo</h3>
+                          <p className="text-sm text-muted-foreground">
+                            Selecciona varios productos y colores y asigna las cantidades vendidas en una sola operación.
+                          </p>
+                        </div>
+                        <Button className="w-full" variant="outline" onClick={() => setSaleDialogStep('group')}>
+                          Continuar con venta en grupo
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+              </ScrollArea>
+            )}
+
+            {saleDialogStep === 'unit' && (
+              <div className="flex h-full min-h-0 flex-col gap-6 overflow-hidden">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="-ml-2 flex items-center gap-2"
+                  onClick={() => setSaleDialogStep('type')}
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Volver
+                </Button>
+                <ScrollArea className="flex-1 -mx-6 px-6">
+                  <form onSubmit={handleSubmitSale(onSaleSubmit)} className="space-y-4 py-4 px-1">
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <div className="space-y-2">
                         <Label htmlFor="sale-category">Categoría</Label>
                         <Select
-                            value={saleFilters.category}
-                            onValueChange={(value) => {
-                                setSaleFilters({ category: value, name: 'all', model: 'all' });
-                                setSaleValue('productId', '');
-                            }}
+                          value={saleFilters.category}
+                          onValueChange={(value) => {
+                            setSaleFilters({ category: value, name: 'all', model: 'all' });
+                            setSaleValue('productId', '');
+                          }}
                         >
-                            <SelectTrigger id="sale-category">
-                                <SelectValue placeholder="Seleccionar categoría" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Todas las categorías</SelectItem>
-                                {saleCategoryOptions.map(cat => (
-                                    <SelectItem key={cat} value={cat}>{unslugify(cat)}</SelectItem>
-                                ))}
-                            </SelectContent>
+                          <SelectTrigger id="sale-category">
+                            <SelectValue placeholder="Seleccionar categoría" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todas las categorías</SelectItem>
+                            {saleCategoryOptions.map(cat => (
+                              <SelectItem key={cat} value={cat}>{unslugify(cat)}</SelectItem>
+                            ))}
+                          </SelectContent>
                         </Select>
-                    </div>
+                      </div>
 
-                    <div className="space-y-2">
+                      <div className="space-y-2">
                         <Label htmlFor="sale-name">Nombre</Label>
                         <Select
-                            value={saleFilters.name}
-                            onValueChange={(value) => {
-                                setSaleFilters(f => ({ ...f, name: value, model: 'all' }));
-                                setSaleValue('productId', '');
-                            }}
-                            disabled={saleFilters.category === 'all'}
+                          value={saleFilters.name}
+                          onValueChange={(value) => {
+                            setSaleFilters(f => ({ ...f, name: value, model: 'all' }));
+                            setSaleValue('productId', '');
+                          }}
+                          disabled={saleFilters.category === 'all'}
                         >
-                            <SelectTrigger id="sale-name">
-                                <SelectValue placeholder="Seleccionar nombre" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Todos los nombres</SelectItem>
-                                {saleNameOptions.map(name => (
-                                    <SelectItem key={name} value={name}>{unslugify(name)}</SelectItem>
-                                ))}
-                            </SelectContent>
+                          <SelectTrigger id="sale-name">
+                            <SelectValue placeholder="Seleccionar nombre" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todos los nombres</SelectItem>
+                            {saleNameOptions.map(name => (
+                              <SelectItem key={name} value={name}>{unslugify(name)}</SelectItem>
+                            ))}
+                          </SelectContent>
                         </Select>
-                    </div>
-                    
-                    <div className="space-y-2">
+                      </div>
+
+                      <div className="space-y-2">
                         <Label htmlFor="sale-model">Modelo</Label>
                         <Select
-                            value={saleFilters.model}
-                            onValueChange={(value) => {
-                                setSaleFilters(f => ({ ...f, model: value }));
-                                setSaleValue('productId', '');
-                            }}
-                            disabled={saleFilters.name === 'all'}
+                          value={saleFilters.model}
+                          onValueChange={(value) => {
+                            setSaleFilters(f => ({ ...f, model: value }));
+                            setSaleValue('productId', '');
+                          }}
+                          disabled={saleFilters.name === 'all'}
                         >
-                            <SelectTrigger id="sale-model">
-                                <SelectValue placeholder="Seleccionar modelo" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Todos los modelos</SelectItem>
-                                {saleModelOptions.map(model => (
-                                    <SelectItem key={model} value={model}>{model}</SelectItem>
-                                ))}
-                            </SelectContent>
+                          <SelectTrigger id="sale-model">
+                            <SelectValue placeholder="Seleccionar modelo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todos los modelos</SelectItem>
+                            {saleModelOptions.map(model => (
+                              <SelectItem key={model} value={model}>{model}</SelectItem>
+                            ))}
+                          </SelectContent>
                         </Select>
+                      </div>
                     </div>
 
-                    <hr className="my-2" />
-                    
                     <div className="space-y-2">
-                        <Label htmlFor="productId">Seleccionar Producto Final</Label>
-                        <Controller
-                            name="productId"
-                            control={controlSale}
-                            render={({ field }) => (
-                                <Select onValueChange={field.onChange} value={field.value} disabled={saleDialogProducts.length === 0}>
-                                    <SelectTrigger id="productId">
-                                        <SelectValue placeholder="Seleccionar producto de la lista" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {saleDialogProducts.map(p => (
-                                            <SelectItem key={p.id} value={p.id}>{`${unslugify(p.name)} (${p.model})`}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            )}
-                        />
-                        {saleDialogProducts.length === 0 && saleFilters.category !== 'all' && (
-                            <p className="text-sm text-muted-foreground">No hay productos con los filtros seleccionados.</p>
+                      <Label htmlFor="productId">Seleccionar Producto Final</Label>
+                      <Controller
+                        name="productId"
+                        control={controlSale}
+                        render={({ field }) => (
+                          <Select onValueChange={field.onChange} value={field.value} disabled={saleDialogProducts.length === 0}>
+                            <SelectTrigger id="productId">
+                              <SelectValue placeholder="Seleccionar producto de la lista" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {saleDialogProducts.map(p => (
+                                <SelectItem key={p.id} value={p.id}>{`${unslugify(p.name)} (${p.model})`}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         )}
-                        {errorsSale.productId && <p className="text-red-500 text-sm">{errorsSale.productId.message}</p>}
+                      />
+                      {saleDialogProducts.length === 0 && saleFilters.category !== 'all' && (
+                        <p className="text-sm text-muted-foreground">No hay productos con los filtros seleccionados.</p>
+                      )}
+                      {errorsSale.productId && <p className="text-red-500 text-sm">{errorsSale.productId.message}</p>}
                     </div>
 
                     {saleProduct && (
+                      <div className="grid gap-4 md:grid-cols-2">
                         <div className="space-y-2">
-                            <Label htmlFor="colorHex">Color</Label>
-                            <Controller
-                                name="colorHex"
-                                control={controlSale}
-                                render={({ field }) => (
-                                    <Select onValueChange={field.onChange} value={field.value}>
-                                        <SelectTrigger id="colorHex">
-                                            <SelectValue placeholder="Seleccionar color" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {saleProduct.colors.map(c => (
-                                                <SelectItem key={c.hex} value={c.hex} disabled={c.stock === 0}>
-                                                  <div className="flex items-center gap-2">
-                                                      <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: c.hex }} />
-                                                      <span>{c.name} (Stock: {c.stock})</span>
-                                                  </div>
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                )}
-                            />
-                            {errorsSale.colorHex && <p className="text-red-500 text-sm">{errorsSale.colorHex.message}</p>}
+                          <Label htmlFor="colorHex">Color</Label>
+                          <Controller
+                            name="colorHex"
+                            control={controlSale}
+                            render={({ field }) => (
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <SelectTrigger id="colorHex">
+                                  <SelectValue placeholder="Seleccionar color" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {saleProduct.colors.map(c => (
+                                    <SelectItem key={c.hex} value={c.hex} disabled={c.stock === 0}>
+                                      <div className="flex items-center gap-2">
+                                        <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: c.hex }} />
+                                        <span>{c.name} (Stock: {c.stock})</span>
+                                      </div>
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                          />
+                          {errorsSale.colorHex && <p className="text-red-500 text-sm">{errorsSale.colorHex.message}</p>}
                         </div>
-                    )}
-                
-                    <div className="space-y-2">
-                        <Label htmlFor="quantity">Cantidad</Label>
-                        <Input 
-                            id="quantity" 
-                            type="number" 
+
+                        <div className="space-y-2">
+                          <Label htmlFor="quantity">Cantidad</Label>
+                          <Input
+                            id="quantity"
+                            type="number"
                             min="1"
-                            {...registerSale('quantity')} 
+                            {...registerSale('quantity')}
                             disabled={!watchSale('colorHex')}
-                        />
-                        {errorsSale.quantity && <p className="text-red-500 text-sm">{errorsSale.quantity.message}</p>}
-                    </div>
-                    
+                          />
+                          {errorsSale.quantity && <p className="text-red-500 text-sm">{errorsSale.quantity.message}</p>}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="space-y-2">
-                        <Label htmlFor="discount_code">Código de Descuento (Opcional)</Label>
-                        {!appliedDiscount ? (
-                            <div className="flex gap-2">
-                                <Input 
-                                    id="discount_code"
-                                    {...registerSale('discount_code')}
-                                    placeholder="Ej: VERANO2025"
-                                    className="flex-1"
-                                />
-                                <Button 
-                                    type="button"
-                                    variant="outline"
-                                    onClick={handleValidateDiscountCode}
-                                    disabled={isValidatingDiscount || !watchSale('discount_code')?.trim()}
-                                    className="px-3"
-                                >
-                                    {isValidatingDiscount ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                        'Aplicar'
-                                    )}
-                                </Button>
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-md">
-                                <CheckCircle className="h-4 w-4 text-green-600" />
-                                <div className="flex-1">
-                                    <p className="text-sm font-medium text-green-900">
-                                        {appliedDiscount.name}
-                                    </p>
-                                    <p className="text-xs text-green-700">
-                                        {appliedDiscount.percentage}% de descuento aplicado
-                                    </p>
-                                </div>
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={handleRemoveDiscountCode}
-                                    className="h-8 w-8 p-0 text-green-700 hover:text-green-900"
-                                >
-                                    <X className="h-4 w-4" />
-                                </Button>
-                            </div>
-                        )}
+                      <Label htmlFor="discount_code">Código de Descuento (Opcional)</Label>
+                      {!appliedDiscount ? (
+                        <div className="flex gap-2">
+                          <Input
+                            id="discount_code"
+                            {...registerSale('discount_code')}
+                            placeholder="Ej: VERANO2025"
+                            className="flex-1"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={handleValidateDiscountCode}
+                            disabled={isValidatingDiscount || !watchSale('discount_code')?.trim()}
+                            className="px-3"
+                          >
+                            {isValidatingDiscount ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              'Aplicar'
+                            )}
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-md">
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-green-900">
+                              {appliedDiscount.name}
+                            </p>
+                            <p className="text-xs text-green-700">
+                              {appliedDiscount.percentage}% de descuento aplicado
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleRemoveDiscountCode}
+                            className="h-8 w-8 p-0 text-green-700 hover:text-green-900"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
-                </form>
-              </ScrollArea>
-               <DialogFooter>
-                    <DialogClose asChild>
-                        <Button type="button" variant="secondary">Cancelar</Button>
-                    </DialogClose>
-                    <Button onClick={handleSubmitSale(onSaleSubmit)} type="button" disabled={!saleProduct || !watchSale('colorHex')}>Confirmar Venta</Button>
+                  </form>
+                </ScrollArea>
+
+                <DialogFooter>
+                  <DialogClose asChild>
+                    <Button type="button" variant="secondary">Cancelar</Button>
+                  </DialogClose>
+                  <Button onClick={handleSubmitSale(onSaleSubmit)} type="button" disabled={!saleProduct || !watchSale('colorHex')}>
+                    Confirmar Venta
+                  </Button>
                 </DialogFooter>
-          </DialogContent>
+              </div>
+            )}
+
+            {saleDialogStep === 'group' && (
+              <div className="flex h-full flex-col gap-6 overflow-hidden">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="-ml-2 flex items-center gap-2"
+                    onClick={() => setSaleDialogStep('type')}
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Volver
+                  </Button>
+                  <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                    <span>{`Productos seleccionados: ${totalGroupSaleLines}`}</span>
+                    <span>{`Unidades totales: ${totalGroupSaleUnits}`}</span>
+                    {totalGroupSaleUnits > 0 && (
+                      <Button
+                        size="sm"
+                        onClick={handleGroupSaleSubmit}
+                        disabled={isProcessingGroupSale}
+                      >
+                        {isProcessingGroupSale ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar venta en grupo'}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar producto por nombre o modelo..."
+                    value={groupSaleSearchQuery}
+                    onChange={(e) => setGroupSaleSearchQuery(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  <ScrollArea className="relative overflow-hidden -mx-6 px-6 max-h-[60vh] h-full">
+                    <div className="space-y-4 py-4">
+                    {filteredGroupSaleProducts.map(product => (
+                      <Collapsible key={product.id} className="border-b pb-4">
+                        <CollapsibleTrigger className="w-full flex justify-between items-center py-2 font-semibold">
+                          <span>{unslugify(product.name)} ({product.model})</span>
+                          <ChevronDown className="h-4 w-4 transition-transform data-[state=open]:rotate-180" />
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="space-y-3 pt-2">
+                          {product.colors.map(color => {
+                            const key = `${product.id}-${color.hex}`;
+                            const selectedQuantity = groupSaleSelections[key] ?? 0;
+
+                            return (
+                              <div key={color.hex} className="grid grid-cols-1 md:grid-cols-3 items-center gap-3 md:gap-4">
+                                <div className="flex items-center gap-2">
+                                  <div className="h-5 w-5 rounded-full border" style={{ backgroundColor: color.hex }} />
+                                  <span className="text-sm md:text-base">{color.name} (Stock: {color.stock})</span>
+                                </div>
+                                <div className="flex items-center gap-2 md:justify-center">
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-8 w-8 rounded-full"
+                                    onClick={() => setGroupSaleQuantity(product.id, color.hex, selectedQuantity - 1)}
+                                  >
+                                    <Minus className="h-4 w-4" />
+                                  </Button>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    max={color.stock}
+                                    className="w-20 text-center"
+                                    value={selectedQuantity}
+                                    onChange={(e) => setGroupSaleQuantity(product.id, color.hex, Number(e.target.value || 0))}
+                                  />
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-8 w-8 rounded-full"
+                                    onClick={() => setGroupSaleQuantity(product.id, color.hex, selectedQuantity + 1)}
+                                  >
+                                    <Plus className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                                <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
+                                  <span>{selectedQuantity > 0 ? `Seleccionado: ${selectedQuantity}` : 'Sin seleccionar'}</span>
+                                  {selectedQuantity > 0 && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8"
+                                      onClick={() => setGroupSaleQuantity(product.id, color.hex, 0)}
+                                    >
+                                      <X className="h-4 w-4 mr-1" /> Quitar
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </CollapsibleContent>
+                      </Collapsible>
+                    ))}
+
+                    {filteredGroupSaleProducts.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-8">
+                        No se encontraron productos para la búsqueda actual.
+                      </p>
+                    )}
+                    </div>
+                  </ScrollArea>
+                </div>
+
+                <DialogFooter>
+                  <DialogClose asChild>
+                    <Button type="button" variant="secondary">Cancelar</Button>
+                  </DialogClose>
+                  <Button
+                    onClick={handleGroupSaleSubmit}
+                    type="button"
+                    disabled={isProcessingGroupSale || totalGroupSaleUnits === 0}
+                  >
+                    {isProcessingGroupSale ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar venta en grupo'}
+                  </Button>
+                </DialogFooter>
+              </div>
+            )}
+          </div>
+        </DialogContent>
       </Dialog>
       <Dialog open={isSalesHistoryDialogOpen} onOpenChange={setIsSalesHistoryDialogOpen}>
         <DialogContent className="max-w-4xl">
