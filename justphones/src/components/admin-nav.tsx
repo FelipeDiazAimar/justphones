@@ -12,7 +12,6 @@ const navItems = [
   { href: '/admin/models', label: 'Modelos' },
   { href: '/admin/faqs', label: 'Preguntas Frecuentes' },
   { href: '/admin/carousel', label: 'Carrusel' },
-  { href: '/admin/finanzas', label: 'Finanzas' },
   { href: '/admin/pedidos', label: 'Pedidos' },
   { href: '/admin/codigos', label: 'Codigos' },
 ];

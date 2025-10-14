@@ -740,7 +740,7 @@ function FinanceDashboard() {
       0,
     );
 
-    const totalCosts = totalFixedCostsForPeriod + totalSalaryWithdrawn + totalStockInvestment + negativeMonetaryIncome;
+    const totalCosts = totalFixedCostsForPeriod + totalSalaryWithdrawn + totalStockInvestment - negativeMonetaryIncome;
     const netProfit = totalRevenue + totalCosts;
 
     const totalStockValue = products.reduce((sum, p) => {
@@ -919,6 +919,8 @@ function FinanceDashboard() {
       totalSalaryWithdrawn,
       totalStockValue,
       totalMonetaryIncome,
+      positiveMonetaryIncome,
+      negativeMonetaryIncome,
       totalStockInvestment,
       salesCount: filteredSales.length,
       requestsCount: totalItemsRequestedCount,
@@ -1954,9 +1956,9 @@ function FinanceDashboard() {
                   colorClass="text-green-500"
                   custom={2}
                 >
-                  <p className="font-semibold mt-4">Fórmula: Ingreso por Productos + Movimientos Monetarios</p>
+                  <p className="font-semibold mt-4">Fórmula: Ingreso por Productos + Ingresos Monetarios</p>
                   <p>Ingreso por Productos: <span className="text-green-600">${financialSummaryDetails.totalSales.toLocaleString()}</span></p>
-                  <p>Movimientos Monetarios: <span className={financialSummaryDetails.totalMonetaryIncome >= 0 ? 'text-green-600' : 'text-red-600'}>${financialSummaryDetails.totalMonetaryIncome.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
+                  <p>Ingresos Monetarios: <span className="text-green-600">${financialSummaryDetails.positiveMonetaryIncome.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
                   <p className="mt-2 font-semibold">Total: <span className="text-green-600">${financialSummaryDetails.totalRevenue.toLocaleString()}</span></p>
                 </FinancialKpiCard>
                 <FinancialKpiCard
@@ -2034,14 +2036,15 @@ function FinanceDashboard() {
                     maximumFractionDigits: 0,
                   })}`}
                   icon={TrendingDown}
-                  detail="Pedidos + Fijos + Sueldos"
+                  detail="Pedidos + Fijos + Sueldos + Egresos"
                   colorClass="text-red-500"
                   custom={6}
                 >
-                  <p className="font-semibold mt-4">Fórmula: Costos de Pedidos + Costos Fijos + Extracción de Sueldos</p>
+                  <p className="font-semibold mt-4">Fórmula: Costos de Pedidos + Costos Fijos + Extracción de Sueldos + Egresos Monetarios</p>
                   <p>Costos de Pedidos: <span className="text-red-600">${financialSummaryDetails.totalStockInvestment.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
                   <p>Costos Fijos: <span className="text-red-600">${financialSummaryDetails.totalFixedCostsForPeriod.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
                   <p>Extracción de Sueldos: <span className="text-red-600">${financialSummaryDetails.totalSalaryWithdrawn.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
+                  <p>Egresos Monetarios: <span className="text-red-600">$-${financialSummaryDetails.negativeMonetaryIncome.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
                   <p className="mt-2 font-semibold">Total: <span className="text-red-600">${financialSummaryDetails.totalCosts.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
                 </FinancialKpiCard>
                 <FinancialKpiCard
