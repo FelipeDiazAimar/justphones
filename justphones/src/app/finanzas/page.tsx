@@ -946,6 +946,20 @@ function FinanceDashboard() {
     statsPeriod,
   ]);
 
+  // Filtered salary withdrawals for UI display (same logic as in financialSummaryDetails)
+  const filteredSalaryWithdrawalsForUI = useMemo(() => {
+    const selectedClosure = statsPeriod === 'all' ? null : closures.find(c => c.id === statsPeriod);
+    if (!selectedClosure) return salaryWithdrawals;
+    return salaryWithdrawals.filter(item => new Date(item.created_at) >= new Date(selectedClosure.startDate));
+  }, [salaryWithdrawals, closures, statsPeriod]);
+
+  // Filtered monetary income for UI display (same logic as in financialSummaryDetails)
+  const filteredMonetaryIncomeForUI = useMemo(() => {
+    const selectedClosure = statsPeriod === 'all' ? null : closures.find(c => c.id === statsPeriod);
+    if (!selectedClosure) return monetaryIncome;
+    return monetaryIncome.filter(item => new Date(item.created_at) >= new Date(selectedClosure.startDate));
+  }, [monetaryIncome, closures, statsPeriod]);
+
   const salesChartData = useMemo(() => {
     const last30Days = subDays(new Date(), 30);
     const dailySales = sales
@@ -3120,7 +3134,7 @@ function FinanceDashboard() {
                   </form>
                   <CardContent className="overflow-y-auto max-h-96">
                     <ul className="space-y-2 pr-2">
-                      {salaryWithdrawals.map((s) => (
+                      {filteredSalaryWithdrawalsForUI.map((s) => (
                         <li key={s.id} className="flex justify-between items-center text-sm">
                           {editingSalaryId === s.id ? (
                             <div className="flex items-center gap-2 flex-1">
@@ -3225,7 +3239,7 @@ function FinanceDashboard() {
                   </form>
                   <CardContent className="overflow-y-auto max-h-96">
                     <ul className="space-y-2 pr-2">
-                      {monetaryIncome.map((income) => (
+                      {filteredMonetaryIncomeForUI.map((income) => (
                         <li key={income.id} className="flex justify-between items-center text-sm">
                           {editingIncomeId === income.id ? (
                             <div className="flex items-center gap-2 flex-1">
