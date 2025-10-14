@@ -2999,18 +2999,18 @@ function FinanceDashboard() {
                   <CardHeader>
                     <CardTitle>Costos Fijos Mensuales</CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <form
-                      onSubmit={handleSubmitFixedCost(onFixedCostSubmit)}
-                      className="flex items-start gap-2 mb-4"
-                    >
-                      <Input {...registerFixedCost('name')} placeholder="Nombre del costo" className="h-9" />
-                      <Input {...registerFixedCost('amount', { valueAsNumber: true })} type="number" placeholder="$" className="h-9 w-24" />
-                      <Button type="submit" size="icon" className="h-9 w-9 flex-shrink-0">
-                        <PlusCircle />
-                      </Button>
-                    </form>
-                    <ul className="space-y-2">
+                  <form
+                    onSubmit={handleSubmitFixedCost(onFixedCostSubmit)}
+                    className="flex items-start gap-2 mb-4 px-6"
+                  >
+                    <Input {...registerFixedCost('name')} placeholder="Nombre del costo" className="h-9" />
+                    <Input {...registerFixedCost('amount', { valueAsNumber: true })} type="number" placeholder="$" className="h-9 w-24" />
+                    <Button type="submit" size="icon" className="h-9 w-9 flex-shrink-0">
+                      <PlusCircle />
+                    </Button>
+                  </form>
+                  <CardContent className="overflow-y-auto max-h-96">
+                    <ul className="space-y-2 pr-2">
                       {fixedCosts.map((cost) => (
                         <li key={cost.id} className="flex justify-between items-center text-sm">
                           {editingFixedCostId === cost.id ? (
@@ -3099,28 +3099,28 @@ function FinanceDashboard() {
                   <CardHeader>
                     <CardTitle>Extracciones de Sueldo</CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <form
-                      onSubmit={handleSubmitSalary(onSalarySubmit)}
-                      className="flex items-start gap-2 mb-4"
-                    >
-                      <Input
-                        {...registerSalary('description')}
-                        placeholder="Descripción (ej. Sueldo Enero)"
-                        className="h-9"
-                      />
-                      <Input
-                        {...registerSalary('amount', { valueAsNumber: true })}
-                        type="number"
-                        placeholder="$"
-                        className="h-9 w-24"
-                      />
-                      <Button type="submit" size="icon" className="h-9 w-9 flex-shrink-0">
-                        <PlusCircle />
-                      </Button>
-                    </form>
-                    <ul className="space-y-2">
-                      {salaryWithdrawals.slice(0, 5).map((s) => (
+                  <form
+                    onSubmit={handleSubmitSalary(onSalarySubmit)}
+                    className="flex items-start gap-2 mb-4 px-6"
+                  >
+                    <Input
+                      {...registerSalary('description')}
+                      placeholder="Descripción (ej. Sueldo Enero)"
+                      className="h-9"
+                    />
+                    <Input
+                      {...registerSalary('amount', { valueAsNumber: true })}
+                      type="number"
+                      placeholder="$"
+                      className="h-9 w-24"
+                    />
+                    <Button type="submit" size="icon" className="h-9 w-9 flex-shrink-0">
+                      <PlusCircle />
+                    </Button>
+                  </form>
+                  <CardContent className="overflow-y-auto max-h-96">
+                    <ul className="space-y-2 pr-2">
+                      {salaryWithdrawals.map((s) => (
                         <li key={s.id} className="flex justify-between items-center text-sm">
                           {editingSalaryId === s.id ? (
                             <div className="flex items-center gap-2 flex-1">
@@ -3213,19 +3213,19 @@ function FinanceDashboard() {
                   <CardHeader>
                     <CardTitle>Ingresos/Extracciones</CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <form
-                      onSubmit={handleSubmitIncome(onIncomeSubmit)}
-                      className="flex items-start gap-2 mb-4"
-                    >
-                      <Input {...registerIncome('name')} placeholder="Nombre del ingreso/egreso" className="h-9" />
-                      <Input {...registerIncome('amount', { valueAsNumber: true })} type="number" placeholder="±$" className="h-9 w-24" />
-                      <Button type="submit" size="icon" className="h-9 w-9 flex-shrink-0">
-                        <PlusCircle />
-                      </Button>
-                    </form>
-                    <ul className="space-y-2">
-                      {monetaryIncome.slice(0, 5).map((income) => (
+                  <form
+                    onSubmit={handleSubmitIncome(onIncomeSubmit)}
+                    className="flex items-start gap-2 mb-4 px-6"
+                  >
+                    <Input {...registerIncome('name')} placeholder="Nombre del ingreso/egreso" className="h-9" />
+                    <Input {...registerIncome('amount', { valueAsNumber: true })} type="number" placeholder="±$" className="h-9 w-24" />
+                    <Button type="submit" size="icon" className="h-9 w-9 flex-shrink-0">
+                      <PlusCircle />
+                    </Button>
+                  </form>
+                  <CardContent className="overflow-y-auto max-h-96">
+                    <ul className="space-y-2 pr-2">
+                      {monetaryIncome.map((income) => (
                         <li key={income.id} className="flex justify-between items-center text-sm">
                           {editingIncomeId === income.id ? (
                             <div className="flex items-center gap-2 flex-1">
