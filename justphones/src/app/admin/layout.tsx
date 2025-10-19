@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -102,6 +103,7 @@ export default function AdminLayout({
 }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const pathname = usePathname();
 
   useEffect(() => {
     // Verificar si ya está autenticado en localStorage
@@ -127,15 +129,19 @@ export default function AdminLayout({
     return <AdminAuthForm />;
   }
 
+  const isDashboardPage = pathname === '/admin';
+
   return (
     <div className="flex flex-col min-h-screen">
       <Header showCart={false} />
       <main className="flex-grow container mx-auto px-4 md:px-6 py-8">
-        <h1 className="text-3xl font-bold mb-6 text-center md:text-left">Panel de Administración</h1>
-        <AdminNav />
+        {!isDashboardPage && (
+          <h1 className="text-3xl font-bold mb-6 text-center md:text-left">Panel de Administración</h1>
+        )}
+        {!isDashboardPage && <AdminNav />}
         <SalaryWithdrawalsProvider>
           <MonetaryIncomeProvider>
-            <div className="mt-6">{children}</div>
+            <div className={isDashboardPage ? "" : "mt-6"}>{children}</div>
           </MonetaryIncomeProvider>
         </SalaryWithdrawalsProvider>
       </main>
