@@ -109,6 +109,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -128,6 +129,15 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import {
   Tooltip,
@@ -503,7 +513,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 function FinanceDashboard() {
-  const { sales, isLoading: isLoadingSales } = useSales();
+  const { sales, isLoading: isLoadingSales, updateSale, deleteSale } = useSales();
   const { products, isLoading: isLoadingProducts } = useProducts();
   const { customerRequests, isLoading: isLoadingRequests } = useCustomerRequests();
   const { productViews, isLoading: isLoadingViews } = useProductViews();
@@ -543,7 +553,13 @@ function FinanceDashboard() {
   const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
   const [editingFixedCostValues, setEditingFixedCostValues] = useState<{ name: string; amount: number } | null>(null);
   const [editingSalaryValues, setEditingSalaryValues] = useState<{ description: string; amount: number } | null>(null);
-  const [editingIncomeValues, setEditingIncomeValues] = useState<{ name: string; amount: number } | null>(null);
+  const [editingSaleId, setEditingSaleId] = useState<string | null>(null);
+  const [editingSaleValues, setEditingSaleValues] = useState<{
+    quantity: number;
+    price_per_unit: number;
+    discount_code?: string;
+    discount_percentage: number;
+  } | null>(null);
 
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const touchStartX = useRef<number | null>(null);
@@ -691,6 +707,41 @@ function FinanceDashboard() {
     if (await addMonetaryIncome(payload)) {
       toast({ title: 'Ingreso Monetario Registrado' });
       resetIncome({ name: '', amount: 0, description: '' });
+    }
+  };
+
+  const handleEditSale = (sale: Sale) => {
+    setEditingSaleId(sale.id);
+    setEditingSaleValues({
+      quantity: sale.quantity,
+      price_per_unit: sale.price_per_unit,
+      discount_code: sale.discount_code || undefined,
+      discount_percentage: sale.discount_percentage,
+    });
+  };
+
+  const handleSaveSaleEdit = async () => {
+    if (!editingSaleId || !editingSaleValues) return;
+
+    const success = await updateSale(editingSaleId, {
+      quantity: editingSaleValues.quantity,
+      price_per_unit: editingSaleValues.price_per_unit,
+      discount_code: editingSaleValues.discount_code,
+      discount_percentage: editingSaleValues.discount_percentage,
+      total_price: editingSaleValues.quantity * editingSaleValues.price_per_unit,
+    });
+
+    if (success) {
+      toast({ title: 'Venta actualizada', description: 'La venta ha sido actualizada exitosamente.' });
+      setEditingSaleId(null);
+      setEditingSaleValues(null);
+    }
+  };
+
+  const handleDeleteSale = async (saleId: string) => {
+    const success = await deleteSale(saleId);
+    if (success) {
+      toast({ title: 'Venta eliminada', description: 'La venta ha sido eliminada exitosamente.' });
     }
   };
 
@@ -3462,6 +3513,7 @@ function FinanceDashboard() {
                           <TableHead className="text-right">Total</TableHead>
                           <TableHead>Fecha</TableHead>
                           <TableHead>Hace</TableHead>
+                          <TableHead className="text-right">Acciones</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -3497,7 +3549,7 @@ function FinanceDashboard() {
                                 )}
                               </TableCell>
                               <TableCell className="text-right font-medium">
-                                ${sale.total_price.toLocaleString()}
+                                ${(sale.quantity * sale.price_per_unit * (1 - sale.discount_percentage / 100)).toLocaleString()}
                               </TableCell>
                               <TableCell>
                                 <div className="flex flex-col">
@@ -3509,6 +3561,46 @@ function FinanceDashboard() {
                               </TableCell>
                               <TableCell className="text-muted-foreground">
                                 {timeAgo}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex items-center justify-end space-x-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleEditSale(sale)}
+                                    className="h-8 w-8"
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-destructive hover:text-destructive"
+                                      >
+                                        <Trash className="h-4 w-4" />
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          Esta acción no se puede deshacer. Esto eliminará permanentemente la venta de {unslugify(sale.product_name)} por ${(sale.quantity * sale.price_per_unit * (1 - sale.discount_percentage / 100)).toLocaleString()}.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                        <AlertDialogAction
+                                          onClick={() => handleDeleteSale(sale.id)}
+                                          className="bg-destructive hover:bg-destructive/90"
+                                        >
+                                          Eliminar
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </div>
                               </TableCell>
                             </TableRow>
                           );
@@ -3523,6 +3615,99 @@ function FinanceDashboard() {
                   )}
                 </CardContent>
               </Card>
+
+              {/* Edit Sale Dialog */}
+              <Dialog open={!!editingSaleId} onOpenChange={(open) => !open && setEditingSaleId(null)}>
+                <DialogContent className="sm:max-w-[425px]">
+                  <DialogHeader>
+                    <DialogTitle>Editar Venta</DialogTitle>
+                    <DialogDescription>
+                      Modifica los detalles de la venta seleccionada.
+                    </DialogDescription>
+                  </DialogHeader>
+                  {editingSaleValues && (
+                    <div className="grid gap-4 py-4">
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="edit-quantity" className="text-right">
+                          Cantidad
+                        </Label>
+                        <Input
+                          id="edit-quantity"
+                          type="number"
+                          min="1"
+                          value={editingSaleValues.quantity}
+                          onChange={(e) => setEditingSaleValues(prev => prev ? { ...prev, quantity: Number(e.target.value) } : null)}
+                          className="col-span-3"
+                        />
+                      </div>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="edit-price" className="text-right">
+                          Precio Unit.
+                        </Label>
+                        <Input
+                          id="edit-price"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={editingSaleValues.price_per_unit}
+                          onChange={(e) => setEditingSaleValues(prev => prev ? { ...prev, price_per_unit: Number(e.target.value) } : null)}
+                          className="col-span-3"
+                        />
+                      </div>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="edit-discount-code" className="text-right">
+                          Código Desc.
+                        </Label>
+                        <Input
+                          id="edit-discount-code"
+                          value={editingSaleValues.discount_code || ''}
+                          onChange={(e) => setEditingSaleValues(prev => prev ? { ...prev, discount_code: e.target.value || undefined } : null)}
+                          className="col-span-3"
+                          placeholder="Opcional"
+                        />
+                      </div>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="edit-discount-percentage" className="text-right">
+                          Descuento %
+                        </Label>
+                        <Input
+                          id="edit-discount-percentage"
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={editingSaleValues.discount_percentage}
+                          onChange={(e) => setEditingSaleValues(prev => prev ? { ...prev, discount_percentage: Number(e.target.value) } : null)}
+                          className="col-span-3"
+                        />
+                      </div>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label className="text-right font-medium">
+                          Subtotal
+                        </Label>
+                        <div className="col-span-3 text-lg">
+                          ${(editingSaleValues.quantity * editingSaleValues.price_per_unit).toLocaleString()}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label className="text-right font-medium">
+                          Total c/Desc.
+                        </Label>
+                        <div className="col-span-3 text-lg font-bold text-green-600">
+                          ${(editingSaleValues.quantity * editingSaleValues.price_per_unit * (1 - editingSaleValues.discount_percentage / 100)).toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <DialogFooter>
+                    <Button type="button" variant="secondary" onClick={() => setEditingSaleId(null)}>
+                      Cancelar
+                    </Button>
+                    <Button type="button" onClick={handleSaveSaleEdit}>
+                      Guardar Cambios
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </motion.section>
           </main>
         </div>

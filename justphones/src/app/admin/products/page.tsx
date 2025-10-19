@@ -159,7 +159,7 @@ function getCroppedImg(image: HTMLImageElement, crop: Crop, fileName: string): P
   });
 }
 
-function calculateSalePricing(product: Product) {
+function calculateSalePricing(product: Product, applyCashDiscount: boolean = true) {
   let finalPrice = product.price;
   let discountPercentage = product.discount || 0;
 
@@ -167,9 +167,11 @@ function calculateSalePricing(product: Product) {
       finalPrice = finalPrice * (1 - product.discount / 100);
   }
 
-  const cashDiscount = 0.2;
-  finalPrice = finalPrice * (1 - cashDiscount);
-  discountPercentage += cashDiscount * 100;
+  if (applyCashDiscount) {
+    const cashDiscount = 0.2;
+    finalPrice = finalPrice * (1 - cashDiscount);
+    discountPercentage += cashDiscount * 100;
+  }
 
   return { finalPrice, discountPercentage };
 }
@@ -1016,7 +1018,7 @@ export default function AdminProductsPage() {
       let failedSales = 0;
 
       for (const entry of salesPayload) {
-        const { finalPrice, discountPercentage } = calculateSalePricing(entry.product);
+        const { finalPrice, discountPercentage } = calculateSalePricing(entry.product, false);
         const saleData: Omit<Sale, 'id' | 'created_at'> = {
           product_id: entry.product.id,
           product_name: entry.product.name,
@@ -1026,7 +1028,7 @@ export default function AdminProductsPage() {
           quantity: entry.quantity,
           price_per_unit: finalPrice,
           total_price: finalPrice * entry.quantity,
-          discount_percentage,
+          discount_percentage: discountPercentage,
         };
 
         const success = await addSale(saleData);
@@ -2686,15 +2688,6 @@ export default function AdminProductsPage() {
                   <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
                     <span>{`Productos seleccionados: ${totalGroupSaleLines}`}</span>
                     <span>{`Unidades totales: ${totalGroupSaleUnits}`}</span>
-                    {totalGroupSaleUnits > 0 && (
-                      <Button
-                        size="sm"
-                        onClick={handleGroupSaleSubmit}
-                        disabled={isProcessingGroupSale}
-                      >
-                        {isProcessingGroupSale ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar venta en grupo'}
-                      </Button>
-                    )}
                   </div>
                 </div>
 
