@@ -1174,7 +1174,9 @@ function FinanceDashboard() {
         }
         acc[pedidoId].entries.push(entry);
         acc[pedidoId].totalCost += (entry.cost || 0) * entry.quantity_added;
-        acc[pedidoId].totalPrice += (entry.price || 0) * entry.quantity_added;
+        // Apply 20% discount to price for profit calculations (cash price)
+        const discountedPrice = (entry.price || 0) * 0.8;
+        acc[pedidoId].totalPrice += discountedPrice * entry.quantity_added;
         return acc;
       },
       {} as Record<string, { entries: StockHistory[]; date: Date; totalCost: number; totalPrice: number }>,
