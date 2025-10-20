@@ -553,6 +553,7 @@ function FinanceDashboard() {
   const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
   const [editingFixedCostValues, setEditingFixedCostValues] = useState<{ name: string; amount: number } | null>(null);
   const [editingSalaryValues, setEditingSalaryValues] = useState<{ description: string; amount: number } | null>(null);
+  const [editingIncomeValues, setEditingIncomeValues] = useState<{ name: string; amount: number } | null>(null);
   const [editingSaleId, setEditingSaleId] = useState<string | null>(null);
   const [editingSaleValues, setEditingSaleValues] = useState<{
     quantity: number;
