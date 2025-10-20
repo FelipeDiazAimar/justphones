@@ -1018,7 +1018,8 @@ export default function AdminProductsPage() {
       let failedSales = 0;
 
       for (const entry of salesPayload) {
-        const { finalPrice, discountPercentage } = calculateSalePricing(entry.product, false);
+        // Registrar cada venta con el descuento del 20% aplicado por ventas en efectivo
+        const { finalPrice, discountPercentage } = calculateSalePricing(entry.product, true);
         const saleData: Omit<Sale, 'id' | 'created_at'> = {
           product_id: entry.product.id,
           product_name: entry.product.name,
@@ -1026,7 +1027,7 @@ export default function AdminProductsPage() {
           color_name: entry.color.name,
           color_hex: entry.color.hex,
           quantity: entry.quantity,
-          price_per_unit: finalPrice,
+          price_per_unit: entry.product.price,
           total_price: finalPrice * entry.quantity,
           discount_percentage: discountPercentage,
         };
@@ -1139,7 +1140,7 @@ export default function AdminProductsPage() {
         color_name: colorToUpdate.name,
         color_hex: colorToUpdate.hex,
         quantity: data.quantity,
-        price_per_unit: finalPrice,
+        price_per_unit: productToUpdate.price,
         total_price: finalPrice * data.quantity,
         discount_code: appliedDiscount?.code || undefined,
         discount_percentage: discountPercentage,
