@@ -126,9 +126,11 @@ export default function AdminFinancePage() {
   const { productViews, isLoading: isLoadingViews } = useProductViews();
   const { customerRequests, isLoading: isLoadingRequests } = useCustomerRequests();
   const { stockHistory, isLoading: isLoadingStockHistory } = useStockHistory();
-  const { fixedCosts, addFixedCost, updateFixedCost, deleteFixedCost, isLoading: isLoadingFixedCosts } = useFixedCosts();
+  const { fixedCosts, addFixedCost, updateFixedCost, deleteFixedCost, updateCostsWithoutMonth, isLoading: isLoadingFixedCosts } = useFixedCosts();
   const { salaryWithdrawals, addSalaryWithdrawal, updateSalaryWithdrawal, deleteSalaryWithdrawal, isLoading: isLoadingSalaryWithdrawals } = useSalaryWithdrawals();
   const { monetaryIncome, addMonetaryIncome, updateMonetaryIncome, deleteMonetaryIncome, isLoading: isLoadingMonetaryIncome } = useMonetaryIncome();
+
+  
 
   const [sortPopularityBy, setSortPopularityBy] = useState<'sales' | 'requests' | 'views'>('sales');
   
@@ -219,8 +221,10 @@ export default function AdminFinancePage() {
   }, [toast]);
 
   useEffect(() => {
-    refreshClosures();
-  }, [refreshClosures]);
+    if (selectedMonth && fixedCosts.some(cost => !cost.month)) {
+      updateCostsWithoutMonth(selectedMonth);
+    }
+  }, [selectedMonth, fixedCosts, updateCostsWithoutMonth]);
 
   const sortedClosures = useMemo(() => {
     return [...closures].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
@@ -271,6 +275,14 @@ export default function AdminFinancePage() {
         return { value: c.month, label: label.charAt(0).toUpperCase() + label.slice(1) };
       });
   };
+
+  // Costos fijos del mes seleccionado
+  const monthlyFixedCosts = useMemo(() => {
+    // Si no hay mes seleccionado, retornar vacío para evitar mostrar costos globales
+    if (!selectedMonth) return [] as FixedCost[];
+    // Filtrar estrictamente por el campo month
+    return fixedCosts.filter(cost => cost.month === selectedMonth);
+  }, [fixedCosts, selectedMonth]);
 
   // Estado para controlar la expansión de cada card
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
@@ -362,7 +374,7 @@ export default function AdminFinancePage() {
 
 
   const onFixedCostSubmit = async (data: z.infer<typeof fixedCostSchema>) => {
-      const success = await addFixedCost(data);
+      const success = await addFixedCost({ ...data, month: selectedMonth });
       if (success) {
           toast({ title: "Costo Fijo Añadido" });
           resetFixedCost({ name: '', amount: 0 });
@@ -377,7 +389,7 @@ export default function AdminFinancePage() {
 
   const onEditFixedCostSubmit = async (data: z.infer<typeof fixedCostSchema>) => {
     if (!editingCost) return;
-    const success = await updateFixedCost(editingCost.id, { name: data.name, amount: data.amount });
+    const success = await updateFixedCost(editingCost.id, { name: data.name, amount: data.amount, month: selectedMonth });
     if (success) {
         toast({ title: "Costo Fijo Actualizado" });
         setIsEditCostDialogOpen(false);
@@ -1033,9 +1045,9 @@ export default function AdminFinancePage() {
             id: 'costos-fijos',
             title: 'Costos Fijos',
             icon: <Building className="h-4 w-4" />,
-            value: fixedCosts.reduce((acc, cost) => acc + cost.amount, 0),
+            value: monthlyFixedCosts.reduce((acc, cost) => acc + cost.amount, 0),
             formula: 'SUMA(Costos fijos)',
-            calculations: fixedCosts.map(cost => ({
+            calculations: monthlyFixedCosts.map(cost => ({
               label: cost.name,
               value: cost.amount,
               isNegative: true
@@ -1118,7 +1130,7 @@ export default function AdminFinancePage() {
             title: 'Costos Totales',
             icon: <CreditCard className="h-4 w-4" />,
             value: (() => {
-              const costosFijos = fixedCosts.reduce((acc, cost) => acc + cost.amount, 0);
+              const costosFijos = monthlyFixedCosts.reduce((acc, cost) => acc + cost.amount, 0);
               const extraccionesSueldos = salaryWithdrawals.filter(w => isInSelectedMonth(w.created_at)).reduce((sum, w) => sum + w.amount, 0);
               const costosPedidos = stockHistory.filter(entry => isInSelectedMonth(entry.created_at)).reduce((acc, entry) => acc + ((entry.cost || 0) * entry.quantity_added), 0);
               const egresosMonetarios = monetaryIncome
@@ -1128,7 +1140,7 @@ export default function AdminFinancePage() {
             })(),
             formula: 'Costos fijos + Sueldos + Costos de pedidos + Egresos monetarios',
             calculations: [
-              { label: 'Costos Fijos', value: fixedCosts.reduce((acc, cost) => acc + cost.amount, 0), isNegative: true },
+              { label: 'Costos Fijos', value: monthlyFixedCosts.reduce((acc, cost) => acc + cost.amount, 0), isNegative: true },
               { label: 'Extracciones de Sueldos', value: salaryWithdrawals.filter(w => isInSelectedMonth(w.created_at)).reduce((sum, w) => sum + w.amount, 0), isNegative: true },
               { label: 'Costos de Pedidos', value: stockHistory.filter(entry => isInSelectedMonth(entry.created_at)).reduce((acc, entry) => acc + ((entry.cost || 0) * entry.quantity_added), 0), isNegative: true },
               { label: 'Egresos Monetarios', value: monetaryIncome.filter(income => isInSelectedMonth(income.created_at) && (income.name.startsWith('[EGRESO]') || income.amount < 0)).reduce((total, income) => total + Math.abs(income.amount), 0), isNegative: true }
@@ -1164,7 +1176,7 @@ export default function AdminFinancePage() {
                 .reduce((total, income) => total + income.amount, 0);
               const ingresosTotales = ingresosProductos + ingresosMonetarios;
               
-              const costosFijos = fixedCosts.reduce((acc, cost) => acc + cost.amount, 0);
+              const costosFijos = monthlyFixedCosts.reduce((acc, cost) => acc + cost.amount, 0);
               const extraccionesSueldos = salaryWithdrawals.filter(w => isInSelectedMonth(w.created_at)).reduce((sum, w) => sum + w.amount, 0);
               const costosPedidos = stockHistory.filter(entry => isInSelectedMonth(entry.created_at)).reduce((acc, entry) => acc + ((entry.cost || 0) * entry.quantity_added), 0);
               const egresosMonetarios = monetaryIncome
@@ -1182,7 +1194,7 @@ export default function AdminFinancePage() {
                 .reduce((total, income) => total + income.amount, 0);
               const ingresosTotales = ingresosProductos + ingresosMonetarios;
               
-              const costosFijos = fixedCosts.reduce((acc, cost) => acc + cost.amount, 0);
+              const costosFijos = monthlyFixedCosts.reduce((acc, cost) => acc + cost.amount, 0);
               const extraccionesSueldos = salaryWithdrawals.filter(w => isInSelectedMonth(w.created_at)).reduce((sum, w) => sum + w.amount, 0);
               const costosPedidos = stockHistory.filter(entry => isInSelectedMonth(entry.created_at)).reduce((acc, entry) => acc + ((entry.cost || 0) * entry.quantity_added), 0);
               const egresosMonetarios = monetaryIncome
@@ -1279,7 +1291,7 @@ export default function AdminFinancePage() {
                 totalIngresos += ventas + ingresosPositivos;
 
                 // Costos: fijos (cada mes cuenta 1 vez), sueldos, costos de pedidos, egresos monetarios
-                const costosFijos = fixedCosts.reduce((acc, c) => acc + c.amount, 0);
+                const costosFijos = fixedCosts.filter(cost => cost.month === current.month).reduce((acc, cost) => acc + cost.amount, 0);
                 const sueldos = salaryWithdrawals.filter(w => {
                   const d = parseISO(w.created_at);
                   return d >= start && d <= end;
@@ -1320,7 +1332,7 @@ export default function AdminFinancePage() {
                 }).reduce((acc, mi) => acc + mi.amount, 0);
                 const ingresosMes = ventas + ingresosPositivos;
 
-                const costosFijos = fixedCosts.reduce((acc, c2) => acc + c2.amount, 0);
+                const costosFijos = fixedCosts.filter(cost => cost.month === c.month).reduce((acc, cost) => acc + cost.amount, 0);
                 const sueldos = salaryWithdrawals.filter(w => {
                   const d = parseISO(w.created_at);
                   return d >= start && d <= end;
@@ -1705,7 +1717,7 @@ export default function AdminFinancePage() {
                               </TableRow>
                           </TableHeader>
                           <TableBody>
-                              {fixedCosts.length > 0 ? fixedCosts.map((cost) => (
+                              {monthlyFixedCosts.length > 0 ? monthlyFixedCosts.map((cost) => (
                                   <TableRow key={cost.id}>
                                       <TableCell className="font-medium">{cost.name}</TableCell>
                                       <TableCell className="text-right">${cost.amount.toLocaleString()}</TableCell>

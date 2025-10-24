@@ -23,6 +23,7 @@ import { useProductViews } from '@/hooks/use-product-views';
 import { useCustomerRequests } from '@/hooks/use-customer-requests';
 import { useStockHistory } from '@/hooks/use-stock-history';
 import { useFixedCosts } from '@/hooks/use-fixed-costs';
+import type { Sale } from '@/lib/sales';
 import {
   useSalaryWithdrawals,
   SalaryWithdrawalsProvider,
@@ -678,7 +679,14 @@ function FinanceDashboard() {
   });
 
   const onFixedCostSubmit = async (data: { name: string; amount: number }) => {
-    if (await addFixedCost(data as Omit<FixedCost, 'id' | 'created_at'>)) {
+    const fallbackMonth = format(new Date(), 'yyyy-MM');
+    const targetMonth = selectedClosure?.month ?? latestClosureMonth ?? fallbackMonth;
+    const payload: Omit<FixedCost, 'id' | 'created_at'> = {
+      name: data.name,
+      amount: data.amount,
+      month: targetMonth,
+    };
+    if (await addFixedCost(payload)) {
       toast({ title: 'Costo Fijo Añadido' });
       resetFixedCost({ name: '', amount: 0 });
     }
@@ -717,7 +725,7 @@ function FinanceDashboard() {
       quantity: sale.quantity,
       price_per_unit: sale.price_per_unit,
       discount_code: sale.discount_code || undefined,
-      discount_percentage: sale.discount_percentage,
+      discount_percentage: sale.discount_percentage ?? 0,
     });
   };
 
@@ -753,9 +761,25 @@ function FinanceDashboard() {
     isLoadingViews ||
     isLoadingStock;
 
-  const financialSummaryDetails = useMemo(() => {
-    const selectedClosure = statsPeriod === 'all' ? null : closures.find(c => c.id === statsPeriod);
+  const selectedClosure = useMemo(() => {
+    if (statsPeriod === 'all') return null;
+    return closures.find((c) => c.id === statsPeriod) ?? null;
+  }, [statsPeriod, closures]);
 
+  const periodFixedCosts = useMemo(() => {
+    if (!selectedClosure) return fixedCosts;
+    return fixedCosts.filter((cost) => cost.month === selectedClosure.month);
+  }, [fixedCosts, selectedClosure]);
+
+  const latestClosureMonth = useMemo(() => {
+    if (closures.length === 0) return null;
+    const sorted = [...closures].sort(
+      (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime(),
+    );
+    return sorted[sorted.length - 1].month;
+  }, [closures]);
+
+  const financialSummaryDetails = useMemo(() => {
     const filterByClosure = <T extends { created_at: string }>(items: T[]): T[] => {
       if (!selectedClosure) return items;
       return items.filter(item => new Date(item.created_at) >= new Date(selectedClosure.startDate));
@@ -774,8 +798,8 @@ function FinanceDashboard() {
       return sum + ((product?.cost || 0) * sale.quantity);
     }, 0);
 
-    const monthlyFixedCosts = fixedCosts.reduce((sum, cost) => sum + cost.amount, 0);
-    const totalFixedCostsForPeriod = - fixedCosts.reduce((sum, cost) => sum + cost.amount, 0);
+  const periodFixedCostsSum = periodFixedCosts.reduce((sum, cost) => sum + cost.amount, 0);
+  const totalFixedCostsForPeriod = -periodFixedCostsSum;
 
     const totalSalaryWithdrawn = - filteredSalaryWithdrawals.reduce(
       (sum, s) => sum + s.amount,
@@ -792,7 +816,7 @@ function FinanceDashboard() {
       0,
     );
 
-    const totalCosts = totalFixedCostsForPeriod + totalSalaryWithdrawn + totalStockInvestment - negativeMonetaryIncome;
+  const totalCosts = totalFixedCostsForPeriod + totalSalaryWithdrawn + totalStockInvestment - negativeMonetaryIncome;
     const netProfit = totalRevenue + totalCosts;
 
     const totalStockValue = products.reduce((sum, p) => {
@@ -845,7 +869,7 @@ function FinanceDashboard() {
       .sort((a, b) => b.value - a.value)
       .slice(0, 10);
 
-    const fixedCostsBreakdown = fixedCosts
+    const fixedCostsBreakdown = periodFixedCosts
       .map(cost => ({
         label: cost.name,
         value: cost.amount,
@@ -931,7 +955,9 @@ function FinanceDashboard() {
         }).reduce((acc, mi) => acc + mi.amount, 0);
         const ingresosMes = ventas + ingresosPositivos;
 
-        const costosFijos = fixedCosts.reduce((acc, c2) => acc + c2.amount, 0);
+        const costosFijos = fixedCosts
+          .filter((item) => item.month === c.month)
+          .reduce((acc, item) => acc + item.amount, 0);
         const sueldos = salaryWithdrawals.filter(w => {
           const d = parseISO(w.created_at);
           return d >= start && d <= end;
@@ -1002,17 +1028,15 @@ function FinanceDashboard() {
 
   // Filtered salary withdrawals for UI display (same logic as in financialSummaryDetails)
   const filteredSalaryWithdrawalsForUI = useMemo(() => {
-    const selectedClosure = statsPeriod === 'all' ? null : closures.find(c => c.id === statsPeriod);
     if (!selectedClosure) return salaryWithdrawals;
     return salaryWithdrawals.filter(item => new Date(item.created_at) >= new Date(selectedClosure.startDate));
-  }, [salaryWithdrawals, closures, statsPeriod]);
+  }, [salaryWithdrawals, selectedClosure]);
 
   // Filtered monetary income for UI display (same logic as in financialSummaryDetails)
   const filteredMonetaryIncomeForUI = useMemo(() => {
-    const selectedClosure = statsPeriod === 'all' ? null : closures.find(c => c.id === statsPeriod);
     if (!selectedClosure) return monetaryIncome;
     return monetaryIncome.filter(item => new Date(item.created_at) >= new Date(selectedClosure.startDate));
-  }, [monetaryIncome, closures, statsPeriod]);
+  }, [monetaryIncome, selectedClosure]);
 
   const salesChartData = useMemo(() => {
     const last30Days = subDays(new Date(), 30);
@@ -3082,9 +3106,10 @@ function FinanceDashboard() {
                   </form>
                   <CardContent className="overflow-y-auto max-h-96">
                     <ul className="space-y-2 pr-2">
-                      {fixedCosts.map((cost) => (
-                        <li key={cost.id} className="flex justify-between items-center text-sm">
-                          {editingFixedCostId === cost.id ? (
+                      {periodFixedCosts.length > 0
+                        ? periodFixedCosts.map((cost) => (
+                          <li key={cost.id} className="flex justify-between items-center text-sm">
+                            {editingFixedCostId === cost.id ? (
                             <div className="flex items-center gap-2 flex-1">
                               <Input
                                 value={editingFixedCostValues?.name || cost.name}
@@ -3160,8 +3185,13 @@ function FinanceDashboard() {
                               </div>
                             </>
                           )}
-                        </li>
-                      ))}
+                          </li>
+                        ))
+                        : (
+                          <li className="text-sm text-muted-foreground text-center">
+                            No hay costos fijos registrados para este período.
+                          </li>
+                        )}
                     </ul>
                   </CardContent>
                 </Card>
@@ -3191,91 +3221,97 @@ function FinanceDashboard() {
                   </form>
                   <CardContent className="overflow-y-auto max-h-96">
                     <ul className="space-y-2 pr-2">
-                      {filteredSalaryWithdrawalsForUI.map((s) => (
-                        <li key={s.id} className="flex justify-between items-center text-sm">
-                          {editingSalaryId === s.id ? (
-                            <div className="flex items-center gap-2 flex-1">
-                              <Input
-                                value={editingSalaryValues?.description || s.description || ''}
-                                onChange={(e) => setEditingSalaryValues(prev => ({ ...prev!, description: e.target.value }))}
-                                className="h-8 text-sm"
-                                placeholder="Descripción"
-                              />
-                              <Input
-                                type="number"
-                                value={editingSalaryValues?.amount || s.amount}
-                                onChange={(e) => setEditingSalaryValues(prev => ({ ...prev!, amount: parseFloat(e.target.value) || 0 }))}
-                                className="h-8 w-20 text-sm"
-                                placeholder="$"
-                              />
-                              <Button
-                                size="sm"
-                                onClick={async () => {
-                                  if (editingSalaryValues) {
-                                    await updateSalaryWithdrawal(s.id, editingSalaryValues);
+                      {filteredSalaryWithdrawalsForUI.length > 0 ? (
+                        filteredSalaryWithdrawalsForUI.map((s) => (
+                          <li key={s.id} className="flex justify-between items-center text-sm">
+                            {editingSalaryId === s.id ? (
+                              <div className="flex items-center gap-2 flex-1">
+                                <Input
+                                  value={editingSalaryValues?.description || s.description || ''}
+                                  onChange={(e) => setEditingSalaryValues(prev => ({ ...prev!, description: e.target.value }))}
+                                  className="h-8 text-sm"
+                                  placeholder="Descripción"
+                                />
+                                <Input
+                                  type="number"
+                                  value={editingSalaryValues?.amount || s.amount}
+                                  onChange={(e) => setEditingSalaryValues(prev => ({ ...prev!, amount: parseFloat(e.target.value) || 0 }))}
+                                  className="h-8 w-20 text-sm"
+                                  placeholder="$"
+                                />
+                                <Button
+                                  size="sm"
+                                  onClick={async () => {
+                                    if (editingSalaryValues) {
+                                      await updateSalaryWithdrawal(s.id, editingSalaryValues);
+                                      setEditingSalaryId(null);
+                                      setEditingSalaryValues(null);
+                                    }
+                                  }}
+                                  className="h-8"
+                                >
+                                  Guardar
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
                                     setEditingSalaryId(null);
                                     setEditingSalaryValues(null);
-                                  }
-                                }}
-                                className="h-8"
-                              >
-                                Guardar
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  setEditingSalaryId(null);
-                                  setEditingSalaryValues(null);
-                                }}
-                                className="h-8"
-                              >
-                                Cancelar
-                              </Button>
-                            </div>
-                          ) : (
-                            <>
-                              <div>
-                                <span>{s.description || 'Sin descripción'}</span>
-                                <p className="text-xs text-muted-foreground">
-                                  {format(parseISO(s.created_at), 'dd/MM/yy')}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium">${s.amount.toLocaleString()}</span>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6 rounded-full"
-                                  onClick={() => {
-                                    setEditingSalaryId(s.id);
-                                    setEditingSalaryValues({ description: s.description || '', amount: s.amount });
                                   }}
+                                  className="h-8"
                                 >
-                                  <Edit className="h-3 w-3" />
+                                  Cancelar
                                 </Button>
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive rounded-full">
-                                      <Trash className="h-3 w-3" />
-                                    </Button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>¿Eliminar extracción?</AlertDialogTitle>
-                                      <AlertDialogDescription>Esta acción no se puede deshacer.</AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                      <AlertDialogAction onClick={() => deleteSalaryWithdrawal(s.id)}>Eliminar</AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
                               </div>
-                            </>
-                          )}
+                            ) : (
+                              <>
+                                <div>
+                                  <span>{s.description || 'Sin descripción'}</span>
+                                  <p className="text-xs text-muted-foreground">
+                                    {format(parseISO(s.created_at), 'dd/MM/yy')}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium">${s.amount.toLocaleString()}</span>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 rounded-full"
+                                    onClick={() => {
+                                      setEditingSalaryId(s.id);
+                                      setEditingSalaryValues({ description: s.description || '', amount: s.amount });
+                                    }}
+                                  >
+                                    <Edit className="h-3 w-3" />
+                                  </Button>
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive rounded-full">
+                                        <Trash className="h-3 w-3" />
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>¿Eliminar extracción?</AlertDialogTitle>
+                                        <AlertDialogDescription>Esta acción no se puede deshacer.</AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                        <AlertDialogAction onClick={() => deleteSalaryWithdrawal(s.id)}>Eliminar</AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </div>
+                              </>
+                            )}
+                          </li>
+                        ))
+                      ) : (
+                        <li className="text-sm text-muted-foreground text-center">
+                          No hay extracciones registradas para este período.
                         </li>
-                      ))}
+                      )}
                     </ul>
                   </CardContent>
                 </Card>
@@ -3544,7 +3580,7 @@ function FinanceDashboard() {
                                       {sale.discount_code}
                                     </Badge>
                                     <span className="text-xs text-muted-foreground">
-                                      -{sale.discount_percentage}%
+                                      -{(sale.discount_percentage ?? 0)}%
                                     </span>
                                   </div>
                                 ) : (
@@ -3552,7 +3588,7 @@ function FinanceDashboard() {
                                 )}
                               </TableCell>
                               <TableCell className="text-right font-medium">
-                                ${(sale.quantity * sale.price_per_unit * (1 - sale.discount_percentage / 100)).toLocaleString()}
+                                ${(sale.quantity * sale.price_per_unit * (1 - (sale.discount_percentage ?? 0) / 100)).toLocaleString()}
                               </TableCell>
                               <TableCell>
                                 <div className="flex flex-col">
@@ -3589,7 +3625,7 @@ function FinanceDashboard() {
                                       <AlertDialogHeader>
                                         <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
                                         <AlertDialogDescription>
-                                          Esta acción no se puede deshacer. Esto eliminará permanentemente la venta de {unslugify(sale.product_name)} por ${(sale.quantity * sale.price_per_unit * (1 - sale.discount_percentage / 100)).toLocaleString()}.
+                                          Esta acción no se puede deshacer. Esto eliminará permanentemente la venta de {unslugify(sale.product_name)} por ${(sale.quantity * sale.price_per_unit * (1 - (sale.discount_percentage ?? 0) / 100)).toLocaleString()}.
                                         </AlertDialogDescription>
                                       </AlertDialogHeader>
                                       <AlertDialogFooter>

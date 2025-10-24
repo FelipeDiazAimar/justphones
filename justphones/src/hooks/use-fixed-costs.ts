@@ -76,20 +76,31 @@ export function useFixedCosts() {
     return true;
   };
   
+  const updateCostsWithoutMonth = async (defaultMonth: string) => {
+    const costsWithoutMonth = fixedCosts.filter(cost => !cost.month);
+    if (costsWithoutMonth.length === 0) return;
+
+    const updates = costsWithoutMonth.map(cost => 
+      supabase.from('fixed_costs').update({ month: defaultMonth }).eq('id', cost.id)
+    );
+
+    await Promise.all(updates);
+    // The realtime subscription will handle the fetch
+  };
+
   const deleteFixedCost = async (costId: string) => {
     const { error } = await supabase.from('fixed_costs').delete().eq('id', costId);
     if (error) {
       console.error('Error deleting fixed cost:', error.message);
       toast({ 
-          variant: 'destructive', 
-          title: 'Error', 
-          description: `No se pudo eliminar el costo fijo: ${error.message}` 
+        variant: 'destructive', 
+        title: 'Error', 
+        description: `No se pudo eliminar el costo fijo: ${error.message}` 
       });
       return false;
     }
-    // No need to call fetch here, the realtime subscription will handle it.
     return true;
   };
 
-  return { fixedCosts, isLoading, addFixedCost, updateFixedCost, deleteFixedCost };
+  return { fixedCosts, isLoading, addFixedCost, updateFixedCost, deleteFixedCost, updateCostsWithoutMonth };
 }

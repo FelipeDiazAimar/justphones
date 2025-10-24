@@ -4,4 +4,5 @@ export type FixedCost = {
   created_at: string;
   name: string;
   amount: number;
+  month: string;
 };
