@@ -766,10 +766,51 @@ function FinanceDashboard() {
     return closures.find((c) => c.id === statsPeriod) ?? null;
   }, [statsPeriod, closures]);
 
-  const periodFixedCosts = useMemo(() => {
-    if (!selectedClosure) return fixedCosts;
-    return fixedCosts.filter((cost) => cost.month === selectedClosure.month);
-  }, [fixedCosts, selectedClosure]);
+  const getClosurePeriod = useMemo(() => {
+    return (selectedClosure: ClosureEntry | null) => {
+      if (!selectedClosure) return { start: new Date(0), end: new Date() };
+      const sortedClosures = [...closures].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+      const currentIndex = sortedClosures.findIndex((c) => c.id === selectedClosure.id);
+      const nextClosure = sortedClosures[currentIndex + 1];
+      const start = new Date(selectedClosure.startDate);
+      const end = nextClosure ? new Date(new Date(nextClosure.startDate).getTime() - 1) : new Date();
+      return { start, end };
+    };
+  }, [closures]);
+
+  const filterByClosurePeriod = useCallback(
+    <T extends { created_at: string }>(items: T[], closure: ClosureEntry | null): T[] => {
+      if (!closure) return items;
+      const { start, end } = getClosurePeriod(closure);
+      return items.filter((item) => {
+        if (!item.created_at) return false;
+        const itemDate = new Date(item.created_at);
+        if (Number.isNaN(itemDate.getTime())) return false;
+        return itemDate >= start && itemDate <= end;
+      });
+    },
+    [getClosurePeriod],
+  );
+
+  const getFixedCostsForClosure = useCallback(
+    (closure: ClosureEntry | null) => {
+      if (!closure) return fixedCosts;
+      const { start, end } = getClosurePeriod(closure);
+      return fixedCosts.filter((cost) => {
+        if (cost.month) return cost.month === closure.month;
+        if (!cost.created_at) return false;
+        const costDate = new Date(cost.created_at);
+        if (Number.isNaN(costDate.getTime())) return false;
+        return costDate >= start && costDate <= end;
+      });
+    },
+    [fixedCosts, getClosurePeriod],
+  );
+
+  const periodFixedCosts = useMemo(
+    () => getFixedCostsForClosure(selectedClosure),
+    [getFixedCostsForClosure, selectedClosure],
+  );
 
   const latestClosureMonth = useMemo(() => {
     if (closures.length === 0) return null;
@@ -779,17 +820,17 @@ function FinanceDashboard() {
     return sorted[sorted.length - 1].month;
   }, [closures]);
 
-  const financialSummaryDetails = useMemo(() => {
-    const filterByClosure = <T extends { created_at: string }>(items: T[]): T[] => {
-      if (!selectedClosure) return items;
-      return items.filter(item => new Date(item.created_at) >= new Date(selectedClosure.startDate));
-    };
+  const filteredStockHistory = useMemo(
+    () => filterByClosurePeriod(stockHistory, selectedClosure),
+    [stockHistory, selectedClosure, filterByClosurePeriod],
+  );
 
-    const filteredSales = filterByClosure(sales);
-    const filteredSalaryWithdrawals = filterByClosure(salaryWithdrawals);
-    const filteredMonetaryIncome = filterByClosure(monetaryIncome);
-    const filteredStockHistory = filterByClosure(stockHistory);
-    const filteredCustomerRequests = filterByClosure(customerRequests);
+  const financialSummaryDetails = useMemo(() => {
+    const filteredSales = filterByClosurePeriod(sales, selectedClosure);
+    const filteredSalaryWithdrawals = filterByClosurePeriod(salaryWithdrawals, selectedClosure);
+    const filteredMonetaryIncome = filterByClosurePeriod(monetaryIncome, selectedClosure);
+    const filteredCustomerRequests = filterByClosurePeriod(customerRequests, selectedClosure);
+    const filteredStockEntries = filteredStockHistory;
     const productsMap = new Map(products.map((p) => [p.id, p]));
     const today = new Date();
 
@@ -798,25 +839,28 @@ function FinanceDashboard() {
       return sum + ((product?.cost || 0) * sale.quantity);
     }, 0);
 
-  const periodFixedCostsSum = periodFixedCosts.reduce((sum, cost) => sum + cost.amount, 0);
-  const totalFixedCostsForPeriod = -periodFixedCostsSum;
+    const periodFixedCostsSum = periodFixedCosts.reduce((sum, cost) => sum + cost.amount, 0);
+    const totalFixedCostsForPeriod = -periodFixedCostsSum;
 
-    const totalSalaryWithdrawn = - filteredSalaryWithdrawals.reduce(
-      (sum, s) => sum + s.amount,
-      0,
-    );
+    const totalSalaryWithdrawn = -filteredSalaryWithdrawals.reduce((sum, s) => sum + s.amount, 0);
 
-    const positiveMonetaryIncome = filteredMonetaryIncome.filter(i => i.amount > 0).reduce((sum, i) => sum + i.amount, 0);
-    const negativeMonetaryIncome = filteredMonetaryIncome.filter(i => i.amount < 0).reduce((sum, i) => sum + Math.abs(i.amount), 0);
+    const positiveMonetaryIncome = filteredMonetaryIncome
+      .filter((i) => i.amount > 0 && !i.name.startsWith('[EGRESO]'))
+      .reduce((sum, i) => sum + i.amount, 0);
+    const negativeMonetaryIncome = filteredMonetaryIncome
+      .filter((i) => i.amount < 0 || i.name.startsWith('[EGRESO]'))
+      .reduce((sum, i) => sum + Math.abs(i.amount), 0);
 
-    const totalRevenue = filteredSales.reduce((sum, sale) => sum + sale.total_price, 0) + positiveMonetaryIncome;
+    const totalRevenue =
+      filteredSales.reduce((sum, sale) => sum + sale.total_price, 0) + positiveMonetaryIncome;
 
-    const totalStockInvestment = - filteredStockHistory.reduce(
+    const totalStockInvestment = -filteredStockEntries.reduce(
       (sum, entry) => sum + (entry.cost || 0) * entry.quantity_added,
       0,
     );
 
-  const totalCosts = totalFixedCostsForPeriod + totalSalaryWithdrawn + totalStockInvestment - negativeMonetaryIncome;
+    const totalCosts =
+      totalFixedCostsForPeriod + totalSalaryWithdrawn + totalStockInvestment - negativeMonetaryIncome;
     const netProfit = totalRevenue + totalCosts;
 
     const totalStockValue = products.reduce((sum, p) => {
@@ -854,8 +898,7 @@ function FinanceDashboard() {
           isNegative: false,
         };
       })
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 10);
+      .sort((a, b) => b.value - a.value);
 
     const monetaryMovementsBreakdown = filteredMonetaryIncome
       .map(income => {
@@ -866,8 +909,7 @@ function FinanceDashboard() {
           isNegative: isEgreso,
         };
       })
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 10);
+      .sort((a, b) => b.value - a.value);
 
     const fixedCostsBreakdown = periodFixedCosts
       .map(cost => ({
@@ -884,8 +926,7 @@ function FinanceDashboard() {
         value: salary.amount,
         isNegative: true,
       }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 10);
+      .sort((a, b) => b.value - a.value);
 
     const groupedPedidos = filteredStockHistory.reduce((acc, entry) => {
       const pedidoId = entry.pedido_id;
@@ -914,8 +955,7 @@ function FinanceDashboard() {
         isNegative: true,
         items,
       }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 10);
+      .sort((a, b) => b.value - a.value);
 
     const stockValueBreakdown = products
       .filter(p => p.colors.some(c => c.stock > 0))
@@ -932,53 +972,60 @@ function FinanceDashboard() {
       .slice(0, 10);
 
     const capitalBreakdown = (() => {
-      const out = [] as Array<{ month: string; income: number; costs: number; net: number; cumulative: number }>;
-      if (closures.length === 0) return out;
-      const sorted = [...closures].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-      const relevantClosures = statsPeriod === 'all' ? sorted.slice(-6) : (selectedClosure ? sorted.filter(c => new Date(c.startDate) <= new Date(selectedClosure.startDate)).slice(-6) : sorted.slice(-6));
-      let totalIngresos = 0;
-      let totalCostos = 0;
-      relevantClosures.forEach((c, idx) => {
-        const start = new Date(c.startDate);
-        const next = relevantClosures[idx + 1];
-        const end = next ? new Date(new Date(next.startDate).getTime() - 1) : new Date();
-        const labelDate = new Date(Number(c.month.split('-')[0]), Number(c.month.split('-')[1]) - 1, 1);
-        const label = labelDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+      if (closures.length === 0)
+        return [] as Array<{ month: string; income: number; costs: number; net: number; cumulative: number }>;
 
-        const ventas = sales.filter(s => {
-          const d = parseISO(s.created_at);
-          return d >= start && d <= end;
-        }).reduce((acc, s) => acc + s.total_price, 0);
-        const ingresosPositivos = monetaryIncome.filter(mi => {
-          const d = parseISO(mi.created_at);
-          return (!mi.name.startsWith('[EGRESO]') && mi.amount > 0) && d >= start && d <= end;
-        }).reduce((acc, mi) => acc + mi.amount, 0);
+      const sorted = [...closures].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+      const relevantClosures = sorted.slice(-6);
+      const breakdown: Array<{ month: string; income: number; costs: number; net: number; cumulative: number }> = [];
+      let cumulative = 0;
+
+      relevantClosures.forEach((closure) => {
+        const filteredSalesForClosure = filterByClosurePeriod(sales, closure);
+        const filteredMonetaryIncomeForClosure = filterByClosurePeriod(monetaryIncome, closure);
+        const filteredSalaryWithdrawalsForClosure = filterByClosurePeriod(salaryWithdrawals, closure);
+        const filteredStockForClosure = filterByClosurePeriod(stockHistory, closure);
+        const fixedCostsForClosure = getFixedCostsForClosure(closure);
+
+        const ventas = filteredSalesForClosure.reduce((acc, sale) => acc + sale.total_price, 0);
+        const ingresosPositivos = filteredMonetaryIncomeForClosure
+          .filter((mi) => mi.amount > 0 && !mi.name.startsWith('[EGRESO]'))
+          .reduce((acc, mi) => acc + mi.amount, 0);
         const ingresosMes = ventas + ingresosPositivos;
 
-        const costosFijos = fixedCosts
-          .filter((item) => item.month === c.month)
-          .reduce((acc, item) => acc + item.amount, 0);
-        const sueldos = salaryWithdrawals.filter(w => {
-          const d = parseISO(w.created_at);
-          return d >= start && d <= end;
-        }).reduce((acc, w) => acc + w.amount, 0);
-        const costosPedidos = stockHistory.filter(e => {
-          const d = parseISO(e.created_at);
-          return d >= start && d <= end;
-        }).reduce((acc, e) => acc + ((e.cost || 0) * e.quantity_added), 0);
-        const egresosMonetarios = monetaryIncome.filter(mi => {
-          const d = parseISO(mi.created_at);
-          return (mi.name.startsWith('[EGRESO]') || mi.amount < 0) && d >= start && d <= end;
-        }).reduce((acc, mi) => acc + Math.abs(mi.amount), 0);
-        const costosMes = costosFijos + sueldos + costosPedidos + egresosMonetarios;
+        const totalFixedCostsForClosure = -fixedCostsForClosure.reduce((acc, item) => acc + item.amount, 0);
+        const totalSalaryWithdrawnForClosure = -filteredSalaryWithdrawalsForClosure.reduce(
+          (acc, withdrawal) => acc + withdrawal.amount,
+          0,
+        );
+        const totalStockInvestmentForClosure = -filteredStockForClosure.reduce(
+          (acc, entry) => acc + (entry.cost || 0) * entry.quantity_added,
+          0,
+        );
+        const negativeMonetaryIncomeForClosure = filteredMonetaryIncomeForClosure
+          .filter((mi) => mi.amount < 0 || mi.name.startsWith('[EGRESO]'))
+          .reduce((acc, mi) => acc + Math.abs(mi.amount), 0);
 
-        totalIngresos += ingresosMes;
-        totalCostos += costosMes;
-        const net = ingresosMes - costosMes;
-        const cumulative = totalIngresos - totalCostos;
-        out.push({ month: label, income: ingresosMes, costs: costosMes, net, cumulative });
+        const costs =
+          Math.abs(totalFixedCostsForClosure) +
+          Math.abs(totalSalaryWithdrawnForClosure) +
+          Math.abs(totalStockInvestmentForClosure) +
+          negativeMonetaryIncomeForClosure;
+
+        const net = ingresosMes - costs;
+        cumulative += net;
+
+        const labelDate = new Date(
+          Number(closure.month.split('-')[0]),
+          Number(closure.month.split('-')[1]) - 1,
+          1,
+        );
+        const label = labelDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+
+        breakdown.push({ month: label, income: ingresosMes, costs, net, cumulative });
       });
-      return out;
+
+      return breakdown;
     })();
 
     const availableCapital = capitalBreakdown.length > 0 ? capitalBreakdown[capitalBreakdown.length - 1].cumulative : 0;
@@ -1017,26 +1064,27 @@ function FinanceDashboard() {
   }, [
     sales,
     products,
-    fixedCosts,
     salaryWithdrawals,
     monetaryIncome,
-    stockHistory,
+    filteredStockHistory,
     customerRequests,
+    periodFixedCosts,
+    filterByClosurePeriod,
+    getFixedCostsForClosure,
     closures,
     statsPeriod,
   ]);
 
   // Filtered salary withdrawals for UI display (same logic as in financialSummaryDetails)
-  const filteredSalaryWithdrawalsForUI = useMemo(() => {
-    if (!selectedClosure) return salaryWithdrawals;
-    return salaryWithdrawals.filter(item => new Date(item.created_at) >= new Date(selectedClosure.startDate));
-  }, [salaryWithdrawals, selectedClosure]);
+  const filteredSalaryWithdrawalsForUI = useMemo(
+    () => filterByClosurePeriod(salaryWithdrawals, selectedClosure),
+    [salaryWithdrawals, selectedClosure, filterByClosurePeriod],
+  );
 
-  // Filtered monetary income for UI display (same logic as in financialSummaryDetails)
-  const filteredMonetaryIncomeForUI = useMemo(() => {
-    if (!selectedClosure) return monetaryIncome;
-    return monetaryIncome.filter(item => new Date(item.created_at) >= new Date(selectedClosure.startDate));
-  }, [monetaryIncome, selectedClosure]);
+  const filteredMonetaryIncomeForUI = useMemo(
+    () => filterByClosurePeriod(monetaryIncome, selectedClosure),
+    [monetaryIncome, selectedClosure, filterByClosurePeriod],
+  );
 
   const salesChartData = useMemo(() => {
     const last30Days = subDays(new Date(), 30);
@@ -1184,9 +1232,9 @@ function FinanceDashboard() {
   };
 
   const groupedStockHistory = useMemo(() => {
-    if (!stockHistory || stockHistory.length === 0) return [];
+    if (!filteredStockHistory || filteredStockHistory.length === 0) return [];
 
-    const grouped = stockHistory.reduce(
+    const grouped = filteredStockHistory.reduce(
       (acc, entry) => {
         const pedidoId = entry.pedido_id;
         if (!acc[pedidoId]) {
@@ -1221,7 +1269,7 @@ function FinanceDashboard() {
       }));
 
     return entries;
-  }, [stockHistory]);
+  }, [filteredStockHistory]);
 
   const mostSoldProduct = useMemo(() => {
     return productPopularityData.length > 0
