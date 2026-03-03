@@ -258,6 +258,7 @@ const monetaryIncomeSchema = z.object({
 const ITEMS_PER_PAGE_RENTABILIDAD = 8;
 const ITEMS_PER_PAGE_LOW_ROTATION = 5;
 const ITEMS_PER_PAGE_STOCK_RECOMMENDATIONS = 3;
+const CAPITAL_KPI_START_MONTH = '2025-09';
 type StatsPeriod = string; // 'all' or closure ID
 
 type SalesFilter = 'all' | 'today' | 'yesterday' | 'dayBeforeYesterday';
@@ -267,6 +268,12 @@ type ClosureEntry = {
   month: string;
   startDate: string;
   createdAt?: string | null;
+  openingCapital?: number;
+  closingCapital?: number | null;
+  periodIncome?: number | null;
+  periodCosts?: number | null;
+  periodNet?: number | null;
+  periodEndDate?: string | null;
 };
 
 const EditablePriceCell = ({
@@ -594,6 +601,15 @@ function FinanceDashboard() {
     const refreshClosures = useCallback(async () => {
       setIsLoadingClosures(true);
       try {
+        const parseOptionalNumber = (value: unknown): number | null => {
+          if (typeof value === 'number' && Number.isFinite(value)) return value;
+          if (typeof value === 'string' && value.trim() !== '') {
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? parsed : null;
+          }
+          return null;
+        };
+
         const response = await fetch('/api/admin/finance-closures', {
           method: 'GET',
           headers: { Accept: 'application/json' },
@@ -620,6 +636,28 @@ function FinanceDashboard() {
                 : typeof record['createdAt'] === 'string'
                   ? (record['createdAt'] as string)
                   : null;
+            const openingCapital =
+              parseOptionalNumber(record['opening_capital']) ??
+              parseOptionalNumber(record['openingCapital']) ??
+              0;
+            const closingCapital =
+              parseOptionalNumber(record['closing_capital']) ??
+              parseOptionalNumber(record['closingCapital']);
+            const periodIncome =
+              parseOptionalNumber(record['period_income']) ??
+              parseOptionalNumber(record['periodIncome']);
+            const periodCosts =
+              parseOptionalNumber(record['period_costs']) ??
+              parseOptionalNumber(record['periodCosts']);
+            const periodNet =
+              parseOptionalNumber(record['period_net']) ??
+              parseOptionalNumber(record['periodNet']);
+            const periodEndDate =
+              typeof record['period_end_date'] === 'string'
+                ? (record['period_end_date'] as string)
+                : typeof record['periodEndDate'] === 'string'
+                  ? (record['periodEndDate'] as string)
+                  : null;
 
             if (!id || !month || !startDateRaw) {
               return null;
@@ -630,6 +668,12 @@ function FinanceDashboard() {
               month,
               startDate: startDateRaw,
               createdAt,
+              openingCapital,
+              closingCapital,
+              periodIncome,
+              periodCosts,
+              periodNet,
+              periodEndDate,
             } as ClosureEntry;
           })
           .filter((item): item is ClosureEntry => item !== null);
@@ -773,7 +817,13 @@ function FinanceDashboard() {
       const currentIndex = sortedClosures.findIndex((c) => c.id === selectedClosure.id);
       const nextClosure = sortedClosures[currentIndex + 1];
       const start = new Date(selectedClosure.startDate);
-      const end = nextClosure ? new Date(new Date(nextClosure.startDate).getTime() - 1) : new Date();
+      const persistedEnd = selectedClosure.periodEndDate ? new Date(selectedClosure.periodEndDate) : null;
+      const hasPersistedEnd = Boolean(persistedEnd && !Number.isNaN(persistedEnd.getTime()));
+      const end = hasPersistedEnd
+        ? (persistedEnd as Date)
+        : nextClosure
+          ? new Date(new Date(nextClosure.startDate).getTime() - 1)
+          : new Date();
       return { start, end };
     };
   }, [closures]);
@@ -820,9 +870,142 @@ function FinanceDashboard() {
     return sorted[sorted.length - 1].month;
   }, [closures]);
 
+  const handleCloseCash = useCallback(async () => {
+    if (isClosing || isReverting) return;
+    setIsClosing(true);
+    try {
+      const cutoffDate = new Date();
+      const newMonth = format(cutoffDate, 'yyyy-MM');
+
+      const response = await fetch('/api/admin/finance-closures', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          month: newMonth,
+          startDate: cutoffDate.toISOString(),
+        }),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error ?? 'No se pudo registrar el cierre de caja.');
+      }
+
+      const createdMonth =
+        typeof result?.data?.month === 'string' ? (result.data.month as string) : newMonth;
+      const finalizedMonth =
+        typeof result?.finalizedMonth === 'string' ? (result.finalizedMonth as string) : null;
+
+      await refreshClosures();
+      toast({
+        title: 'Caja cerrada',
+        description: finalizedMonth
+          ? `Se cerró ${finalizedMonth} con corte al ${format(cutoffDate, "d 'de' MMMM, yyyy", { locale: es })}. Nuevo período: ${createdMonth}.`
+          : `Se inició el período ${createdMonth}.`,
+      });
+    } catch (error) {
+      console.error('[Finanzas] Error creando cierre:', error);
+      const message =
+        error instanceof Error ? error.message : 'No se pudo registrar el cierre de caja.';
+      toast({ variant: 'destructive', title: 'Error', description: message });
+    } finally {
+      setTimeout(() => setIsClosing(false), 300);
+    }
+  }, [isClosing, isReverting, refreshClosures, toast]);
+
+  const handleRevertClosure = useCallback(async () => {
+    if (isReverting || isClosing) return;
+    setIsReverting(true);
+    try {
+      if (closures.length <= 1) {
+        toast({
+          title: 'Nada para revertir',
+          description: 'No hay cierres previos para revertir.',
+        });
+        return;
+      }
+
+      const sortedClosures = [...closures].sort(
+        (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime(),
+      );
+      const lastEntry = sortedClosures[sortedClosures.length - 1];
+      if (!lastEntry) {
+        toast({
+          title: 'Nada para revertir',
+          description: 'No hay cierres previos para revertir.',
+        });
+        return;
+      }
+
+      const response = await fetch('/api/admin/finance-closures', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: lastEntry.id }),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error ?? 'No se pudo revertir el cierre.');
+      }
+
+      await refreshClosures();
+      toast({
+        title: 'Cierre revertido',
+        description: `Se eliminó el cierre de ${lastEntry.month}.`,
+      });
+    } catch (error) {
+      console.error('[Finanzas] Error revirtiendo cierre:', error);
+      const message =
+        error instanceof Error ? error.message : 'No se pudo revertir el último cierre.';
+      toast({ variant: 'destructive', title: 'Error', description: message });
+    } finally {
+      setTimeout(() => setIsReverting(false), 300);
+    }
+  }, [closures, isClosing, isReverting, refreshClosures, toast]);
+
   const filteredStockHistory = useMemo(
     () => filterByClosurePeriod(stockHistory, selectedClosure),
     [stockHistory, selectedClosure, filterByClosurePeriod],
+  );
+
+  const calculatePeriodFinancials = useCallback(
+    (closure: ClosureEntry | null) => {
+      const filteredSalesForClosure = filterByClosurePeriod(sales, closure);
+      const filteredMonetaryIncomeForClosure = filterByClosurePeriod(monetaryIncome, closure);
+      const filteredSalaryWithdrawalsForClosure = filterByClosurePeriod(salaryWithdrawals, closure);
+      const filteredStockForClosure = filterByClosurePeriod(stockHistory, closure);
+      const fixedCostsForClosure = getFixedCostsForClosure(closure);
+
+      const salesIncome = filteredSalesForClosure.reduce((acc, sale) => acc + sale.total_price, 0);
+      const positiveMonetaryIncome = filteredMonetaryIncomeForClosure
+        .filter((mi) => mi.amount > 0 && !mi.name.startsWith('[EGRESO]'))
+        .reduce((acc, mi) => acc + mi.amount, 0);
+      const income = salesIncome + positiveMonetaryIncome;
+
+      const fixedCostsValue = fixedCostsForClosure.reduce((acc, item) => acc + item.amount, 0);
+      const salaryCostsValue = filteredSalaryWithdrawalsForClosure.reduce(
+        (acc, withdrawal) => acc + withdrawal.amount,
+        0,
+      );
+      const stockCostsValue = filteredStockForClosure.reduce(
+        (acc, entry) => acc + (entry.cost || 0) * entry.quantity_added,
+        0,
+      );
+      const negativeMonetaryIncome = filteredMonetaryIncomeForClosure
+        .filter((mi) => mi.amount < 0 || mi.name.startsWith('[EGRESO]'))
+        .reduce((acc, mi) => acc + Math.abs(mi.amount), 0);
+
+      const costs = fixedCostsValue + salaryCostsValue + stockCostsValue + negativeMonetaryIncome;
+      const net = income - costs;
+
+      return { income, costs, net };
+    },
+    [
+      filterByClosurePeriod,
+      sales,
+      monetaryIncome,
+      salaryWithdrawals,
+      stockHistory,
+      getFixedCostsForClosure,
+    ],
   );
 
   const financialSummaryDetails = useMemo(() => {
@@ -973,47 +1156,27 @@ function FinanceDashboard() {
 
     const capitalBreakdown = (() => {
       if (closures.length === 0)
-        return [] as Array<{ month: string; income: number; costs: number; net: number; cumulative: number }>;
+        return [] as Array<{ rawMonth: string; month: string; income: number; costs: number; net: number; cumulative: number }>;
 
       const sorted = [...closures].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-      const relevantClosures = sorted.slice(-6);
-      const breakdown: Array<{ month: string; income: number; costs: number; net: number; cumulative: number }> = [];
-      let cumulative = 0;
+      const breakdown: Array<{ rawMonth: string; month: string; income: number; costs: number; net: number; cumulative: number }> = [];
+      sorted.forEach((closure, index) => {
+        const hasPersistedSummary =
+          typeof closure.periodIncome === 'number' &&
+          typeof closure.periodCosts === 'number' &&
+          typeof closure.periodNet === 'number';
 
-      relevantClosures.forEach((closure) => {
-        const filteredSalesForClosure = filterByClosurePeriod(sales, closure);
-        const filteredMonetaryIncomeForClosure = filterByClosurePeriod(monetaryIncome, closure);
-        const filteredSalaryWithdrawalsForClosure = filterByClosurePeriod(salaryWithdrawals, closure);
-        const filteredStockForClosure = filterByClosurePeriod(stockHistory, closure);
-        const fixedCostsForClosure = getFixedCostsForClosure(closure);
+        const dynamicSummary = hasPersistedSummary ? null : calculatePeriodFinancials(closure);
+        const income = hasPersistedSummary ? (closure.periodIncome as number) : (dynamicSummary?.income ?? 0);
+        const costs = hasPersistedSummary ? (closure.periodCosts as number) : (dynamicSummary?.costs ?? 0);
+        const net = hasPersistedSummary ? (closure.periodNet as number) : (dynamicSummary?.net ?? 0);
 
-        const ventas = filteredSalesForClosure.reduce((acc, sale) => acc + sale.total_price, 0);
-        const ingresosPositivos = filteredMonetaryIncomeForClosure
-          .filter((mi) => mi.amount > 0 && !mi.name.startsWith('[EGRESO]'))
-          .reduce((acc, mi) => acc + mi.amount, 0);
-        const ingresosMes = ventas + ingresosPositivos;
-
-        const totalFixedCostsForClosure = -fixedCostsForClosure.reduce((acc, item) => acc + item.amount, 0);
-        const totalSalaryWithdrawnForClosure = -filteredSalaryWithdrawalsForClosure.reduce(
-          (acc, withdrawal) => acc + withdrawal.amount,
-          0,
-        );
-        const totalStockInvestmentForClosure = -filteredStockForClosure.reduce(
-          (acc, entry) => acc + (entry.cost || 0) * entry.quantity_added,
-          0,
-        );
-        const negativeMonetaryIncomeForClosure = filteredMonetaryIncomeForClosure
-          .filter((mi) => mi.amount < 0 || mi.name.startsWith('[EGRESO]'))
-          .reduce((acc, mi) => acc + Math.abs(mi.amount), 0);
-
-        const costs =
-          Math.abs(totalFixedCostsForClosure) +
-          Math.abs(totalSalaryWithdrawnForClosure) +
-          Math.abs(totalStockInvestmentForClosure) +
-          negativeMonetaryIncomeForClosure;
-
-        const net = ingresosMes - costs;
-        cumulative += net;
+        const persistedOpening = typeof closure.openingCapital === 'number' ? closure.openingCapital : null;
+        const previousCumulative = index > 0 ? breakdown[index - 1].cumulative : null;
+        const baseCapital = index === 0
+          ? (persistedOpening ?? 0)
+          : (previousCumulative ?? persistedOpening ?? 0);
+        const cumulative = baseCapital + net;
 
         const labelDate = new Date(
           Number(closure.month.split('-')[0]),
@@ -1022,15 +1185,31 @@ function FinanceDashboard() {
         );
         const label = labelDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
 
-        breakdown.push({ month: label, income: ingresosMes, costs, net, cumulative });
+        breakdown.push({ rawMonth: closure.month, month: label, income, costs, net, cumulative });
       });
 
       return breakdown;
     })();
 
-    const availableCapital = capitalBreakdown.length > 0 ? capitalBreakdown[capitalBreakdown.length - 1].cumulative : 0;
-    const totalHistoricalIncome = capitalBreakdown.reduce((sum, m) => sum + m.income, 0);
-    const totalHistoricalCosts = capitalBreakdown.reduce((sum, m) => sum + m.costs, 0);
+    const historicalBaseCapital = (() => {
+      if (closures.length === 0) return 0;
+      const sorted = [...closures].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+      const first = sorted[0];
+      return typeof first?.openingCapital === 'number' ? first.openingCapital : 0;
+    })();
+
+    const preOperationalNet = capitalBreakdown
+      .filter((m) => m.rawMonth < CAPITAL_KPI_START_MONTH)
+      .reduce((sum, m) => sum + m.net, 0);
+
+    const operationalCapitalBreakdown = capitalBreakdown.filter(
+      (m) => m.rawMonth >= CAPITAL_KPI_START_MONTH,
+    );
+
+    const totalHistoricalIncome = operationalCapitalBreakdown.reduce((sum, m) => sum + m.income, 0);
+    const totalHistoricalCosts = operationalCapitalBreakdown.reduce((sum, m) => sum + m.costs, 0);
+    const availableCapital =
+      historicalBaseCapital + totalHistoricalIncome - totalHistoricalCosts;
 
     return {
       totalRevenue,
@@ -1051,13 +1230,15 @@ function FinanceDashboard() {
       requestsCount: totalItemsRequestedCount,
       soldItemsCount: totalItemsSoldCount,
       totalSales: filteredSales.reduce((sum, sale) => sum + sale.total_price, 0),
+      historicalBaseCapital,
+      preOperationalNet,
       revenueBreakdown,
       monetaryMovementsBreakdown,
       fixedCostsBreakdown,
       salaryWithdrawalsBreakdown,
       pedidoCostsBreakdown,
       stockValueBreakdown,
-      capitalBreakdown,
+      capitalBreakdown: operationalCapitalBreakdown,
       totalHistoricalIncome,
       totalHistoricalCosts,
     };
@@ -1073,6 +1254,7 @@ function FinanceDashboard() {
     getFixedCostsForClosure,
     closures,
     statsPeriod,
+    calculatePeriodFinancials,
   ]);
 
   // Filtered salary withdrawals for UI display (same logic as in financialSummaryDetails)
@@ -1699,7 +1881,7 @@ function FinanceDashboard() {
                           <SelectItem value="all">Total Histórico</SelectItem>
                           {closures.map((closure) => (
                             <SelectItem key={closure.id} value={closure.id}>
-                              {closure.month}
+                                {`${closure.month} · ${format(new Date(closure.startDate), 'dd/MM/yyyy', { locale: es })}`}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -1709,68 +1891,7 @@ function FinanceDashboard() {
                       variant="outline"
                       size="sm"
                       disabled={isClosing || isReverting || isLoadingClosures}
-                      onClick={async () => {
-                        if (isClosing || isReverting) return;
-                        setIsClosing(true);
-                        try {
-                          const today = new Date();
-                          console.log('Fecha del último cierre:', closures.length > 0 ? new Date(closures[closures.length - 1].startDate).toLocaleDateString() : 'Ninguno');
-                          const already = closures.some((closure) => {
-                            const date = new Date(closure.startDate);
-                            return (
-                              date.getFullYear() === today.getFullYear() &&
-                              date.getMonth() === today.getMonth() &&
-                              date.getDate() === today.getDate()
-                            );
-                          });
-                          if (already) {
-                            console.log('Error: Ya existe un cierre hoy');
-                            toast({
-                              title: 'Cierre ya registrado',
-                              description: 'Ya existe un cierre de caja hoy.',
-                            });
-                            return;
-                          }
-
-                          const newMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-                          const startDate = new Date(
-                            today.getFullYear(),
-                            today.getMonth(),
-                            today.getDate(),
-                            0,
-                            0,
-                            0,
-                            0,
-                          ).toISOString();
-                          const response = await fetch('/api/admin/finance-closures', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ month: newMonth, startDate }),
-                          });
-                          const result = await response.json().catch(() => null);
-                          if (!response.ok || !result?.success) {
-                            throw new Error(result?.error ?? 'No se pudo registrar el cierre de caja.');
-                          }
-
-                          const createdMonth =
-                            typeof result?.data?.month === 'string' ? (result.data.month as string) : newMonth;
-                          await refreshClosures();
-                          toast({
-                            title: 'Caja cerrada',
-                            description: `Se inició el período ${createdMonth}.`,
-                          });
-                        } catch (error) {
-                          console.error('[Finanzas] Error creando cierre:', error);
-                          const message =
-                            error instanceof Error
-                              ? error.message
-                              : 'No se pudo registrar el cierre de caja.';
-                          console.log('Error al hacer el cierre de caja:', message);
-                          toast({ variant: 'destructive', title: 'Error', description: message });
-                        } finally {
-                          setTimeout(() => setIsClosing(false), 300);
-                        }
-                      }}
+                      onClick={handleCloseCash}
                     >
                       {isClosing ? (
                         <>
@@ -1781,70 +1902,36 @@ function FinanceDashboard() {
                         'Cerrar caja hoy'
                       )}
                     </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      disabled={isReverting || isClosing || closures.length <= 1 || isLoadingClosures}
-                      onClick={async () => {
-                        if (isReverting || isClosing) return;
-                        setIsReverting(true);
-                        try {
-                          if (closures.length <= 1) {
-                            toast({
-                              title: 'Nada para revertir',
-                              description: 'No hay cierres previos para revertir.',
-                            });
-                            return;
-                          }
-
-                          const sortedClosures = [...closures].sort(
-                            (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime(),
-                          );
-                          const lastEntry = sortedClosures[sortedClosures.length - 1];
-                          if (!lastEntry) {
-                            toast({
-                              title: 'Nada para revertir',
-                              description: 'No hay cierres previos para revertir.',
-                            });
-                            return;
-                          }
-
-                          const response = await fetch('/api/admin/finance-closures', {
-                            method: 'DELETE',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ id: lastEntry.id }),
-                          });
-                          const result = await response.json().catch(() => null);
-                          if (!response.ok || !result?.success) {
-                            throw new Error(result?.error ?? 'No se pudo revertir el cierre.');
-                          }
-
-                          await refreshClosures();
-                          toast({
-                            title: 'Cierre revertido',
-                            description: `Se eliminó el cierre de ${lastEntry.month}.`,
-                          });
-                        } catch (error) {
-                          console.error('[Finanzas] Error revirtiendo cierre:', error);
-                          const message =
-                            error instanceof Error
-                              ? error.message
-                              : 'No se pudo revertir el último cierre.';
-                          toast({ variant: 'destructive', title: 'Error', description: message });
-                        } finally {
-                          setTimeout(() => setIsReverting(false), 300);
-                        }
-                      }}
-                    >
-                      {isReverting ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Revirtiendo…
-                        </>
-                      ) : (
-                        'Revertir cierre'
-                      )}
-                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          disabled={isReverting || isClosing || closures.length <= 1 || isLoadingClosures}
+                        >
+                          {isReverting ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Revirtiendo…
+                            </>
+                          ) : (
+                            'Revertir cierre'
+                          )}
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>¿Confirmar reversión de cierre?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Esta acción eliminará el último cierre{lastClosure ? ` (${lastClosure.month})` : ''} y reabrirá el período anterior.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleRevertClosure}>Sí, revertir cierre</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                     <ThemeToggle />
                   </div>
                 </SheetContent>
@@ -1862,7 +1949,7 @@ function FinanceDashboard() {
                       <SelectItem value="all">Total Histórico</SelectItem>
                       {closures.map((closure) => (
                         <SelectItem key={closure.id} value={closure.id}>
-                          {closure.month}
+                          {`${closure.month} · ${format(new Date(closure.startDate), 'dd/MM/yyyy', { locale: es })}`}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1873,68 +1960,7 @@ function FinanceDashboard() {
                   size="sm"
                   className="h-10"
                   disabled={isClosing || isReverting || isLoadingClosures}
-                  onClick={async () => {
-                    if (isClosing || isReverting) return;
-                    setIsClosing(true);
-                    try {
-                      const today = new Date();
-                      console.log('Fecha del último cierre:', closures.length > 0 ? new Date(closures[closures.length - 1].startDate).toLocaleDateString() : 'Ninguno');
-                      const already = closures.some((closure) => {
-                        const date = new Date(closure.startDate);
-                        return (
-                          date.getFullYear() === today.getFullYear() &&
-                          date.getMonth() === today.getMonth() &&
-                          date.getDate() === today.getDate()
-                        );
-                      });
-                      if (already) {
-                        console.log('Error: Ya existe un cierre hoy');
-                        toast({
-                          title: 'Cierre ya registrado',
-                          description: 'Ya existe un cierre de caja hoy.',
-                        });
-                        return;
-                      }
-
-                      const newMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-                      const startDate = new Date(
-                        today.getFullYear(),
-                        today.getMonth(),
-                        today.getDate(),
-                        0,
-                        0,
-                        0,
-                        0,
-                      ).toISOString();
-                      const response = await fetch('/api/admin/finance-closures', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ month: newMonth, startDate }),
-                      });
-                      const result = await response.json().catch(() => null);
-                      if (!response.ok || !result?.success) {
-                        throw new Error(result?.error ?? 'No se pudo registrar el cierre de caja.');
-                      }
-
-                      const createdMonth =
-                        typeof result?.data?.month === 'string' ? (result.data.month as string) : newMonth;
-                      await refreshClosures();
-                      toast({
-                        title: 'Caja cerrada',
-                        description: `Se inició el período ${createdMonth}.`,
-                      });
-                    } catch (error) {
-                      console.error('[Finanzas] Error creando cierre:', error);
-                      const message =
-                        error instanceof Error
-                          ? error.message
-                          : 'No se pudo registrar el cierre de caja.';
-                      console.log('Error al hacer el cierre de caja:', message);
-                      toast({ variant: 'destructive', title: 'Error', description: message });
-                    } finally {
-                      setTimeout(() => setIsClosing(false), 300);
-                    }
-                  }}
+                  onClick={handleCloseCash}
                 >
                   {isClosing ? (
                     <>
@@ -1945,71 +1971,37 @@ function FinanceDashboard() {
                     'Cerrar caja hoy'
                   )}
                 </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="h-10"
-                  disabled={isReverting || isClosing || closures.length <= 1 || isLoadingClosures}
-                  onClick={async () => {
-                    if (isReverting || isClosing) return;
-                    setIsReverting(true);
-                    try {
-                      if (closures.length <= 1) {
-                        toast({
-                          title: 'Nada para revertir',
-                          description: 'No hay cierres previos para revertir.',
-                        });
-                        return;
-                      }
-
-                      const sortedClosures = [...closures].sort(
-                        (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime(),
-                      );
-                      const lastEntry = sortedClosures[sortedClosures.length - 1];
-                      if (!lastEntry) {
-                        toast({
-                          title: 'Nada para revertir',
-                          description: 'No hay cierres previos para revertir.',
-                        });
-                        return;
-                      }
-
-                      const response = await fetch('/api/admin/finance-closures', {
-                        method: 'DELETE',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ id: lastEntry.id }),
-                      });
-                      const result = await response.json().catch(() => null);
-                      if (!response.ok || !result?.success) {
-                        throw new Error(result?.error ?? 'No se pudo revertir el cierre.');
-                      }
-
-                      await refreshClosures();
-                      toast({
-                        title: 'Cierre revertido',
-                        description: `Se eliminó el cierre de ${lastEntry.month}.`,
-                      });
-                    } catch (error) {
-                      console.error('[Finanzas] Error revirtiendo cierre:', error);
-                      const message =
-                        error instanceof Error
-                          ? error.message
-                          : 'No se pudo revertir el último cierre.';
-                      toast({ variant: 'destructive', title: 'Error', description: message });
-                    } finally {
-                      setTimeout(() => setIsReverting(false), 300);
-                    }
-                  }}
-                >
-                  {isReverting ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Revirtiendo…
-                    </>
-                  ) : (
-                    'Revertir cierre'
-                  )}
-                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="h-10"
+                      disabled={isReverting || isClosing || closures.length <= 1 || isLoadingClosures}
+                    >
+                      {isReverting ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Revirtiendo…
+                        </>
+                      ) : (
+                        'Revertir cierre'
+                      )}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>¿Confirmar reversión de cierre?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Esta acción eliminará el último cierre{lastClosure ? ` (${lastClosure.month})` : ''} y reabrirá el período anterior.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleRevertClosure}>Sí, revertir cierre</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
               <div className="hidden md:flex items-center">
                 <ThemeToggle />
@@ -2219,7 +2211,7 @@ function FinanceDashboard() {
                   detail="Dinero líquido histórico"
                   custom={9}
                 >
-                  <p className="font-semibold mt-4">Fórmula: Capital acumulado desde julio 2025 (fecha de inicio del negocio)</p>
+                  <p className="font-semibold mt-4">Fórmula: Capital histórico operativo = Capital base + Total Ingresos Históricos - Total Costos Históricos</p>
                   <p className="font-semibold">Cálculos:</p>
                   <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
                     {financialSummaryDetails.capitalBreakdown.map((item, index) => (
