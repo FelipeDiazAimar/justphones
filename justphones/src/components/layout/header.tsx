@@ -8,6 +8,7 @@ import {
   Search,
   ArrowLeft,
   ChevronDown,
+  LayoutDashboard,
 } from 'lucide-react';
 
 import {
@@ -210,6 +211,12 @@ export function Header({ showCart = true }: { showCart?: boolean }) {
             
             <ThemeToggle />
             {showCart && <CartSheet />}
+            <Button asChild variant="outline" size="sm" className="rounded-full gap-1.5 text-xs font-semibold border-primary/40 text-primary hover:bg-primary/10">
+              <Link href="/admin">
+                <LayoutDashboard className="h-3.5 w-3.5" />
+                Admin
+              </Link>
+            </Button>
             {pathname !== '/catalog' && (
                 <Button variant="ghost" size="icon" className="rounded-full" onClick={() => router.back()}>
                     <ArrowLeft className="h-6 w-6" />
@@ -309,8 +316,24 @@ export function Header({ showCart = true }: { showCart?: boolean }) {
                   </div>
                 </div>
 
-                <div className="mt-auto p-4 border-t space-y-4">
-                 
+                <div className="mt-auto p-4 border-t space-y-2">
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Panel Admin</p>
+                  <Link
+                    href="/admin/pedidos"
+                    onClick={closeMobileMenu}
+                    className="flex items-center gap-2 w-full rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
+                  >
+                    <LayoutDashboard className="h-4 w-4" />
+                    Pedidos / Ventas
+                  </Link>
+                  <Link
+                    href="/admin/finance"
+                    onClick={closeMobileMenu}
+                    className="flex items-center gap-2 w-full rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
+                  >
+                    <LayoutDashboard className="h-4 w-4" />
+                    Finanzas
+                  </Link>
                 </div>
 
             </SheetContent>

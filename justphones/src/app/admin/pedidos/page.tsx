@@ -25,7 +25,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import type { CustomerRequest } from '@/lib/customer-requests';
-import { createClient } from '@/lib/supabase/client';
+import { validateDiscountCode } from '@/lib/mock-data';
 
 
 const ITEMS_PER_PAGE = 5;
@@ -53,7 +53,6 @@ const saleSchema = z.object({
 
 
 export default function AdminPedidosPage() {
-  const supabase = createClient();
   const { sales, addSale, updateSale, deleteSale, isLoading: isLoadingSales } = useSales();
   const { products, isLoading: isLoadingProducts } = useProducts();
   const { customerRequests, updateCustomerRequest, deleteCustomerRequest, isLoading: isLoadingRequests } = useCustomerRequests();
@@ -329,24 +328,23 @@ export default function AdminPedidosPage() {
     }
 
     setIsValidatingDiscount(true);
-    
+
     try {
-      const { data: discountData, error: rpcError } = await supabase.rpc('apply_and_increment_discount', { 
-        p_code: discountCode.trim().toUpperCase() 
-      });
-      
-      if (rpcError || !discountData || !discountData.success) {
+      await new Promise(r => setTimeout(r, 400));
+      const discountData = validateDiscountCode(discountCode.trim());
+
+      if (!discountData.success) {
         toast({
           variant: "destructive",
           title: "Código inválido",
-          description: discountData?.message || "El código ingresado no es válido o ha expirado."
+          description: discountData.error || "El código ingresado no es válido o ha expirado."
         });
         setAppliedDiscount(null);
       } else {
         setAppliedDiscount({
-          code: discountData.code,
-          name: discountData.name,
-          percentage: discountData.percentage,
+          code: discountData.code!,
+          name: discountData.name!,
+          percentage: discountData.percentage!,
           isApplied: true
         });
         toast({

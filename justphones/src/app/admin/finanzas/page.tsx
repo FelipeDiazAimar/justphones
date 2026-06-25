@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import { MOCK_FINANCE_CLOSURES } from '@/lib/mock-data';
 import { useSales } from '@/hooks/use-sales';
 import { useProducts } from '@/hooks/use-products';
 import { useProductViews } from '@/hooks/use-product-views';
@@ -38,6 +39,17 @@ import type { MonetaryIncome } from '@/lib/monetary-income';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
+
+const INITIAL_CLOSURES = MOCK_FINANCE_CLOSURES
+  .map(c => ({
+    id: c.id,
+    month: c.month,
+    startDate: c.start_date,
+    createdAt: c.created_at ?? null,
+  }))
+  .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+
+const INITIAL_SELECTED_MONTH = INITIAL_CLOSURES[INITIAL_CLOSURES.length - 1]?.month ?? '';
 
 const ITEMS_PER_PAGE = 5;
 
@@ -142,11 +154,11 @@ export default function AdminFinancePage() {
   const [salesChartView, setSalesChartView] = useState<'daily' | 'monthly' | 'yearly'>('daily');
   const [profitChartView, setProfitChartView] = useState<'daily' | 'weekly' | 'monthly' | 'by_order'>('daily');
 
-  // Cierres de caja manuales (persistidos en Supabase)
+  // Cierres de caja manuales
   type ClosureEntry = { id: string; month: string; startDate: string; createdAt?: string | null };
-  const [closures, setClosures] = useState<ClosureEntry[]>([]);
-  const [isLoadingClosures, setIsLoadingClosures] = useState(true);
-  const [selectedMonth, setSelectedMonth] = useState<string>("");
+  const [closures, setClosures] = useState<ClosureEntry[]>(INITIAL_CLOSURES);
+  const [isLoadingClosures, setIsLoadingClosures] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState<string>(INITIAL_SELECTED_MONTH);
   const { toast } = useToast();
 
   const refreshClosures = useCallback(async (preferredMonth?: string) => {

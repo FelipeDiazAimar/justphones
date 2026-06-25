@@ -1,104 +1,42 @@
-
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import type { FixedCost } from '@/lib/fixed-costs';
-import { createClient } from '@/lib/supabase/client';
+import { MOCK_FIXED_COSTS } from '@/lib/mock-data';
 import { useToast } from './use-toast';
 
 export function useFixedCosts() {
-  const supabase = createClient();
   const { toast } = useToast();
-  const [fixedCosts, setFixedCosts] = useState<FixedCost[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [fixedCosts, setFixedCosts] = useState<FixedCost[]>(MOCK_FIXED_COSTS);
+  const [isLoading] = useState(false);
 
-  const fetchFixedCosts = useCallback(async () => {
-    setIsLoading(true);
-    const { data, error } = await supabase.from('fixed_costs').select('*').order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching fixed costs:', error.message);
-      setFixedCosts([]);
-      toast({ 
-          variant: 'destructive', 
-          title: 'Error de Base de Datos', 
-          description: `No se pudieron cargar los costos fijos. Asegúrate de que la tabla "fixed_costs" existe. Error: ${error.message}` 
-      });
-    } else {
-      setFixedCosts(data as FixedCost[]);
-    }
-    setIsLoading(false);
-  }, [supabase, toast]);
-
-  useEffect(() => {
-    fetchFixedCosts();
-
-    const channel = supabase
-      .channel('fixed_costs_changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'fixed_costs' },
-        () => fetchFixedCosts()
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
+  const addFixedCost = async (costData: Omit<FixedCost, 'id' | 'created_at'>): Promise<boolean> => {
+    await new Promise(r => setTimeout(r, 300));
+    const newCost: FixedCost = {
+      ...costData,
+      id: `fc-${Date.now()}`,
+      created_at: new Date().toISOString(),
     };
-  }, [fetchFixedCosts, supabase]);
-  
-  const addFixedCost = async (costData: Omit<FixedCost, 'id' | 'created_at'>) => {
-    const { error } = await supabase.from('fixed_costs').insert([costData]);
-    if (error) {
-      console.error('Error adding fixed cost:', error.message);
-      toast({ 
-          variant: 'destructive', 
-          title: 'Error', 
-          description: `No se pudo añadir el costo fijo: ${error.message}` 
-      });
-      return false;
-    }
-    // No need to call fetch here, the realtime subscription will handle it.
+    setFixedCosts(prev => [newCost, ...prev]);
+    toast({ title: 'Costo fijo añadido' });
     return true;
   };
-  
-  const updateFixedCost = async (costId: string, costData: Partial<Omit<FixedCost, 'id' | 'created_at'>>) => {
-    const { error } = await supabase.from('fixed_costs').update(costData).eq('id', costId);
-    if (error) {
-        console.error('Error updating fixed cost:', error.message);
-        toast({ 
-            variant: 'destructive', 
-            title: 'Error', 
-            description: `No se pudo actualizar el costo fijo: ${error.message}` 
-        });
-        return false;
-    }
+
+  const updateFixedCost = async (costId: string, costData: Partial<Omit<FixedCost, 'id' | 'created_at'>>): Promise<boolean> => {
+    await new Promise(r => setTimeout(r, 300));
+    setFixedCosts(prev => prev.map(c => c.id === costId ? { ...c, ...costData } : c));
+    toast({ title: 'Costo fijo actualizado' });
     return true;
   };
-  
-  const updateCostsWithoutMonth = async (defaultMonth: string) => {
-    const costsWithoutMonth = fixedCosts.filter(cost => !cost.month);
-    if (costsWithoutMonth.length === 0) return;
 
-    const updates = costsWithoutMonth.map(cost => 
-      supabase.from('fixed_costs').update({ month: defaultMonth }).eq('id', cost.id)
-    );
-
-    await Promise.all(updates);
-    // The realtime subscription will handle the fetch
+  const updateCostsWithoutMonth = async (_defaultMonth: string): Promise<void> => {
+    // No-op in mock mode
   };
 
-  const deleteFixedCost = async (costId: string) => {
-    const { error } = await supabase.from('fixed_costs').delete().eq('id', costId);
-    if (error) {
-      console.error('Error deleting fixed cost:', error.message);
-      toast({ 
-        variant: 'destructive', 
-        title: 'Error', 
-        description: `No se pudo eliminar el costo fijo: ${error.message}` 
-      });
-      return false;
-    }
+  const deleteFixedCost = async (costId: string): Promise<boolean> => {
+    await new Promise(r => setTimeout(r, 300));
+    setFixedCosts(prev => prev.filter(c => c.id !== costId));
+    toast({ title: 'Costo fijo eliminado' });
     return true;
   };
 

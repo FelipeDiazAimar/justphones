@@ -12,7 +12,8 @@ import {
   HelpCircle,
   Image,
   ShoppingCart,
-  Tag
+  Tag,
+  TrendingUp
 } from 'lucide-react';
 
 const dashboardItems = [
@@ -64,6 +65,13 @@ const dashboardItems = [
     icon: Tag,
     color: 'text-indigo-500',
     description: 'Gestiona códigos de descuento, promociones y ofertas especiales.'
+  },
+  {
+    href: '/admin/finanzas',
+    label: 'Finanzas',
+    icon: TrendingUp,
+    color: 'text-emerald-500',
+    description: 'Analiza ventas, ganancias, costos fijos, capital disponible y rentabilidad de productos.'
   },
 ];
 

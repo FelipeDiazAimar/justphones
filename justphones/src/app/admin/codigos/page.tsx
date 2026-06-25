@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Table,
@@ -41,8 +41,8 @@ import { Trash, Edit, PlusCircle, Tag, Check, Copy, Send } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { createClient } from '@/lib/supabase/client';
 import type { DiscountCode } from '@/lib/discount-codes';
+import { MOCK_DISCOUNT_CODES } from '@/lib/mock-data';
 import { Switch } from '@/components/ui/switch';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -66,32 +66,11 @@ const codeSchema = z.object({
 });
 
 export default function AdminCodigosPage() {
-  const supabase = createClient();
   const { toast } = useToast();
-  const [codes, setCodes] = useState<DiscountCode[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [codes, setCodes] = useState<DiscountCode[]>(MOCK_DISCOUNT_CODES);
+  const [isLoading] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCode, setEditingCode] = useState<DiscountCode | null>(null);
-
-  const fetchCodes = useCallback(async () => {
-    setIsLoading(true);
-    const { data, error } = await supabase
-      .from('discount_codes')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching codes:', error.message);
-      toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los códigos de descuento.' });
-    } else {
-      setCodes(data as DiscountCode[]);
-    }
-    setIsLoading(false);
-  }, [supabase, toast]);
-
-  useEffect(() => {
-    fetchCodes();
-  }, [fetchCodes]);
   
   const {
     register,
@@ -133,60 +112,45 @@ export default function AdminCodigosPage() {
   };
   
   const handleDeleteCode = async (codeId: string) => {
-    const { error } = await supabase.from('discount_codes').delete().eq('id', codeId);
-    if (error) {
-        toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar el código.' });
-    } else {
-        toast({ title: 'Código eliminado' });
-        fetchCodes();
-    }
+    await new Promise(r => setTimeout(r, 300));
+    setCodes(prev => prev.filter(c => c.id !== codeId));
+    toast({ title: 'Código eliminado' });
   };
 
   const onCodeSubmit = async (data: z.infer<typeof codeSchema>) => {
-    let success = false;
-    
-    const submissionData: Partial<DiscountCode> = {
+    await new Promise(r => setTimeout(r, 400));
+
+    if (editingCode) {
+      setCodes(prev => prev.map(c => c.id === editingCode.id ? {
+        ...c,
         name: data.name,
         percentage: data.percentage,
         description: data.description,
-        expires_at: data.expires_at ? data.expires_at.toISOString() : null,
+        expires_at: data.expires_at ? data.expires_at.toISOString() : undefined,
         conditions: data.conditions,
-        usage_limit: data.usage_limit || null,
+        usage_limit: data.usage_limit ?? undefined,
         is_active: data.is_active,
-    };
-    
-    // Solo incluir el código si se proporciona
-    if (data.code) {
-        submissionData.code = data.code.toUpperCase();
-    }
-
-    if (editingCode) {
-      // Al editar, no se cambia el código, pero se actualiza el resto
-      delete submissionData.code;
-      const { error } = await supabase.from('discount_codes').update(submissionData).eq('id', editingCode.id);
-      if (error) {
-        toast({ variant: 'destructive', title: 'Error', description: `No se pudo actualizar el código: ${error.message}` });
-      } else {
-        toast({ title: 'Código actualizado' });
-        success = true;
-      }
+      } : c));
+      toast({ title: 'Código actualizado' });
     } else {
-      const { error } = await supabase.from('discount_codes').insert([submissionData]);
-      if (error) {
-        const description = error.message.includes('duplicate key value violates unique constraint "discount_codes_code_key"')
-          ? 'Ya existe un código con ese nombre. Por favor, elige otro.'
-          : `No se pudo crear el código: ${error.message}`;
-        toast({ variant: 'destructive', title: 'Error', description });
-      } else {
-        toast({ title: 'Código creado' });
-        success = true;
-      }
+      const newCode: DiscountCode = {
+        id: `dc-${Date.now()}`,
+        created_at: new Date().toISOString(),
+        code: data.code ? data.code.toUpperCase() : Math.random().toString(36).substring(2, 8).toUpperCase(),
+        name: data.name,
+        percentage: data.percentage,
+        description: data.description,
+        expires_at: data.expires_at ? data.expires_at.toISOString() : undefined,
+        conditions: data.conditions,
+        usage_limit: data.usage_limit ?? undefined,
+        usage_count: 0,
+        is_active: data.is_active,
+      };
+      setCodes(prev => [newCode, ...prev]);
+      toast({ title: 'Código creado' });
     }
 
-    if (success) {
-      setIsDialogOpen(false);
-      fetchCodes();
-    }
+    setIsDialogOpen(false);
   };
 
   const copyToClipboard = (text: string) => {

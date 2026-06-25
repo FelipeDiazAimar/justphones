@@ -36,8 +36,7 @@ import {
 } from '@/components/ui/select';
 import { Input } from './ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { createClient } from '@/lib/supabase/client';
-import { DiscountCode } from '@/lib/discount-codes';
+import { validateDiscountCode } from '@/lib/mock-data';
 import { Label } from './ui/label';
 
 const paymentOptions = {
@@ -59,22 +58,21 @@ export function CartSheet() {
   const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);
   const [showFirstPurchasePopup, setShowFirstPurchasePopup] = useState(false);
   const { toast } = useToast();
-  const supabase = createClient();
-  const phoneNumber = '5493564338599'; 
-  
+  const phoneNumber = '5493564338599';
+
   const handleApplyDiscountCode = async () => {
     if (!discountCode.trim()) return;
     setIsApplyingCode(true);
 
-    const { data: discountData, error: rpcError } = await supabase.rpc('apply_and_increment_discount', { p_code: discountCode.trim().toUpperCase() });
+    await new Promise(r => setTimeout(r, 400));
+    const result = validateDiscountCode(discountCode.trim());
 
-    if (rpcError || !discountData || !discountData.success) {
-        const errorMessage = discountData?.error || rpcError?.message || 'Código de descuento inválido.';
-        toast({ variant: "destructive", title: "Error", description: errorMessage });
+    if (!result.success) {
+        toast({ variant: "destructive", title: "Error", description: result.error || 'Código de descuento inválido.' });
         setAppliedDiscount(null);
-    } else if (discountData.success) {
-        setAppliedDiscount({ code: discountData.code, percentage: discountData.percentage, name: discountData.name });
-        toast({ title: "¡Éxito!", description: `Se aplicó un ${discountData.percentage}% de descuento. Uso registrado automáticamente.` });
+    } else {
+        setAppliedDiscount({ code: result.code!, percentage: result.percentage!, name: result.name! });
+        toast({ title: "¡Éxito!", description: `Se aplicó un ${result.percentage}% de descuento.` });
     }
     setIsApplyingCode(false);
   };

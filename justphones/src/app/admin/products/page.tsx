@@ -54,7 +54,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useSubcategories } from '@/hooks/use-subcategories';
 import { useModels } from '@/hooks/use-models';
 import { unslugify, cn, expandModelString } from '@/lib/utils';
-import { createClient } from '@/lib/supabase/client';
+import { validateDiscountCode } from '@/lib/mock-data';
 import type { Sale } from '@/lib/sales';
 import { useSales } from '@/hooks/use-sales';
 import { useProductHistory } from '@/hooks/use-product-history';
@@ -263,7 +263,6 @@ const ColorImageInput = ({ control, index, errors, onFileSelect, setPreviewDialo
 }
 
 export default function AdminProductsPage() {
-  const supabase = createClient();
   const { products, addProduct, updateProduct, deleteProduct, isLoading: isLoadingProducts, fetchProducts, getProductById, uploadCoverImage, uploadColorImage } = useProducts();
   const { subcategories, isLoading: isLoadingSubcategories } = useSubcategories();
   const { models, allModels, isLoading: isLoadingModels } = useModels();
@@ -862,35 +861,29 @@ export default function AdminProductsPage() {
     }
 
     setIsValidatingDiscount(true);
-    
-    try {
-      // Usar la misma función que el carrito para validar (pero sin aplicar aún)
-      const { data: discountData, error: rpcError } = await supabase.rpc('apply_and_increment_discount', { 
-        p_code: discountCode.trim().toUpperCase() 
-      });
-      
-      console.log('[DEBUG] Validación de cupón (usando apply_and_increment):', discountData);
-      console.log('[DEBUG] Error validación:', rpcError);
 
-      if (rpcError || !discountData || !discountData.success) {
-        const errorMessage = discountData?.error || rpcError?.message || 'Código de descuento inválido.';
-        toast({ 
-          variant: "destructive", 
-          title: "Código Inválido", 
-          description: errorMessage 
+    try {
+      await new Promise(r => setTimeout(r, 400));
+      const discountData = validateDiscountCode(discountCode.trim());
+
+      if (!discountData.success) {
+        toast({
+          variant: "destructive",
+          title: "Código Inválido",
+          description: discountData.error || "Código de descuento inválido."
         });
         setAppliedDiscount(null);
       } else {
         setAppliedDiscount({
-          code: discountData.code || discountCode.toUpperCase(),
-          name: discountData.name || '',
-          percentage: discountData.percentage || 0,
+          code: discountData.code!,
+          name: discountData.name!,
+          percentage: discountData.percentage!,
           isApplied: true
         });
-        
-        toast({ 
-          title: "¡Código válido!", 
-          description: `Se aplicó un ${discountData.percentage}% de descuento. Uso registrado automáticamente.`,
+
+        toast({
+          title: "¡Código válido!",
+          description: `Se aplicó un ${discountData.percentage}% de descuento.`,
           className: "border-green-500/20 shadow-lg shadow-green-500/10"
         });
       }
@@ -1269,23 +1262,10 @@ export default function AdminProductsPage() {
     }
     
     try {
-      const { error: historyError } = await supabase
-        .from('stock_history')
-        .insert(historyEntries);
-  
-      if (historyError) {
-        throw new Error(`Error al guardar el historial: ${historyError.message}`);
-      }
-  
+      await new Promise(r => setTimeout(r, 300));
+
       for (const [productId, updatedProduct] of productUpdatesMap.entries()) {
-        const { error: productError } = await supabase
-          .from('products')
-          .update({ colors: updatedProduct.colors })
-          .eq('id', productId);
-  
-        if (productError) {
-          throw new Error(`Error al actualizar el producto ${productId}: ${productError.message}`);
-        }
+        await updateProduct(productId, { colors: updatedProduct.colors });
       }
 
       const successMessage = `Se actualizó el stock de ${historyEntries.length} item(s) en el pedido #${pedidoId.substring(0, 4)}.`;
@@ -1310,7 +1290,7 @@ export default function AdminProductsPage() {
     } finally {
       setIsSavingStockUpdate(false);
     }
-  }, [stockUpdates, fetchProducts, fetchStockHistory, supabase, toast]);
+  }, [stockUpdates, fetchProducts, fetchStockHistory, updateProduct, toast]);
 
   const handleMobileStockInputChange = (key: string, value: string) => {
     setMobileStockInputs(prev => ({ ...prev, [key]: value }));
@@ -1596,23 +1576,7 @@ export default function AdminProductsPage() {
         entriesCount: entries.length,
         entryIds: entries.map(e => e.id)
       });
-      // Verificación previa: ¿existen aún las filas objetivo?
-      const idsToDeletePre = entries.map(e => e.id);
-      const { data: preRowsByIds, error: preErrIds } = await supabase
-        .from('stock_history')
-        .select('id, pedido_id')
-        .in('id', idsToDeletePre);
-      const { data: preRowsByPedido, error: preErrPedido } = await supabase
-        .from('stock_history')
-        .select('id')
-        .eq('pedido_id', pedidoId);
-      console.log('[PEDIDOS][DELETE] Preselect filas existentes:', {
-        preErrIds,
-        preErrPedido,
-        countByIds: preRowsByIds?.length ?? 0,
-        idsFound: preRowsByIds?.map(r => r.id) ?? [],
-        countByPedido: preRowsByPedido?.length ?? 0,
-      });
+      // Mock: no pre-select needed
       // Preflight checks (ensure we can subtract the quantities)
       const issues: string[] = [];
       for (const entry of entries) {
@@ -1675,69 +1639,8 @@ export default function AdminProductsPage() {
         console.warn('[PEDIDOS][DELETE] Error llamando API admin, se intentará client-side:', apiErr);
       }
 
-      let deletedCount = 0;
-      if (adminDeleted > 0) {
-        deletedCount = adminDeleted;
-      } else {
-        console.log('[PEDIDOS][DELETE] Intentando borrar stock_history por IDs (client-side):', idsToDelete);
-        const { data: deletedByIds, error: delErr } = await supabase
-          .from('stock_history')
-          .delete()
-          .in('id', idsToDelete)
-          .select('id');
-
-        deletedCount = Array.isArray(deletedByIds) ? deletedByIds.length : 0;
-        console.log('[PEDIDOS][DELETE] Resultado borrado por IDs:', { delErr, deletedCount, deletedByIds });
-
-        if (delErr) {
-          // Rollback product stock changes
-          for (const [productId, original] of originalSnapshots.entries()) {
-            console.warn('[PEDIDOS][DELETE] Error borrando por IDs. Revirtiendo stock de producto', productId);
-            await updateProduct(productId, { colors: original.colors }, false);
-          }
-          // Refrescar UI tras rollback
-          try {
-            await fetchProducts();
-            await fetchStockHistory();
-          } catch (_) {}
-          throw new Error(`Error eliminando historial: ${delErr.message}`);
-        }
-      }
-
-      // Si no se borró nada por IDs, intentar por pedido_id (fallback) o cancelar y revertir stocks
-      if (deletedCount === 0) {
-        console.warn('[PEDIDOS][DELETE] 0 filas eliminadas por IDs. Intentando borrar por pedido_id:', pedidoId);
-        const { data: deletedByPedido, error: delErr2 } = await supabase
-          .from('stock_history')
-          .delete()
-          .eq('pedido_id', pedidoId)
-          .select('id');
-        const deletedByPedidoCount = Array.isArray(deletedByPedido) ? deletedByPedido.length : 0;
-        console.log('[PEDIDOS][DELETE] Resultado borrado por pedido_id:', { delErr2, deletedByPedidoCount, deletedByPedido });
-
-        if (delErr2 || deletedByPedidoCount === 0) {
-          console.warn('[PEDIDOS][DELETE] Hard delete falló o eliminó 0. Intentando soft-delete (set quantity=0, notes=__DELETED__).');
-          const { data: softData, error: softErr } = await supabase
-            .from('stock_history')
-            .update({ quantity_added: 0, notes: '__DELETED__' })
-            .eq('pedido_id', pedidoId)
-            .select('id');
-          console.log('[PEDIDOS][DELETE] Soft-delete resultado:', { softErr, softCount: softData?.length ?? 0, softIds: softData?.map(r => r.id) });
-
-          if (softErr || (softData?.length ?? 0) === 0) {
-            for (const [productId, original] of originalSnapshots.entries()) {
-              console.warn('[PEDIDOS][DELETE] Soft-delete también falló. Revirtiendo stock de producto', productId);
-              await updateProduct(productId, { colors: original.colors }, false);
-            }
-            // Refrescar UI tras rollback
-            try {
-              await fetchProducts();
-              await fetchStockHistory();
-            } catch (_) {}
-            throw new Error(softErr ? `Error soft-deleting historial: ${softErr.message}` : 'No se eliminaron registros del historial. Verifica RLS o filtros.');
-          }
-        }
-      }
+      // Mock: API admin route already handles deletion (returns { success: true, deleted: 1 })
+      const deletedCount = adminDeleted > 0 ? adminDeleted : entries.length;
 
       await fetchProducts();
       await fetchStockHistory();

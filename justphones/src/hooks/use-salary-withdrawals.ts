@@ -1,9 +1,8 @@
-
 'use client';
 
-import React, { useState, useEffect, useCallback, createContext, useContext, ReactNode } from 'react';
+import React, { useState, createContext, useContext, ReactNode } from 'react';
 import type { SalaryWithdrawal } from '@/lib/salary-withdrawals';
-import { createClient } from '@/lib/supabase/client';
+import { MOCK_SALARY_WITHDRAWALS } from '@/lib/mock-data';
 import { useToast } from './use-toast';
 
 interface SalaryContextType {
@@ -17,95 +16,33 @@ interface SalaryContextType {
 const SalaryContext = createContext<SalaryContextType | undefined>(undefined);
 
 export function SalaryWithdrawalsProvider({ children }: { children: ReactNode }) {
-  const supabase = createClient();
   const { toast } = useToast();
-  const [salaryWithdrawals, setSalaryWithdrawals] = useState<SalaryWithdrawal[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [salaryWithdrawals, setSalaryWithdrawals] = useState<SalaryWithdrawal[]>(MOCK_SALARY_WITHDRAWALS);
+  const [isLoading] = useState(false);
 
-  const fetchSalaryWithdrawals = useCallback(async () => {
-    setIsLoading(true);
-    const { data, error } = await supabase.from('salary_withdrawals').select('*').order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching salary withdrawals:', error.message);
-      setSalaryWithdrawals([]);
-      toast({ 
-          variant: 'destructive', 
-          title: 'Error de Base de Datos', 
-          description: `No se pudieron cargar las extracciones de sueldo. Error: ${error.message}` 
-      });
-    } else {
-      setSalaryWithdrawals(data as SalaryWithdrawal[]);
-    }
-    setIsLoading(false);
-  }, [supabase, toast]);
-
-  useEffect(() => {
-    fetchSalaryWithdrawals();
-    const channel = supabase
-      .channel('salary_withdrawals_changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'salary_withdrawals' },
-        () => fetchSalaryWithdrawals()
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [fetchSalaryWithdrawals, supabase]);
-  
-  const addSalaryWithdrawal = async (data: Omit<SalaryWithdrawal, 'id' | 'created_at'>) => {
-    const { error } = await supabase.from('salary_withdrawals').insert([data]);
-    if (error) {
-      console.error('Error adding salary withdrawal:', error.message);
-      toast({ 
-          variant: 'destructive', 
-          title: 'Error', 
-          description: `No se pudo registrar la extracción: ${error.message}` 
-      });
-      return false;
-    }
-    return true;
-  };
-  
-  const updateSalaryWithdrawal = async (id: string, data: Partial<Omit<SalaryWithdrawal, 'id' | 'created_at'>>) => {
-    const { error } = await supabase.from('salary_withdrawals').update(data).eq('id', id);
-    if (error) {
-        console.error('Error updating salary withdrawal:', error.message);
-        toast({ 
-            variant: 'destructive', 
-            title: 'Error', 
-            description: `No se pudo actualizar la extracción: ${error.message}` 
-        });
-        return false;
-    }
-    return true;
-  };
-  
-  const deleteSalaryWithdrawal = async (id: string) => {
-    const { error } = await supabase.from('salary_withdrawals').delete().eq('id', id);
-    if (error) {
-      console.error('Error deleting salary withdrawal:', error.message);
-      toast({ 
-          variant: 'destructive', 
-          title: 'Error', 
-          description: `No se pudo eliminar la extracción: ${error.message}` 
-      });
-      return false;
-    }
+  const addSalaryWithdrawal = async (data: Omit<SalaryWithdrawal, 'id' | 'created_at'>): Promise<boolean> => {
+    await new Promise(r => setTimeout(r, 300));
+    const newEntry: SalaryWithdrawal = { ...data, id: `sw-${Date.now()}`, created_at: new Date().toISOString() };
+    setSalaryWithdrawals(prev => [newEntry, ...prev]);
+    toast({ title: 'Extracción registrada' });
     return true;
   };
 
-  const value = {
-      salaryWithdrawals,
-      isLoading,
-      addSalaryWithdrawal,
-      updateSalaryWithdrawal,
-      deleteSalaryWithdrawal
+  const updateSalaryWithdrawal = async (id: string, data: Partial<Omit<SalaryWithdrawal, 'id' | 'created_at'>>): Promise<boolean> => {
+    await new Promise(r => setTimeout(r, 300));
+    setSalaryWithdrawals(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
+    toast({ title: 'Extracción actualizada' });
+    return true;
   };
 
+  const deleteSalaryWithdrawal = async (id: string): Promise<boolean> => {
+    await new Promise(r => setTimeout(r, 300));
+    setSalaryWithdrawals(prev => prev.filter(s => s.id !== id));
+    toast({ title: 'Extracción eliminada' });
+    return true;
+  };
+
+  const value = { salaryWithdrawals, isLoading, addSalaryWithdrawal, updateSalaryWithdrawal, deleteSalaryWithdrawal };
   return React.createElement(SalaryContext.Provider, { value }, children);
 }
 

@@ -42,7 +42,6 @@ import { Trash, Edit, PlusCircle, UploadCloud, X, Crop } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCarouselImagesR2 as useCarouselImages } from '@/hooks/use-carousel-images-r2';
-import { createClient } from '@/lib/supabase/client';
 import ReactCrop, { type Crop as CropType, centerCrop, makeAspectCrop } from 'react-image-crop';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -101,7 +100,6 @@ function getCroppedImg(image: HTMLImageElement, crop: CropType, fileName: string
 }
 
 export default function AdminCarouselPage() {
-  const supabase = createClient();
   const { carouselImages, addCarouselImage, updateCarouselImage, deleteCarouselImage, uploadCarouselImageFile, isLoading: isLoadingCarousel } = useCarouselImages();
   
   const [isImageDialogOpen, setIsImageDialogOpen] = useState(false);

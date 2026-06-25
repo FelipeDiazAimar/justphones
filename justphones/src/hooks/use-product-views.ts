@@ -1,9 +1,7 @@
-
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { createClient } from '@/lib/supabase/client';
-import { useToast } from './use-toast';
+import { useState } from 'react';
+import { MOCK_SALES } from '@/lib/mock-data';
 
 export type ProductView = {
   product_id: string;
@@ -11,31 +9,18 @@ export type ProductView = {
 };
 
 export function useProductViews() {
-  const supabase = createClient();
-  const { toast } = useToast();
-  const [productViews, setProductViews] = useState<ProductView[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const productViews: ProductView[] = Object.values(
+    MOCK_SALES.reduce((acc: Record<string, ProductView>, sale) => {
+      if (!acc[sale.product_id]) {
+        acc[sale.product_id] = { product_id: sale.product_id, view_count: 0 };
+      }
+      acc[sale.product_id].view_count += sale.quantity;
+      return acc;
+    }, {})
+  ).sort((a, b) => b.view_count - a.view_count);
 
-  const fetchProductViews = useCallback(async () => {
-    setIsLoading(true);
-    const { data, error } = await supabase
-      .from('product_views')
-      .select('*')
-      .order('view_count', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching product views:', error.message);
-      setProductViews([]);
-      toast({ variant: 'destructive', title: 'Error', description: 'No se pudo cargar las vistas de productos.' });
-    } else {
-      setProductViews(data as ProductView[]);
-    }
-    setIsLoading(false);
-  }, [supabase, toast]);
-
-  useEffect(() => {
-    fetchProductViews();
-  }, [fetchProductViews]);
+  const [isLoading] = useState(false);
+  const fetchProductViews = async () => {};
 
   return { productViews, isLoading, fetchProductViews };
 }

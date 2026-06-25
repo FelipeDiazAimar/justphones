@@ -1,9 +1,8 @@
-
 'use client';
 
-import React, { useState, useEffect, useCallback, createContext, useContext, ReactNode } from 'react';
+import React, { useState, createContext, useContext, ReactNode } from 'react';
 import type { CustomerRequest } from '@/lib/customer-requests';
-import { createClient } from '@/lib/supabase/client';
+import { MOCK_CUSTOMER_REQUESTS } from '@/lib/mock-data';
 import { useToast } from './use-toast';
 
 interface CustomerRequestsContextType {
@@ -17,111 +16,37 @@ interface CustomerRequestsContextType {
 const CustomerRequestsContext = createContext<CustomerRequestsContextType | undefined>(undefined);
 
 export function CustomerRequestsProvider({ children }: { children: ReactNode }) {
-  const supabase = createClient();
   const { toast } = useToast();
-  const [customerRequests, setCustomerRequests] = useState<CustomerRequest[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const fetchCustomerRequests = useCallback(async () => {
-    console.log("[useCustomerRequests] Fetching customer requests...");
-    setIsLoading(true);
-    const { data, error, count } = await supabase
-      .from('customer_requests')
-      .select('*', { count: 'exact' });
-
-    if (error) {
-      console.error('[useCustomerRequests] Error fetching customer requests:', error.message);
-      setCustomerRequests([]);
-      toast({ 
-        variant: 'destructive', 
-        title: 'Error de Datos', 
-        description: `No se pudieron cargar los pedidos de clientes: ${error.message}` 
-      });
-    } else {
-      console.log(`[useCustomerRequests] Fetch successful. ${data?.length ?? 0} records returned by query. Total count in table: ${count}.`);
-      setCustomerRequests(data as CustomerRequest[]);
-       if (data.length === 0 && count !== 0) {
-        console.warn("[useCustomerRequests] WARNING: Query returned 0 records, but total count in table is non-zero. This strongly suggests an RLS policy issue or an authentication problem.");
-        toast({
-          variant: 'destructive',
-          title: 'Problema de Permisos Detectado',
-          description: 'Se detectaron pedidos de clientes pero no se pueden mostrar. Revisa las políticas RLS y la autenticación.'
-        });
-      }
-    }
-    setIsLoading(false);
-  }, [supabase, toast]);
-
-  useEffect(() => {
-    fetchCustomerRequests();
-  }, [fetchCustomerRequests]);
+  const [customerRequests, setCustomerRequests] = useState<CustomerRequest[]>(MOCK_CUSTOMER_REQUESTS);
+  const [isLoading] = useState(false);
 
   const addCustomerRequest = async (requestData: Omit<CustomerRequest, 'id' | 'created_at'>[] | Omit<CustomerRequest, 'id' | 'created_at'>): Promise<boolean> => {
-    const dataToInsert = Array.isArray(requestData) ? requestData : [requestData];
-    if (dataToInsert.length === 0) return true;
-
-    const { error } = await supabase.from('customer_requests').insert(dataToInsert);
-    if (error) {
-      console.error('Error adding customer request:', error.message);
-      return false;
-    }
-    await fetchCustomerRequests();
+    await new Promise(r => setTimeout(r, 300));
+    const dataArray = Array.isArray(requestData) ? requestData : [requestData];
+    if (dataArray.length === 0) return true;
+    const newRequests: CustomerRequest[] = dataArray.map((req, i) => ({
+      ...req,
+      id: `req-new-${Date.now()}-${i}`,
+      created_at: new Date().toISOString(),
+    }));
+    setCustomerRequests(prev => [...newRequests, ...prev]);
     return true;
   };
-  
-  const updateCustomerRequest = async (requestId: string, requestData: Partial<Omit<CustomerRequest, 'id' | 'created_at'>>) => {
-    try {
-      const res = await fetch('/api/admin/customer-requests', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: requestId, payload: requestData }),
-      });
 
-      const body = await res.json().catch(() => ({}));
-
-      if (!res.ok || body?.success !== true) {
-        const message = body?.error || `Status ${res.status}`;
-        console.error('Error updating customer request:', message);
-        toast({ variant: 'destructive', title: 'Error', description: `No se pudo actualizar el pedido: ${message}` });
-        return false;
-      }
-
-      await fetchCustomerRequests();
-      return true;
-    } catch (error: any) {
-      console.error('Error updating customer request: network error', error?.message);
-      toast({ variant: 'destructive', title: 'Error', description: 'No se pudo actualizar el pedido: problema de red' });
-      return false;
-    }
+  const updateCustomerRequest = async (requestId: string, requestData: Partial<Omit<CustomerRequest, 'id' | 'created_at'>>): Promise<boolean> => {
+    await new Promise(r => setTimeout(r, 300));
+    setCustomerRequests(prev => prev.map(r => r.id === requestId ? { ...r, ...requestData } : r));
+    toast({ title: 'Pedido actualizado' });
+    return true;
   };
 
-  const deleteCustomerRequest = async (requestId: string) => {
-    console.log('[useCustomerRequests] deleteCustomerRequest llamado', { requestId });
-    try {
-      const res = await fetch(`/api/admin/customer-requests?id=${encodeURIComponent(requestId)}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      const body = await res.json().catch(() => ({}));
-      console.log('[useCustomerRequests] API delete response', { status: res.status, body });
-      if (!res.ok || body?.success !== true) {
-        const msg = body?.error || `Status ${res.status}`;
-        console.warn('[useCustomerRequests] Eliminación fallida vía API', { requestId, msg });
-        toast({ variant: 'destructive', title: 'Error', description: `No se pudo eliminar el pedido: ${msg}` });
-        return false;
-      }
-      console.log('[useCustomerRequests] Eliminación confirmada por API, realizando refetch...', { requestId });
-      await fetchCustomerRequests();
-      console.log('[useCustomerRequests] Refetch post-eliminación completado');
-      return true;
-    } catch (e: any) {
-      console.error('[useCustomerRequests] Error llamando API de eliminación', { requestId, error: e?.message });
-      toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar el pedido: error de red' });
-      return false;
-    }
+  const deleteCustomerRequest = async (requestId: string): Promise<boolean> => {
+    await new Promise(r => setTimeout(r, 300));
+    setCustomerRequests(prev => prev.filter(r => r.id !== requestId));
+    toast({ title: 'Pedido eliminado' });
+    return true;
   };
 
-  
   return React.createElement(
     CustomerRequestsContext.Provider,
     { value: { customerRequests, isLoading, addCustomerRequest, updateCustomerRequest, deleteCustomerRequest } },
