@@ -20,6 +20,7 @@ export default function RootLayout({
       <head>
         <title>JustPhones Showcase</title>
         <meta name="description" content="Fundas para iPhone y accesorios." />
+        <link rel="icon" href="/favicon.ico" type="image/x-icon" sizes="16x16" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
