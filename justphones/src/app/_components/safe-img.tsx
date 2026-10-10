@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode, SyntheticEvent } from "react";
+import { useState, type ReactNode, type SyntheticEvent } from "react";
 
 /**
  * Placeholder contractual de imágenes.
@@ -33,19 +33,29 @@ interface SvgIconProps {
  * aún no existe (se crea en paralelo por otro agente).
  */
 export function SvgIcon({ src, alt, fallback }: SvgIconProps) {
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
   return (
     <span className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary/10 text-primary dark:bg-primary/15">
-      <span className="flex items-center justify-center [&_svg]:h-5 [&_svg]:w-5">
-        {fallback}
-      </span>
-      {/* Si carga, tapa al fallback. Si falla, se oculta y muestra el fallback. */}
-      <img
-        src={src}
-        alt={alt}
-        loading="lazy"
-        onError={hideBrokenImg}
-        className="absolute inset-0 h-full w-full object-contain p-2"
-      />
+      {!loaded && (
+        <span className="flex items-center justify-center [&_svg]:h-5 [&_svg]:w-5">
+          {fallback}
+        </span>
+      )}
+      {/* Al cargar, tapa al fallback. Si falla, se oculta y queda el fallback. */}
+      {!failed && (
+        <img
+          src={src}
+          alt={alt}
+          loading="lazy"
+          onLoad={() => setLoaded(true)}
+          onError={(e) => {
+            hideBrokenImg(e);
+            setFailed(true);
+          }}
+          className="absolute inset-0 h-full w-full object-contain p-2"
+        />
+      )}
     </span>
   );
 }
