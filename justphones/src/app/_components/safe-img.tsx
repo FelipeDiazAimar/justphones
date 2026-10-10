@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode, type SyntheticEvent } from "react";
+import { useCallback, useState, type ReactNode, type SyntheticEvent } from "react";
 
 /**
  * Placeholder contractual de imágenes.
@@ -35,6 +35,10 @@ interface SvgIconProps {
 export function SvgIcon({ src, alt, fallback }: SvgIconProps) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
+  // Cubre imágenes ya cacheadas: el evento onLoad puede no dispararse tras hidratar.
+  const imgRef = useCallback((el: HTMLImageElement | null) => {
+    if (el && el.complete && el.naturalWidth > 0) setLoaded(true);
+  }, []);
   return (
     <span className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary/10 text-primary dark:bg-primary/15">
       {!loaded && (
@@ -45,6 +49,7 @@ export function SvgIcon({ src, alt, fallback }: SvgIconProps) {
       {/* Al cargar, tapa al fallback. Si falla, se oculta y queda el fallback. */}
       {!failed && (
         <img
+          ref={imgRef}
           src={src}
           alt={alt}
           loading="lazy"
