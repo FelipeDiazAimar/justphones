@@ -1,5 +1,5 @@
 import { PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
-import { r2Client, R2_BUCKETS, type R2BucketName } from './r2-client';
+import { r2Client, R2_BUCKETS, isR2Configured, R2_UNCONFIGURED_MESSAGE, type R2BucketName } from './r2-client';
 
 // Re-exportar para usar en otros archivos
 export { R2_BUCKETS } from './r2-client';
@@ -95,7 +95,21 @@ export async function uploadToR2(
   console.log('📁 [R2] File:', file.name, file.size, 'bytes');
   console.log('🪣 [R2] Bucket:', bucket);
   console.log('📂 [R2] Path prefix:', pathPrefix);
-  
+
+  // Fallback demo: sin env no se intenta nada de red; error claro en el resultado.
+  if (!isR2Configured()) {
+    console.warn('[R2] ' + R2_UNCONFIGURED_MESSAGE);
+    return { success: false, error: R2_UNCONFIGURED_MESSAGE };
+  }
+
+  // La subida corre en Node (API routes): Buffer no existe en el browser.
+  if (typeof Buffer === 'undefined') {
+    return {
+      success: false,
+      error: 'La subida a R2 requiere Node.js (usar desde una API route).',
+    };
+  }
+
   try {
     const fileName = generateUniqueFileName(file.name);
     const fullPath = `${pathPrefix}/${fileName}`;
@@ -145,6 +159,11 @@ export async function uploadToR2(
  * Elimina un archivo de R2
  */
 export async function deleteFromR2(bucket: R2BucketName, path: string): Promise<boolean> {
+  // Fallback demo: sin env, no-op con advertencia en lugar de error del SDK.
+  if (!isR2Configured()) {
+    console.warn('[R2] deleteFromR2 omitido: ' + R2_UNCONFIGURED_MESSAGE);
+    return false;
+  }
   try {
     const deleteCommand = new DeleteObjectCommand({
       Bucket: bucket,

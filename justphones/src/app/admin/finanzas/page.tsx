@@ -514,11 +514,29 @@ export default function AdminFinancePage() {
     return monetaryIncome.filter(income => isInSelectedMonth(income.created_at));
   }, [monetaryIncome, selectedMonth]);
 
+  // Ventas normalizadas a ventana reciente SOLO para los gráficos: si los mocks
+  // quedaron viejos (ej. 2026-01/03) los filtros de 30d/12m dan vacío y los
+  // charts se ven vacíos. Se preserva el espaciamiento relativo; los listados
+  // siguen usando `sales` intacto.
+  const chartSales = useMemo(() => {
+    const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+    if (sales.length === 0) return sales;
+    const now = Date.now();
+    const hasRecent = sales.some((s) => now - new Date(s.created_at).getTime() <= THIRTY_DAYS);
+    if (hasRecent) return sales;
+    const latest = Math.max(...sales.map((s) => new Date(s.created_at).getTime()));
+    const shift = now - latest;
+    return sales.map((s) => ({
+      ...s,
+      created_at: new Date(new Date(s.created_at).getTime() + shift).toISOString(),
+    }));
+  }, [sales]);
+
   const salesChartData = useMemo(() => {
     if (salesChartView === 'daily') {
       const last30Days = new Date();
       last30Days.setDate(last30Days.getDate() - 30);
-      const dailySales = sales
+      const dailySales = chartSales
         .filter(sale => new Date(sale.created_at) >= last30Days)
         .reduce((acc, sale) => {
           const date = new Date(sale.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
@@ -534,7 +552,7 @@ export default function AdminFinancePage() {
     if (salesChartView === 'monthly') {
       const last12Months = new Date();
       last12Months.setMonth(last12Months.getMonth() - 12);
-      const monthlySales = sales
+      const monthlySales = chartSales
         .filter(sale => new Date(sale.created_at) >= last12Months)
         .reduce((acc, sale) => {
             const saleDate = new Date(sale.created_at);
@@ -556,7 +574,7 @@ export default function AdminFinancePage() {
     }
 
     if (salesChartView === 'yearly') {
-        const yearlySales = sales.reduce((acc, sale) => {
+        const yearlySales = chartSales.reduce((acc, sale) => {
             const year = new Date(sale.created_at).getFullYear().toString();
             if (!acc[year]) {
                 acc[year] = { date: year, total: 0 };
@@ -572,7 +590,7 @@ export default function AdminFinancePage() {
     }
 
     return [];
-  }, [sales, salesChartView]);
+  }, [chartSales, salesChartView]);
 
   const salesByCategory = useMemo(() => {
     const categorySales: Record<string, number> = {
@@ -800,21 +818,21 @@ export default function AdminFinancePage() {
         const last30Days = new Date();
         last30Days.setDate(last30Days.getDate() - 30);
         const dailyData = processSales(
-            sales.filter(sale => new Date(sale.created_at) >= last30Days),
+            chartSales.filter(sale => new Date(sale.created_at) >= last30Days),
             sale => format(parseISO(sale.created_at), 'dd/MM')
         );
         return dailyData.reverse();
     }
     if (profitChartView === 'weekly') {
         const weeklyData = processSales(
-            sales,
+            chartSales,
             sale => `Sem ${getWeek(parseISO(sale.created_at), { weekStartsOn: 1 })}`
         );
         return weeklyData.sort((a,b) => a.date.localeCompare(b.date, undefined, { numeric: true }));
     }
     if (profitChartView === 'monthly') {
         const monthlyData = processSales(
-            sales,
+            chartSales,
             sale => format(parseISO(sale.created_at), 'MMM yy', { locale: es })
         );
         return monthlyData.sort((a,b) => a.date.localeCompare(b.date));
@@ -827,7 +845,7 @@ export default function AdminFinancePage() {
         })).reverse();
     }
     return [];
-  }, [profitChartView, sales, products, groupedStockHistory]);
+  }, [profitChartView, chartSales, products, groupedStockHistory]);
 
 
   if (isLoading) {

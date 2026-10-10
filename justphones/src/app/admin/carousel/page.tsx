@@ -229,12 +229,8 @@ export default function AdminCarouselPage() {
 
     if (data.image_url instanceof File) {
       console.log('📁 [ADMIN] Processing file upload...');
-      // Usar R2 en lugar de Supabase Storage
-      const uploadResult = await uploadCarouselImageFile(
-        data.image_url, 
-        data.alt_text, 
-        data.sort_order
-      );
+      // Usar R2 en lugar de Supabase Storage (demo: solo necesita el File)
+      const uploadResult = await uploadCarouselImageFile(data.image_url);
       
       if (!uploadResult.success) {
         // El error ya se muestra en el hook

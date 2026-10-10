@@ -23,6 +23,57 @@ import { Store, Truck, MessageSquare, Landmark, CreditCard } from 'lucide-react'
 import Aurora from '@/components/aurora';
 import { createClient } from '@/lib/supabase/client';
 import { MessageBanner } from '@/components/message-banner';
+import {
+  DEMO_PRODUCTS,
+  formatPriceARS,
+  isDemoMode,
+  whatsappCheckoutUrl,
+} from '@/lib/demo';
+import type { DemoCheckoutItem } from '@/lib/demo';
+
+type DemoCartItem = {
+  key: string;
+  id: string;
+  slug: string;
+  nombre: string;
+  precio: number;
+  modelo: string;
+  color: string;
+  cantidad: number;
+  imagen: string;
+};
+
+const DEMO_CART_KEY = 'justphones-demo-cart-v1';
+
+function readDemoCart(): DemoCartItem[] {
+  try {
+    if (typeof window === 'undefined') return [];
+    const raw = window.localStorage.getItem(DEMO_CART_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (item): item is DemoCartItem =>
+        !!item &&
+        typeof item.key === 'string' &&
+        typeof item.nombre === 'string' &&
+        typeof item.precio === 'number' &&
+        typeof item.cantidad === 'number',
+    );
+  } catch {
+    return [];
+  }
+}
+
+function writeDemoCart(items: DemoCartItem[]) {
+  try {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(DEMO_CART_KEY, JSON.stringify(items));
+    window.dispatchEvent(new Event('demo-cart-updated'));
+  } catch {
+    // localStorage no disponible: el carrito demo solo vive en memoria de la sesión
+  }
+}
 
 
 export default function ProductDetailPage() {
@@ -35,6 +86,92 @@ export default function ProductDetailPage() {
   const product = useMemo(() => (id ? getProductById(id) : undefined), [id, getProductById]);
   const { addToCart } = useCart();
   const { toast } = useToast();
+
+  // ---- Rama demo (contrato solo lectura: src/lib/demo.ts) ----
+  // En modo demo la fuente de datos es DEMO_PRODUCTS (campos en español) y el
+  // carrito demo persiste en localStorage con DEMO_CART_KEY (misma clave que
+  // lee src/components/cart-sheet.tsx). No se toca src/lib.
+  const demoMode = isDemoMode();
+  const demoProduct = useMemo(
+    () => (id ? DEMO_PRODUCTS.find((p) => p.id === id || p.slug === id) : undefined),
+    [id],
+  );
+  const [demoModelo, setDemoModelo] = useState<string>('');
+  const [demoColor, setDemoColor] = useState<string>('');
+  const [demoQuantity, setDemoQuantity] = useState<number>(1);
+  const [demoImageIndex, setDemoImageIndex] = useState<number>(0);
+
+  useEffect(() => {
+    if (demoProduct) {
+      setDemoModelo(demoProduct.modelos[0] ?? '');
+      setDemoColor(demoProduct.colores[0] ?? '');
+      setDemoQuantity(1);
+      setDemoImageIndex(0);
+    }
+  }, [demoProduct]);
+
+  const demoPrecioEfectivo = demoProduct
+    ? (demoProduct.precioOferta ?? demoProduct.precio)
+    : 0;
+  const demoTieneOferta = !!demoProduct && !!demoProduct.precioOferta && demoProduct.precioOferta < demoProduct.precio;
+  const demoDescuentoPct = demoTieneOferta && demoProduct
+    ? Math.round((1 - (demoProduct.precioOferta ?? demoProduct.precio) / demoProduct.precio) * 100)
+    : 0;
+  const demoAgotado = (demoProduct?.stock ?? 0) <= 0;
+  const demoRelacionados = useMemo(() => {
+    if (!demoProduct) return [];
+    return DEMO_PRODUCTS.filter(
+      (p) => p.id !== demoProduct.id && p.categoria === demoProduct.categoria,
+    ).slice(0, 4);
+  }, [demoProduct]);
+
+  const handleDemoAddToCart = () => {
+    if (!demoProduct || demoAgotado) return;
+    const cantidad = Math.max(1, Math.min(Math.floor(demoQuantity) || 1, demoProduct.stock));
+    const key = `${demoProduct.id}|${demoModelo}|${demoColor}`;
+    const items = readDemoCart();
+    const existente = items.find((item) => item.key === key);
+    if (existente) {
+      const nuevaCantidad = Math.min(existente.cantidad + cantidad, demoProduct.stock);
+      writeDemoCart(
+        items.map((item) => (item.key === key ? { ...item, cantidad: nuevaCantidad } : item)),
+      );
+    } else {
+      writeDemoCart([
+        ...items,
+        {
+          key,
+          id: demoProduct.id,
+          slug: demoProduct.slug,
+          nombre: demoProduct.nombre,
+          precio: demoPrecioEfectivo,
+          modelo: demoModelo,
+          color: demoColor,
+          cantidad,
+          imagen: demoProduct.imagenes[0] ?? '/Cover.png?v=3',
+        },
+      ]);
+    }
+    toast({
+      variant: 'success',
+      title: '¡Producto agregado!',
+      description: `${demoProduct.nombre} (${demoColor}) se agregó al carrito.`,
+    });
+  };
+
+  const demoCheckoutUrl = demoProduct
+    ? whatsappCheckoutUrl(
+        [
+          {
+            nombre: demoProduct.nombre,
+            cantidad: Math.max(1, Math.min(Math.floor(demoQuantity) || 1, demoProduct.stock)),
+            precio: demoPrecioEfectivo,
+            modelo: demoModelo || undefined,
+            color: demoColor || undefined,
+          } satisfies DemoCheckoutItem,
+        ],
+      )
+    : '';
 
   const [selectedColor, setSelectedColor] = useState<ProductColor | null>(null);
   const [quantity, setQuantity] = useState<number | ''>(1);
@@ -88,6 +225,8 @@ export default function ProductDetailPage() {
   }, [product]);
   
   useEffect(() => {
+    // En modo demo no hay Supabase: se omite el tracking de vistas.
+    if (isDemoMode()) return;
     const trackView = async () => {
         if (id) {
             const { error } = await supabase.rpc('increment_view', { p_product_id: id });
@@ -185,15 +324,243 @@ export default function ProductDetailPage() {
     };
   }, [api, product, selectedColor, coverImagesCount]);
 
+  // ---- Render demo: detalle sobre DEMO_PRODUCTS (campos en español) ----
+  if (demoMode) {
+    if (!demoProduct) {
+      notFound();
+    }
+    const demo = demoProduct;
+    const demoImagenActual = demo.imagenes[Math.min(demoImageIndex, demo.imagenes.length - 1)] ?? '/Cover.png?v=3';
+    return (
+      <MainLayout noPaddingTop>
+        <MessageBanner />
+        <div className="w-full max-w-6xl mx-auto px-4 lg:grid lg:grid-cols-2 lg:gap-12">
+          <div>
+            <div className="w-full relative mb-4 rounded-lg overflow-hidden">
+              {demoTieneOferta && (
+                <Badge variant="destructive" className="absolute top-2 left-2 z-10">
+                  {demoDescuentoPct}% OFF
+                </Badge>
+              )}
+              <Badge variant="secondary" className="absolute top-2 right-2 z-10">
+                Demo
+              </Badge>
+              <div className="aspect-[4/5] sm:aspect-[3/5] relative">
+                <Image
+                  src={demoImagenActual}
+                  alt={`${demo.nombre} - imagen ${demoImageIndex + 1}`}
+                  fill
+                  className="object-cover"
+                  data-ai-hint="phone accessory"
+                  unoptimized={true}
+                  onError={(e) => {
+                    const t = e.currentTarget as HTMLImageElement;
+                    if (!t.src.includes('Cover.png')) t.src = '/Cover.png?v=3';
+                  }}
+                />
+              </div>
+              {demoAgotado && (
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-lg z-10 pointer-events-none">
+                  <span className="text-white font-bold text-xl tracking-widest">AGOTADO</span>
+                </div>
+              )}
+            </div>
+            {demo.imagenes.length > 1 && (
+              <div className="flex justify-center gap-3 mb-8 lg:mb-0">
+                {demo.imagenes.map((img, index) => (
+                  <button
+                    key={`${img}-${index}`}
+                    onClick={() => setDemoImageIndex(index)}
+                    className={cn(
+                      'relative h-16 w-16 overflow-hidden rounded-md border-2 transition-all',
+                      index === demoImageIndex ? 'border-primary' : 'border-border opacity-70 hover:opacity-100',
+                    )}
+                    aria-label={`Ver imagen ${index + 1}`}
+                  >
+                    <Image src={img} alt="" fill className="object-cover" unoptimized={true} onError={(e) => {
+                      const t = e.currentTarget as HTMLImageElement;
+                      if (!t.src.includes('Cover.png')) t.src = '/Cover.png?v=3';
+                    }} />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <p className="text-sm text-muted-foreground">{demo.categoria} · Demo portfolio</p>
+            <h1 className="text-2xl sm:text-4xl font-bold tracking-tight mt-1">{demo.nombre}</h1>
+            <p className="text-muted-foreground mt-3">{demo.descripcion}</p>
+            <p className="text-sm text-muted-foreground mt-2">★ {demo.rating.toFixed(1)} / 5</p>
+
+            <div className="mt-4 flex flex-col items-start">
+              {demoTieneOferta ? (
+                <>
+                  <div className="flex items-baseline gap-3">
+                    <p className="text-2xl sm:text-3xl font-light text-primary tabular-nums">{formatPriceARS(demoPrecioEfectivo)}</p>
+                    <span className="text-xs font-semibold text-orange-500">OFERTA {demoDescuentoPct}% OFF</span>
+                  </div>
+                  <p className="text-lg text-muted-foreground line-through">{formatPriceARS(demo.precio)}</p>
+                </>
+              ) : (
+                <p className="text-2xl sm:text-3xl font-light text-primary tabular-nums">{formatPriceARS(demo.precio)}</p>
+              )}
+              <p className="text-xs text-muted-foreground mt-1">Precio en ARS · Pedido demo – sin cargo</p>
+            </div>
+
+            {demo.modelos.length > 0 && (
+              <div className="mt-6">
+                <h3 className="text-lg font-medium mb-2">
+                  Modelo: <span className="font-normal">{demoModelo}</span>
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {demo.modelos.map((modelo) => (
+                    <button
+                      key={modelo}
+                      onClick={() => setDemoModelo(modelo)}
+                      className={cn(
+                        'rounded-full border px-4 py-2 text-sm transition-all',
+                        demoModelo === modelo
+                          ? 'border-primary bg-primary/10 font-semibold'
+                          : 'border-border hover:border-primary/60',
+                      )}
+                      aria-pressed={demoModelo === modelo}
+                    >
+                      {modelo}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {demo.colores.length > 0 && (
+              <div className="mt-6">
+                <h3 className="text-lg font-medium mb-2">
+                  Color: <span className="font-normal">{demoColor}</span>
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {demo.colores.map((color) => (
+                    <button
+                      key={color}
+                      onClick={() => setDemoColor(color)}
+                      className={cn(
+                        'rounded-full border px-4 py-2 text-sm transition-all',
+                        demoColor === color
+                          ? 'border-primary bg-primary/10 font-semibold'
+                          : 'border-border hover:border-primary/60',
+                      )}
+                      aria-pressed={demoColor === color}
+                    >
+                      {color}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-6">
+              <h3 className="text-lg font-medium mb-2">Disponibilidad</h3>
+              <Badge variant={demoAgotado ? 'destructive' : 'secondary'}>
+                {demoAgotado ? 'Agotado' : 'En Stock'}
+              </Badge>
+              {!demoAgotado && (
+                <p className="text-sm text-muted-foreground mt-2">{demo.stock} unidades disponibles.</p>
+              )}
+            </div>
+
+            {!demoAgotado && (
+              <div className="mt-6 flex items-center gap-4">
+                <h3 className="text-lg font-medium">Cantidad</h3>
+                <Input
+                  type="number"
+                  min={1}
+                  max={demo.stock}
+                  value={demoQuantity}
+                  onChange={(e) => {
+                    const numValue = parseInt(e.target.value, 10);
+                    if (isNaN(numValue)) {
+                      setDemoQuantity(1);
+                    } else {
+                      setDemoQuantity(Math.max(1, Math.min(numValue, demo.stock)));
+                    }
+                  }}
+                  className="w-20"
+                />
+              </div>
+            )}
+
+            <div className="mt-8 flex flex-col gap-3">
+              <Button
+                size="lg"
+                className="w-full text-lg py-6 relative overflow-hidden group"
+                disabled={demoAgotado}
+                onClick={handleDemoAddToCart}
+              >
+                <span className="relative z-10 flex items-center">
+                  {demoAgotado ? 'Agotado' : 'Agregar al Carrito'}
+                  {!demoAgotado && <CartIcon className="ml-2 h-5 w-5" />}
+                </span>
+              </Button>
+              {!demoAgotado && (
+                <Button size="lg" variant="outline" className="w-full" asChild>
+                  <a href={demoCheckoutUrl} target="_blank" rel="noopener noreferrer">
+                    Comprar ahora por WhatsApp
+                  </a>
+                </Button>
+              )}
+              <p className="text-xs text-muted-foreground text-center">
+                El checkout se finaliza por WhatsApp (Pedido demo – sin cargo).
+              </p>
+            </div>
+
+          </div>
+        </div>
+
+        {demoRelacionados.length > 0 && (
+          <section className="mt-12 w-full max-w-6xl mx-auto px-4">
+            <h3 className="text-xl sm:text-2xl font-semibold mb-4">También te puede interesar</h3>
+            <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory">
+              {demoRelacionados.map((rel) => (
+                <Link
+                  key={rel.id}
+                  href={`/product/${rel.id}`}
+                  className="min-w-[200px] sm:min-w-[240px] snap-start rounded-lg border p-3 hover:border-primary/60 transition-colors bg-card"
+                >
+                  <div className="relative aspect-square overflow-hidden rounded-md mb-2">
+                    <Image
+                      src={rel.imagenes[0] ?? '/Cover.png?v=3'}
+                      alt={rel.nombre}
+                      fill
+                      className="object-cover"
+                      unoptimized={true}
+                      onError={(e) => {
+                        const t = e.currentTarget as HTMLImageElement;
+                        if (!t.src.includes('Cover.png')) t.src = '/Cover.png?v=3';
+                      }}
+                    />
+                  </div>
+                  <p className="text-sm font-medium leading-tight">{rel.nombre}</p>
+                  <p className="text-sm text-primary font-semibold mt-1">
+                    {formatPriceARS(rel.precioOferta ?? rel.precio)}
+                  </p>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+      </MainLayout>
+    );
+  }
+
   const isLoading = isLoadingProducts || !id || !product;
 
   if (isLoading) {
     return (
         <MainLayout noPaddingTop>
             <MessageBanner />
-            <div className="max-w-xs sm:max-w-lg lg:max-w-6xl mx-auto px-4 lg:grid lg:grid-cols-2 lg:gap-12">
+            <div className="max-w-full sm:max-w-lg lg:max-w-6xl mx-auto px-4 sm:px-6 lg:grid lg:grid-cols-2 lg:gap-12">
                 <div>
-                    <Skeleton className="w-full relative aspect-[3/5] rounded-lg mb-8" />
+                    <Skeleton className="w-full relative aspect-[4/5] sm:aspect-[3/5] rounded-lg mb-8" />
                 </div>
                 <div className="space-y-4">
                     <Skeleton className="h-10 w-3/4" />
@@ -274,13 +641,13 @@ export default function ProductDetailPage() {
     <>
       <MainLayout noPaddingTop>
         <MessageBanner />
-        <div className="max-w-xs sm:max-w-lg lg:max-w-6xl mx-auto px-4 lg:grid lg:grid-cols-2 lg:gap-12">
+        <div className="max-w-full sm:max-w-lg lg:max-w-6xl mx-auto px-4 sm:px-6 lg:grid lg:grid-cols-2 lg:gap-12">
              <div className="block lg:hidden text-center mb-4">
-                <h1 className="text-4xl font-bold tracking-tight">{productName}</h1>
+                <h1 className="text-2xl sm:text-4xl font-bold tracking-tight">{productName}</h1>
                 <p className="text-xl text-muted-foreground mt-1">{product.model}</p>
                 <div className="mt-2 flex flex-col items-center">
                   <div className="flex items-baseline gap-2">
-                    <p className="text-3xl font-light text-primary">${finalCashPrice.toLocaleString()}</p>
+                    <p className="text-2xl sm:text-3xl font-light text-primary tabular-nums">${finalCashPrice.toLocaleString()}</p>
                     <span className="text-[11px] font-semibold text-orange-500">EF/TRANSF 20% OFF</span>
                   </div>
                   <p className="text-lg text-muted-foreground line-through">${priceAfterProductDiscount.toLocaleString()}</p>
@@ -293,7 +660,7 @@ export default function ProductDetailPage() {
                         <CarouselContent>
                             {allImages.map((imageData, index) => (
                                 <CarouselItem key={index}>
-                                    <div className="aspect-[3/5] relative">
+                                    <div className="aspect-[4/5] sm:aspect-[3/5] relative">
                                         <Image
                                             src={imageData.image || '/Cover.png?v=3'}
                                             alt={`${product.name} - ${imageData.name}`}
@@ -359,11 +726,11 @@ export default function ProductDetailPage() {
 
             <div>
                 <div className="hidden lg:block text-left mb-4">
-                    <h1 className="text-4xl font-bold tracking-tight">{productName}</h1>
+                    <h1 className="text-2xl sm:text-4xl font-bold tracking-tight">{productName}</h1>
                     <p className="text-xl text-muted-foreground mt-1">{product.model}</p>
                     <div className="mt-2 flex flex-col items-start">
                       <div className="flex items-baseline gap-3">
-                        <p className="text-3xl font-light text-primary">${finalCashPrice.toLocaleString()}</p>
+                        <p className="text-2xl sm:text-3xl font-light text-primary tabular-nums">${finalCashPrice.toLocaleString()}</p>
                         <span className="text-xs md:text-sm font-semibold text-orange-500">EF/TRANSF 20% OFF</span>
                       </div>
                       <p className="text-lg text-muted-foreground line-through">${priceAfterProductDiscount.toLocaleString()}</p>

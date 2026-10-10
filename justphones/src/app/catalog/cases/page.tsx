@@ -68,7 +68,7 @@ function CasesCatalogPageContent() {
 
   const filteredProducts = useMemo(() => {
     let filtered = caseProducts.filter(product => {
-      const inSubCategory = filters.subCategories.length === 0 || filters.subCategories.includes(product.name);
+      const inSubCategory = filters.subCategories.length === 0 || filters.subCategories.includes(product.subCategory ?? '');
       const inColor = filters.colors.length === 0 || product.colors.some(c => filters.colors.includes(c.hex));
       const inModel = filters.models.length === 0 || expandModelString(product.model).some(productModel => filters.models.includes(productModel));
       const inPrice = product.price >= filters.priceRange[0] && product.price <= filters.priceRange[1];
@@ -152,7 +152,7 @@ function CasesCatalogPageContent() {
             <Skeleton className="h-[600px] w-full" />
           </div>
           <div className="col-span-12 lg:col-span-9">
-            <div className="grid grid-cols-2 xl:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
               {Array.from({ length: 9 }).map((_, i) => (
                 <Skeleton key={i} className="w-full aspect-[3/5]" />
               ))}
@@ -169,7 +169,7 @@ function CasesCatalogPageContent() {
       <div>
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h2 className="text-3xl font-bold tracking-tight">{titleComponent}</h2>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">{titleComponent}</h2>
              {searchQuery && (
                 <p className="text-lg text-muted-foreground mt-1">
                     Resultados para: <span className="text-primary font-semibold">"{searchQuery}"</span>
@@ -197,7 +197,7 @@ function CasesCatalogPageContent() {
           <ProductFilters filters={filters} setFilters={setFilters} products={caseProducts} className="hidden lg:block lg:col-span-3" showSubCategoryFilter={true} subCategoryList={subcategories.case} />
           <div className="col-span-12 lg:col-span-9">
              {paginatedProducts.length > 0 ? (
-                <div className="grid grid-cols-2 xl:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
                 {paginatedProducts.map((product: Product) => (
                     <ProductCard key={product.id} product={product} />
                 ))}

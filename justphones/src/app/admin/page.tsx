@@ -1,10 +1,13 @@
 
 'use client';
 
+import { useMemo } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { isDemoMode } from '@/lib/demo';
+import { effectivePrice, formatAdminPrice, useDemoProducts } from './_demo/store';
 import {
   Package,
   Type,
@@ -13,7 +16,10 @@ import {
   Image,
   ShoppingCart,
   Tag,
-  TrendingUp
+  TrendingUp,
+  Boxes,
+  Banknote,
+  PackageX
 } from 'lucide-react';
 
 const dashboardItems = [
@@ -76,6 +82,15 @@ const dashboardItems = [
 ];
 
 export default function AdminDashboard() {
+  const demo = isDemoMode();
+  const { products: demoProducts } = useDemoProducts();
+  const demoStats = useMemo(() => {
+    const units = demoProducts.reduce((acc, p) => acc + p.stock, 0);
+    const value = demoProducts.reduce((acc, p) => acc + effectivePrice(p) * p.stock, 0);
+    const out = demoProducts.filter((p) => p.stock <= 0).length;
+    return { total: demoProducts.length, units, value, out };
+  }, [demoProducts]);
+
   return (
     <div className="space-y-8">
       <motion.div
@@ -88,7 +103,55 @@ export default function AdminDashboard() {
         <p className="text-muted-foreground">
           Selecciona una sección para gestionar diferentes aspectos de JustPhones
         </p>
+        {demo && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Los cambios del panel se guardan solo en este navegador.
+          </p>
+        )}
       </motion.div>
+
+      {demo && (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Package className="h-4 w-4 text-blue-500" />
+                <p className="text-xs">Productos</p>
+              </div>
+              <p className="text-2xl font-bold mt-1">{demoStats.total}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Boxes className="h-4 w-4 text-green-500" />
+                <p className="text-xs">Unidades en stock</p>
+              </div>
+              <p className="text-2xl font-bold mt-1">{demoStats.units}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Banknote className="h-4 w-4 text-emerald-500" />
+                <p className="text-xs">Valor del stock</p>
+              </div>
+              <p className="text-2xl font-bold mt-1">{formatAdminPrice(demoStats.value)}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <PackageX className="h-4 w-4 text-red-500" />
+                <p className="text-xs">Sin stock</p>
+              </div>
+              <p className={cn('text-2xl font-bold mt-1', demoStats.out > 0 && 'text-destructive')}>
+                {demoStats.out}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       <motion.div
         initial={{ opacity: 0 }}

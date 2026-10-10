@@ -1,5 +1,7 @@
 'use client';
 
+import { isDemoMode } from '@/lib/demo';
+import VistaDemoFinanzas from './_demo/vista-demo';
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -372,9 +374,9 @@ const FinancialKpiCard = ({
             </Button>
           </CollapsibleTrigger>
         </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-4">
-            <div className={cn('text-3xl font-bold', colorClass)}>{value}</div>
+        <CardContent className="min-w-0">
+          <div className="flex items-center gap-4 min-w-0">
+            <div className={cn('text-2xl sm:text-3xl font-bold tabular-nums truncate min-w-0', colorClass)}>{value}</div>
             <Icon className={cn('h-6 w-6 text-muted-foreground', colorClass)} />
           </div>
           <p className="text-xs text-muted-foreground">{detail}</p>
@@ -3495,16 +3497,16 @@ function FinanceDashboard() {
                               {pedido.date.toLocaleDateString('es-ES')}
                             </span>
                           </div>
-                          <div className="grid grid-cols-4 gap-4 text-center min-w-[400px] items-center">
-                            <div className="font-normal text-red-500">
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 text-center min-w-0 sm:min-w-[400px] items-center">
+                            <div className="font-normal text-red-500 tabular-nums truncate min-w-0">
                               -${pedido.totalCost.toLocaleString()}
                               <div className="text-xs text-muted-foreground">Costo</div>
                             </div>
-                            <div className="font-normal text-green-500">
+                            <div className="font-normal text-green-500 tabular-nums truncate min-w-0">
                               +${pedido.profit.toLocaleString()}
                               <div className="text-xs text-muted-foreground">Ganancia posible</div>
                             </div>
-                            <div className="font-normal text-primary">
+                            <div className="font-normal text-primary tabular-nums truncate min-w-0">
                               {pedido.margin.toFixed(1)}%
                               <div className="text-xs text-muted-foreground">Margen</div>
                             </div>
@@ -3796,6 +3798,12 @@ function FinanceDashboard() {
 }
 
 export default function FinanzasPage() {
+  // Demo portfolio: vista funcional sin DB. El panel real queda intacto
+  // y se usa solo cuando NEXT_PUBLIC_DEMO_MODE === 'false'.
+  if (isDemoMode()) {
+    return <VistaDemoFinanzas />;
+  }
+
   return (
     <SalaryWithdrawalsProvider>
       <MonetaryIncomeProvider>

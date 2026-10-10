@@ -13,6 +13,8 @@ interface ProductsContextType {
   deleteProduct: (productId: string) => Promise<boolean>;
   getProductById: (id: string) => Product | undefined;
   fetchProducts: () => Promise<void>;
+  uploadCoverImage: (file: File) => Promise<{ success: boolean; url?: string; error?: string }>;
+  uploadColorImage: (file: File) => Promise<{ success: boolean; url?: string; error?: string }>;
 }
 
 export const ProductsContext = createContext<ProductsContextType | undefined>(undefined);
@@ -38,7 +40,7 @@ export function useProductsState() {
     return true;
   };
 
-  const updateProduct = async (productId: string, productData: Partial<Product>): Promise<boolean> => {
+  const updateProduct = async (productId: string, productData: Partial<Product>, _shouldRefetch?: boolean): Promise<boolean> => {
     await new Promise(r => setTimeout(r, 300));
     setProducts(prev => prev.map(p => p.id === productId ? { ...p, ...productData } as Product : p));
     toast({ title: 'Producto actualizado', description: 'Los cambios se guardaron correctamente.' });
@@ -56,7 +58,13 @@ export function useProductsState() {
     return products.find(p => p.id === id);
   }, [products]);
 
-  return { products, isLoading, addProduct, updateProduct, deleteProduct, getProductById, fetchProducts };
+  // Demo: subida de imágenes como no-op que devuelve un placeholder.
+  const demoUploadImage = async (_file: File): Promise<{ success: boolean; url?: string; error?: string }> => {
+    await new Promise(r => setTimeout(r, 500));
+    return { success: true, url: `https://images.unsplash.com/photo-1601784551446-20c9e07cdbdb?w=1200&q=80&t=${Date.now()}` };
+  };
+
+  return { products, isLoading, addProduct, updateProduct, deleteProduct, getProductById, fetchProducts, uploadCoverImage: demoUploadImage, uploadColorImage: demoUploadImage };
 }
 
 export function ProductsProvider({ children }: { children: ReactNode }) {

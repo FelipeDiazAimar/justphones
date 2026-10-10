@@ -1,6 +1,8 @@
 "use client"
 
+import { useState } from 'react';
 import { Analytics } from "@vercel/analytics/next";
+import { CheckCircle2 } from 'lucide-react';
 import { MainLayout } from '@/components/main-layout';
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
@@ -22,7 +24,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import Link from 'next/link';
 import { InstagramIcon } from '@/components/icons/instagram';
 import { WhatsappIcon } from '@/components/icons/whatsapp';
-import { Logo } from '@/components/icons/logo';
 import emailjs from '@emailjs/browser'
 
 const formSchema = z.object({
@@ -34,8 +35,41 @@ const formSchema = z.object({
   }),
 })
 
+const DEMO_STORAGE_KEY = 'justphones_contact_messages_demo';
+
+interface StoredContactMessage {
+  name: string;
+  message: string;
+  createdAt: string;
+}
+
+function hasEmailJsKeys(): boolean {
+  const serviceId = process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID;
+  const templateId = process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID;
+  const publicKey = process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY;
+  return Boolean(serviceId && templateId && publicKey);
+}
+
+function saveDemoMessage(values: z.infer<typeof formSchema>): void {
+  const entry: StoredContactMessage = {
+    name: values.name,
+    message: values.message,
+    createdAt: new Date().toISOString(),
+  };
+  try {
+    const raw = localStorage.getItem(DEMO_STORAGE_KEY);
+    const prev: StoredContactMessage[] = raw ? (JSON.parse(raw) as StoredContactMessage[]) : [];
+    const next = Array.isArray(prev) ? [...prev, entry] : [entry];
+    localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // localStorage no disponible o corrupto: la confirmación local sigue mostrándose.
+  }
+}
+
 export default function ContactPage() {
   const { toast } = useToast()
+  const [sentName, setSentName] = useState<string | null>(null)
+  const emailJsConfigured = hasEmailJsKeys()
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -46,14 +80,23 @@ export default function ContactPage() {
   })
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
+    // Sin keys de EmailJS → modo demo: confirmación local sin romper el envío real.
+    if (!hasEmailJsKeys()) {
+      saveDemoMessage(values)
+      setSentName(values.name)
+      toast({
+        className: "border-primary/10 shadow-lg shadow-primary/10",
+        title: `¡Gracias, ${values.name}!`,
+        description: 'Modo demo: tu mensaje quedó guardado en este navegador.',
+      })
+      form.reset()
+      return
+    }
+
     try {
       const SERVICE_ID = process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID as string
       const TEMPLATE_ID = process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID as string
       const PUBLIC_KEY = process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY as string
-
-      if (!SERVICE_ID || !TEMPLATE_ID || !PUBLIC_KEY) {
-        throw new Error('EmailJS no está configurado')
-      }
 
       const params = {
         name: values.name,
@@ -61,6 +104,7 @@ export default function ContactPage() {
       }
 
       await emailjs.send(SERVICE_ID, TEMPLATE_ID, params, { publicKey: PUBLIC_KEY })
+      setSentName(values.name)
       toast({
         className: "border-primary/10 shadow-lg shadow-primary/10",
         title: `¡Gracias, ${values.name}!`,
@@ -80,15 +124,41 @@ export default function ContactPage() {
     <MainLayout>
         <div className="grid md:grid-cols-2 gap-12">
             <div>
-                <h1 className="text-4xl font-bold mb-4 font-headline">Contáctanos</h1>
+                <h1 className="text-2xl sm:text-4xl font-bold mb-4 font-headline">Contáctanos</h1>
                 <p className="text-lg text-muted-foreground mb-8">
                     ¿Tienes alguna pregunta o pedido especial? Llena el formulario y nos pondremos en contacto contigo.
                 </p>
                 <Card>
                     <CardHeader>
                         <CardTitle>Enviar un Mensaje</CardTitle>
+                        {!emailJsConfigured && (
+                          <CardDescription>
+                            Modo demo: sin EmailJS configurado, tu mensaje se guarda solo en este navegador.
+                          </CardDescription>
+                        )}
                     </CardHeader>
                     <CardContent>
+                        {sentName ? (
+                          <div className="space-y-4 py-2" role="status" aria-live="polite">
+                            <div className="flex items-start gap-3 rounded-md border border-primary/20 bg-primary/5 p-4">
+                              <CheckCircle2 className="h-5 w-5 mt-0.5 text-primary" aria-hidden />
+                              <div>
+                                <p className="font-semibold">¡Gracias, {sentName}!</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {emailJsConfigured
+                                    ? 'Hemos recibido tu mensaje y te responderemos pronto.'
+                                    : 'Modo demo: tu mensaje quedó guardado en este navegador (localStorage). Te responderemos pronto.'}
+                                </p>
+                              </div>
+                            </div>
+                            <Button
+                              variant="outline"
+                              onClick={() => setSentName(null)}
+                            >
+                              Enviar otro mensaje
+                            </Button>
+                          </div>
+                        ) : (
                         <Form {...form}>
                           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
                             <FormField
@@ -127,11 +197,12 @@ export default function ContactPage() {
                             </Button>
                           </form>
                         </Form>
+                        )}
                     </CardContent>
                 </Card>
             </div>
             <div className="space-y-8">
-                 <h2 className="text-3xl font-bold font-headline">Otras Consultas</h2>
+                 <h2 className="text-2xl sm:text-3xl font-bold font-headline">Otras Consultas</h2>
                  <Card>
                     <CardHeader>
                         <CardTitle>Preguntas Frecuentes</CardTitle>

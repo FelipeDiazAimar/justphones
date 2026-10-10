@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useCart } from '@/hooks/use-cart';
@@ -38,6 +38,56 @@ import { Input } from './ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { validateDiscountCode } from '@/lib/mock-data';
 import { Label } from './ui/label';
+import {
+  DEMO_PRODUCTS,
+  DEMO_WHATSAPP_PHONE,
+  formatPriceARS,
+  isDemoMode,
+  whatsappCheckoutUrl,
+} from '@/lib/demo';
+import type { DemoCheckoutItem } from '@/lib/demo';
+
+// ---- Carrito demo (contrato solo lectura: src/lib/demo.ts) ----
+// Misma clave y forma que usa src/app/product/[id]/page.tsx en modo demo.
+// Persistencia en localStorage + total en ARS + checkout con whatsappCheckoutUrl.
+export type DemoCartItem = {
+  key: string;
+  id: string;
+  slug: string;
+  nombre: string;
+  precio: number;
+  modelo: string;
+  color: string;
+  cantidad: number;
+  imagen: string;
+};
+
+export const DEMO_CART_KEY = 'justphones-demo-cart-v1';
+
+function readDemoCart(): DemoCartItem[] {
+  try {
+    if (typeof window === 'undefined') return [];
+    const raw = window.localStorage.getItem(DEMO_CART_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (item): item is DemoCartItem =>
+        !!item &&
+        typeof item.key === 'string' &&
+        typeof item.nombre === 'string' &&
+        typeof item.precio === 'number' &&
+        typeof item.cantidad === 'number',
+    );
+  } catch {
+    return [];
+  }
+}
+
+function demoStockFor(item: DemoCartItem): number {
+  const found = DEMO_PRODUCTS.find((p) => p.id === item.id || p.slug === item.slug);
+  return found ? found.stock : Number.MAX_SAFE_INTEGER;
+}
 
 const paymentOptions = {
   cash: { label: 'Efectivo (20% OFF)', discount: 0.2, type: 'discount' },
@@ -59,6 +109,90 @@ export function CartSheet() {
   const [showFirstPurchasePopup, setShowFirstPurchasePopup] = useState(false);
   const { toast } = useToast();
   const phoneNumber = '5493564338599';
+
+  // ---- Estado demo (independiente del useCart real) ----
+  const demoMode = isDemoMode();
+  const [demoItems, setDemoItems] = useState<DemoCartItem[]>([]);
+
+  useEffect(() => {
+    if (!demoMode) return;
+    setDemoItems(readDemoCart());
+    const sync = () => setDemoItems(readDemoCart());
+    window.addEventListener('storage', sync);
+    window.addEventListener('demo-cart-updated', sync);
+    return () => {
+      window.removeEventListener('storage', sync);
+      window.removeEventListener('demo-cart-updated', sync);
+    };
+  }, [demoMode]);
+
+  const persistDemoItems = useCallback((items: DemoCartItem[]) => {
+    setDemoItems(items);
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(DEMO_CART_KEY, JSON.stringify(items));
+      }
+    } catch {
+      // sin localStorage el carrito demo solo vive en memoria
+    }
+  }, []);
+
+  const updateDemoQuantity = useCallback((key: string, quantity: number) => {
+    setDemoItems((prev) => {
+      const next = prev
+        .map((item) => {
+          if (item.key !== key) return item;
+          if (quantity <= 0) return null;
+          return { ...item, cantidad: Math.min(quantity, demoStockFor(item)) };
+        })
+        .filter((item): item is DemoCartItem => item !== null);
+      try {
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(DEMO_CART_KEY, JSON.stringify(next));
+        }
+      } catch {
+        // noop
+      }
+      return next;
+    });
+  }, []);
+
+  const removeDemoItem = useCallback((key: string) => {
+    setDemoItems((prev) => {
+      const next = prev.filter((item) => item.key !== key);
+      try {
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(DEMO_CART_KEY, JSON.stringify(next));
+        }
+      } catch {
+        // noop
+      }
+      return next;
+    });
+  }, []);
+
+  const clearDemoCart = useCallback(() => {
+    persistDemoItems([]);
+  }, [persistDemoItems]);
+
+  const demoCount = useMemo(
+    () => demoItems.reduce((acc, item) => acc + item.cantidad, 0),
+    [demoItems],
+  );
+  const demoTotal = useMemo(
+    () => demoItems.reduce((acc, item) => acc + item.precio * item.cantidad, 0),
+    [demoItems],
+  );
+  const demoCheckoutUrl = useMemo(() => {
+    const items: DemoCheckoutItem[] = demoItems.map((item) => ({
+      nombre: item.nombre,
+      cantidad: item.cantidad,
+      precio: item.precio,
+      modelo: item.modelo || undefined,
+      color: item.color || undefined,
+    }));
+    return whatsappCheckoutUrl(items, DEMO_WHATSAPP_PHONE);
+  }, [demoItems]);
 
   const handleApplyDiscountCode = async () => {
     if (!discountCode.trim()) return;
@@ -321,6 +455,139 @@ export function CartSheet() {
       });
     }
   };
+
+  // ---- Render demo: carrito funcional sobre localStorage + checkout WhatsApp ----
+  if (demoMode) {
+    return (
+      <Sheet>
+        <SheetTrigger asChild>
+          <Button variant="ghost" size="icon" className="relative rounded-full">
+            <CartIcon className="h-5 w-5" />
+            {demoCount > 0 && (
+              <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 justify-center rounded-full p-0 text-xs">
+                {demoCount}
+              </Badge>
+            )}
+            <span className="sr-only">Abrir carrito</span>
+          </Button>
+        </SheetTrigger>
+        <SheetContent className="flex w-full flex-col sm:max-w-lg p-0">
+          <SheetHeader className="px-6 pt-6 pb-4">
+            <div className="flex justify-between items-center pr-4">
+              <SheetTitle>Mi Carrito ({demoCount})</SheetTitle>
+              {demoItems.length > 0 && (
+                <Button variant="outline" size="sm" onClick={clearDemoCart}>
+                  <Trash className="h-3 w-3 mr-1" />
+                  Vaciar
+                </Button>
+              )}
+            </div>
+            <SheetDescription>
+              Carrito demo con persistencia local. El pedido se finaliza por WhatsApp (sin cargo).
+            </SheetDescription>
+          </SheetHeader>
+
+          {demoItems.length > 0 ? (
+            <>
+              <ScrollArea className="flex-1 my-4 px-6">
+                <div className="flex flex-col gap-6">
+                  {demoItems.map((item) => (
+                    <div key={item.key} className="flex items-center gap-4">
+                      <div className="relative h-20 w-20 overflow-hidden rounded-md">
+                        <Image
+                          src={item.imagen || '/Cover.png?v=3'}
+                          alt={item.nombre}
+                          fill
+                          className="object-cover"
+                        />
+                      </div>
+                      <div className="flex-1 text-sm">
+                        <h4 className="font-medium">{item.nombre}</h4>
+                        <p className="text-muted-foreground">
+                          {[item.modelo, item.color ? `Color: ${item.color}` : '']
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </p>
+                        <p className="font-semibold mt-1">
+                          {formatPriceARS(item.precio * item.cantidad)}
+                        </p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <Button variant="outline" size="icon" className="h-6 w-6" onClick={() => updateDemoQuantity(item.key, item.cantidad - 1)}>
+                            <Minus className="h-3 w-3" />
+                          </Button>
+                          <span>{item.cantidad}</span>
+                          <Button variant="outline" size="icon" className="h-6 w-6" onClick={() => updateDemoQuantity(item.key, item.cantidad + 1)}>
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                      <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive rounded-full" onClick={() => removeDemoItem(item.key)}>
+                        <Trash className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+
+              <SheetFooter className="mt-auto border-t bg-background px-6 py-4">
+                <div className="w-full flex flex-col items-center gap-4">
+                  <div className="flex w-full max-w-xs justify-between text-lg font-semibold">
+                    <span>Total:</span>
+                    <span>{formatPriceARS(demoTotal)}</span>
+                  </div>
+                  <Button className="w-full max-w-xs min-h-[44px]" asChild>
+                    <a href={demoCheckoutUrl} target="_blank" rel="noopener noreferrer">
+                      Finalizar pedido por WhatsApp
+                    </a>
+                  </Button>
+                  <div className="w-full max-w-xs -mt-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-center"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(demoCheckoutUrl);
+                          toast({
+                            title: 'Enlace copiado',
+                            description: 'Pégalo en tu navegador para abrir WhatsApp.',
+                          });
+                        } catch {
+                          toast({
+                            variant: 'destructive',
+                            title: 'No se pudo copiar',
+                            description: 'Intentá nuevamente o abrí el pedido con el botón de WhatsApp.',
+                          });
+                        }
+                      }}
+                    >
+                      <Copy className="mr-2 h-4 w-4" />
+                      Copiar enlace
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground text-center">
+                    Precios en ARS · (Pedido demo – sin cargo)
+                  </p>
+                </div>
+              </SheetFooter>
+            </>
+          ) : (
+            <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center px-6">
+              <CartIcon className="h-16 w-16 text-muted-foreground" />
+              <h3 className="text-xl font-semibold">Tu carrito está vacío</h3>
+              <p className="text-muted-foreground">Parece que aún no has añadido productos. ¡Empieza a explorar!</p>
+              <SheetTrigger asChild>
+                <Button asChild>
+                  <Link href="/catalog">Ver Catálogo</Link>
+                </Button>
+              </SheetTrigger>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+    );
+  }
 
   return (
     <Sheet>

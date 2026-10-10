@@ -2,7 +2,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Menu,
   Search,
@@ -30,6 +30,7 @@ import React from 'react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useModels } from '@/hooks/use-models';
 import { useSubcategories } from '@/hooks/use-subcategories';
+import { DEMO_CATEGORIES, isDemoMode } from '@/lib/demo';
 import { CartSheet } from '../cart-sheet';
 
 export function Header({ showCart = true }: { showCart?: boolean }) {
@@ -40,6 +41,12 @@ export function Header({ showCart = true }: { showCart?: boolean }) {
   const pathname = usePathname();
   const { models } = useModels();
   const { subcategories } = useSubcategories();
+
+  // Rama demo (solo lectura de demo.ts): categorías derivadas sin hardcodear.
+  // Nota: useSearchParams vive en los subcomponentes demo envueltos en Suspense
+  // para no exigir un boundary sobre el Header (MainLayout no lo provee).
+  const demoMode = isDemoMode();
+  const esContacto = pathname === '/contact';
 
   const iphoneModels = (models.case || [])
     .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
@@ -89,7 +96,12 @@ export function Header({ showCart = true }: { showCart?: boolean }) {
             <NavigationMenuList>
                 <NavigationMenuItem>
                   <NavigationMenuLink asChild>
-                    <Link href="/contact" className={cn(navigationMenuTriggerStyle(), "bg-transparent")}>
+                    <Link
+                      href="/contact"
+                      prefetch={true}
+                      aria-current={esContacto ? 'page' : undefined}
+                      className={cn(navigationMenuTriggerStyle(), "bg-transparent", esContacto && "text-primary bg-accent/50")}
+                    >
                       Contáctame
                     </Link>
                   </NavigationMenuLink>
@@ -174,6 +186,11 @@ export function Header({ showCart = true }: { showCart?: boolean }) {
                     </div>
                     </NavigationMenuContent>
                 </NavigationMenuItem>
+                {demoMode && (
+                  <React.Suspense fallback={null}>
+                    <DemoCategoriasDesktop pathname={pathname} />
+                  </React.Suspense>
+                )}
             </NavigationMenuList>
           </NavigationMenu>
 
@@ -267,8 +284,21 @@ export function Header({ showCart = true }: { showCart?: boolean }) {
                 </div>
                 <div className="flex-grow overflow-y-auto px-4">
                   <div className="flex flex-col space-y-2">
-                    <Link href="/contact" onClick={closeMobileMenu} className="font-medium text-lg py-2">Contáctame</Link>
-                    
+                    <Link
+                      href="/contact"
+                      onClick={closeMobileMenu}
+                      prefetch={true}
+                      aria-current={esContacto ? 'page' : undefined}
+                      className={cn("font-medium text-lg py-2", esContacto && "text-primary")}
+                    >
+                      Contáctame
+                    </Link>
+
+                    {demoMode && (
+                      <React.Suspense fallback={null}>
+                        <DemoCategoriasMobile pathname={pathname} onNavigate={closeMobileMenu} />
+                      </React.Suspense>
+                    )}
                     <Collapsible>
                         <CollapsibleTrigger className="font-medium w-full text-left flex justify-between items-center text-lg py-2">
                           <span>iPhone</span>
@@ -369,3 +399,141 @@ const ListItem = React.forwardRef<
   );
 });
 ListItem.displayName = 'ListItem';
+
+/** Dropdown desktop de categorías demo (solo lectura de DEMO_CATEGORIES). */
+function DemoCategoriasDesktop({ pathname }: { pathname: string }) {
+  const searchParams = useSearchParams();
+  const categoriaActiva = searchParams.get('categoria');
+  const ofertaActiva = searchParams.get('oferta') === '1';
+  const esCatalogo = pathname === '/catalog';
+
+  return (
+    <NavigationMenuItem>
+      <NavigationMenuTrigger
+        className={cn('bg-transparent', esCatalogo && categoriaActiva && 'text-primary')}
+      >
+        Categorías
+      </NavigationMenuTrigger>
+      <NavigationMenuContent>
+        <div className="container p-4">
+          <ul className="grid list-none gap-3 md:grid-cols-2 lg:grid-cols-2">
+            <li className="lg:col-span-full">
+              <NavigationMenuLink asChild>
+                <Link
+                  href="/catalog"
+                  prefetch={true}
+                  aria-current={esCatalogo && !categoriaActiva && !ofertaActiva ? 'page' : undefined}
+                  className={cn(
+                    'block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground text-left',
+                    esCatalogo && !categoriaActiva && !ofertaActiva && 'bg-accent/50 text-primary',
+                  )}
+                >
+                  <div className="text-sm font-medium leading-none">
+                    Explora todo el <span className="text-primary">catálogo</span>
+                  </div>
+                </Link>
+              </NavigationMenuLink>
+            </li>
+            {DEMO_CATEGORIES.map((cat) => {
+              const href = `/catalog?categoria=${encodeURIComponent(cat.slug)}`;
+              const isActive = esCatalogo && categoriaActiva === cat.slug;
+              return (
+                <li key={cat.slug}>
+                  <NavigationMenuLink asChild>
+                    <Link
+                      href={href}
+                      prefetch={true}
+                      aria-current={isActive ? 'page' : undefined}
+                      className={cn(
+                        'flex items-center gap-3 select-none rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground text-left',
+                        isActive && 'bg-accent/50 text-primary',
+                      )}
+                    >
+                      <img
+                        src={`/icons/cat/${cat.slug}.svg`}
+                        alt=""
+                        aria-hidden="true"
+                        loading="lazy"
+                        className="h-6 w-6 shrink-0"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium leading-none">{cat.nombre}</span>
+                        <span className="mt-1 line-clamp-2 block text-xs leading-snug text-muted-foreground">
+                          {cat.descripcion}
+                        </span>
+                      </span>
+                    </Link>
+                  </NavigationMenuLink>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </NavigationMenuContent>
+    </NavigationMenuItem>
+  );
+}
+
+/** Desplegable mobile de categorías demo para el Sheet (no toca los links admin). */
+function DemoCategoriasMobile({ pathname, onNavigate }: { pathname: string; onNavigate: () => void }) {
+  const searchParams = useSearchParams();
+  const categoriaActiva = searchParams.get('categoria');
+  const esCatalogo = pathname === '/catalog';
+
+  return (
+    <Collapsible>
+      <CollapsibleTrigger className="font-medium w-full text-left flex justify-between items-center text-lg py-2">
+        <span className={cn(esCatalogo && categoriaActiva && 'text-primary')}>Categorías</span>
+        <ChevronDown className="h-5 w-5 transition-transform data-[state=open]:rotate-180" />
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="flex flex-col space-y-2 pl-4 mt-2 border-l">
+          <Link
+            href="/catalog"
+            onClick={onNavigate}
+            prefetch={true}
+            aria-current={esCatalogo && !categoriaActiva ? 'page' : undefined}
+            className={cn(
+              'text-sm font-medium text-foreground text-left',
+              esCatalogo && !categoriaActiva && 'text-primary',
+            )}
+          >
+            Explora todo el <span className="text-primary">catálogo</span>
+          </Link>
+          {DEMO_CATEGORIES.map((cat) => {
+            const href = `/catalog?categoria=${encodeURIComponent(cat.slug)}`;
+            const isActive = esCatalogo && categoriaActiva === cat.slug;
+            return (
+              <Link
+                key={cat.slug}
+                href={href}
+                onClick={onNavigate}
+                prefetch={true}
+                aria-current={isActive ? 'page' : undefined}
+                className={cn(
+                  'flex items-center gap-2.5 text-sm text-left',
+                  isActive ? 'font-medium text-primary' : 'text-muted-foreground',
+                )}
+              >
+                <img
+                  src={`/icons/cat/${cat.slug}.svg`}
+                  alt=""
+                  aria-hidden="true"
+                  loading="lazy"
+                  className="h-5 w-5 shrink-0"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+                <span>{cat.nombre}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}

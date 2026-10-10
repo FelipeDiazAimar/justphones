@@ -362,7 +362,9 @@ export default function AdminFinancePage() {
 
 
   const onFixedCostSubmit = async (data: z.infer<typeof fixedCostSchema>) => {
-      const success = await addFixedCost(data);
+      const fallbackMonth = format(new Date(), 'yyyy-MM');
+      const targetMonth = selectedMonth || fallbackMonth;
+      const success = await addFixedCost({ name: data.name, amount: data.amount, month: targetMonth });
       if (success) {
           toast({ title: "Costo Fijo Añadido" });
           resetFixedCost({ name: '', amount: 0 });

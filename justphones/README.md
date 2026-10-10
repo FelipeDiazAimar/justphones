@@ -204,6 +204,36 @@ npm run lint       # Linting con ESLint
 
 ---
 
+## Modo demo (sin keys)
+
+El proyecto corre **completo sin ninguna variable de entorno**. No hace falta crear `.env.local` (ver `.env.local.example` solo si se quiere conectar los servicios reales de producción: Supabase, Cloudflare R2, EmailJS).
+
+### Qué funciona sin keys
+
+- **Tienda pública completa**: home con carrusel, catálogo con filtros, detalle de producto, búsqueda, FAQs, carrito persistente en `localStorage`, checkout por WhatsApp (`wa.me`) y códigos de descuento (`DEMO10`, `PROMO20`, `PORTFOLIO`, `BIENVENIDA`).
+- **Panel `/admin` completo sin login**: productos, pedidos, finanzas con gráficos, códigos, carrusel, FAQs, modelos y nombres.
+- Los clientes degradan solos: Supabase usa URL/key placeholder (`src/lib/supabase/client.ts`), las API routes devuelven mocks y los uploads devuelven URLs de Unsplash.
+
+### Qué NO anda sin keys
+
+- **Formulario `/contact`**: requiere `NEXT_PUBLIC_EMAILJS_SERVICE_ID`, `NEXT_PUBLIC_EMAILJS_TEMPLATE_ID` y `NEXT_PUBLIC_EMAILJS_PUBLIC_KEY`; sin ellas muestra un toast de error al enviar.
+- **Persistencia**: los datos mock viven en memoria y se reinician con cada recarga.
+
+### Cómo correr
+
+```bash
+npm install
+npm run dev      # Turbopack en http://localhost:9002
+```
+
+Sin `.env`, sin credenciales, sin login: entrar y usar. El botón **Admin** en el header lleva directo al panel.
+
+### Credenciales
+
+No aplica — **no hay login ni passwords en modo demo**. Los únicos "secretos" de juguete son los códigos de descuento de arriba.
+
+---
+
 ## Rutas Principales
 
 | Ruta | Descripción |

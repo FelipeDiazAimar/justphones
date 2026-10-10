@@ -66,6 +66,15 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import ReactCrop, { type Crop, centerCrop, makeAspectCrop } from 'react-image-crop';
 import { Checkbox } from '@/components/ui/checkbox';
 import type { DiscountCodeValidationResult } from '@/lib/discount-codes';
+import { isDemoMode } from '@/lib/demo';
+import { DemoProductsAdmin } from '../_demo/DemoProductsAdmin';
+
+export default function AdminProductsPage() {
+  if (isDemoMode()) {
+    return <DemoProductsAdmin />;
+  }
+  return <RealAdminProductsPage />;
+}
 
 const PRODUCT_ASPECT = 3 / 5;
 
@@ -262,7 +271,7 @@ const ColorImageInput = ({ control, index, errors, onFileSelect, setPreviewDialo
     )
 }
 
-export default function AdminProductsPage() {
+function RealAdminProductsPage() {
   const { products, addProduct, updateProduct, deleteProduct, isLoading: isLoadingProducts, fetchProducts, getProductById, uploadCoverImage, uploadColorImage } = useProducts();
   const { subcategories, isLoading: isLoadingSubcategories } = useSubcategories();
   const { models, allModels, isLoading: isLoadingModels } = useModels();
@@ -2870,7 +2879,7 @@ export default function AdminProductsPage() {
                               </CollapsibleTrigger>
                               <CollapsibleContent className="space-y-3 pt-2">
                                   {product.colors.map(color => (
-                                      <div key={color.hex} className="grid grid-cols-3 items-center gap-4">
+                                      <div key={color.hex} className="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 sm:gap-4">
                                           <div className="flex items-center gap-2">
                                               <div className="h-5 w-5 rounded-full border" style={{ backgroundColor: color.hex }}/>
                                               <Label htmlFor={`${product.id}-${color.hex}`}>{color.name} (Actual: {color.stock})</Label>

@@ -132,7 +132,7 @@ export default function ModelCatalogPage() {
             <Skeleton className="h-[600px] w-full" />
           </div>
           <div className="col-span-12 lg:col-span-9">
-            <div className="grid grid-cols-2 xl:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
               {Array.from({ length: 9 }).map((_, i) => (
                 <Skeleton key={i} className="w-full aspect-[3/5]" />
               ))}
@@ -148,7 +148,7 @@ export default function ModelCatalogPage() {
           <MainLayout noPaddingTop>
               <MessageBanner />
               <div className="text-center py-20">
-                  <h1 className="text-4xl font-bold tracking-tight mb-4">¡Ups!</h1>
+                  <h1 className="text-2xl sm:text-4xl font-bold tracking-tight mb-4">¡Ups!</h1>
                   <p className="text-xl text-muted-foreground mb-8">Aún no tenemos productos para {modelName}, pero ¡vuelven a entrar pronto!</p>
                   <Button asChild>
                     <Link href="/catalog">Ver todos los productos</Link>
@@ -163,7 +163,7 @@ export default function ModelCatalogPage() {
       <MessageBanner />
       <div>
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-3xl font-bold tracking-tight">{modelName} <span className="text-primary">Cases</span></h2>
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">{modelName} <span className="text-primary">Cases</span></h2>
           <div className="lg:hidden">
             <Sheet>
               <SheetTrigger asChild>
@@ -185,7 +185,7 @@ export default function ModelCatalogPage() {
           <ProductFilters filters={filters} setFilters={setFilters} products={productsForModel} hideModelFilter={true} className="hidden lg:block lg:col-span-3" />
           <div className="col-span-12 lg:col-span-9">
              {paginatedProducts.length > 0 ? (
-                <div className="grid grid-cols-2 xl:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
                 {paginatedProducts.map((product: Product) => (
                     <ProductCard key={product.id} product={product} />
                 ))}
