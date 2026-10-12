@@ -1,170 +1,237 @@
-# JustPhones — E-commerce de Fundas y Accesorios para iPhone
+<div align="center">
 
-> Portfolio demo — tienda online completa con panel de administración, finanzas y carrito funcional.
+# 📱 JustPhones — E-commerce de Fundas y Accesorios para iPhone
 
-![Next.js](https://img.shields.io/badge/Next.js-15.3-black?logo=next.js)
-![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-06B6D4?logo=tailwindcss)
-![Vercel](https://img.shields.io/badge/Deploy-Vercel-black?logo=vercel)
+**Tienda online completa con panel admin, finanzas y checkout por WhatsApp. Next.js 15 + Supabase + R2 + Framer Motion.**
+
+**Complete iPhone cases store with admin panel, finance dashboard and WhatsApp checkout. Next.js 15 + Supabase + R2.**
+
+[![Next.js](https://img.shields.io/badge/Next.js-15.3-black?logo=next.js)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org/)
+[![Tailwind](https://img.shields.io/badge/Tailwind-3.4-06B6D4?logo=tailwindcss)](https://tailwindcss.com/)
+[![Framer](https://img.shields.io/badge/Framer_Motion-11-FF0080)](https://www.framer.com/motion/)
+[![Deploy](https://img.shields.io/badge/Deploy-Vercel-black?logo=vercel)](https://justphones-fv.vercel.app)
+[![License](https://img.shields.io/badge/License-Privado-lightgrey)](#-autor-contacto-y-licencia)
+
+**[🚀 Demo en vivo](https://justphones-fv.vercel.app) · [📦 Repo](https://github.com/FelipeDiazAimar/justphones) · [🇬🇧 English version](README.en.md)**
+
+> Portfolio demo — tienda real adaptada a mock en memoria, sin DB ni login, lista para mostrar.
+
+</div>
+
+> **English TL;DR:** JustPhones is an iPhone cases/accessories store (Next.js 15 App Router) with public catalog (filters by model/category, search, product pages), persistent cart, WhatsApp checkout with real-time discount codes, and a **full admin panel without login in demo** (products, orders, finance with Recharts, discount codes, carousel, FAQs, models). All data lives in `src/lib/mock-data.ts` (in-memory, resets on reload). Real integrations (Supabase, R2, EmailJS) remain in code as production reference. Full English docs in [README.en.md](README.en.md).
 
 ---
 
-## Descripción
+## 📑 Tabla de contenidos
 
-**JustPhones** es una tienda online especializada en fundas y accesorios para iPhone. El proyecto es una aplicación full-stack construida con Next.js 15 App Router que incluye:
-
-- Catálogo de productos con filtros por modelo y categoría
-- Carrito de compras persistente con localStorage
-- Flujo de checkout con envío de pedido por WhatsApp
-- Códigos de descuento validados en tiempo real
-- **Panel de administración completo** (sin login en modo demo)
-- **Dashboard financiero** con gráficos de ventas, rentabilidad y capital
-
-Todo el proyecto funciona con **datos mock en memoria** — sin base de datos ni autenticación requerida, ideal para demostración en portfolio.
+1. [Qué es y qué problema resuelve](#-qué-es-y-qué-problema-resuelve)
+2. [Demo en vivo](#-demo-en-vivo)
+3. [Características](#-características-tienda--admin--finanzas)
+4. [Arquitectura](#-arquitectura)
+5. [Stack y librerías](#-stack-y-librerías)
+6. [Estructura](#-estructura)
+7. [Quick Start](#-quick-start-30-segundos)
+8. [Instalación completa](#-instalación-completa)
+9. [Variables de entorno](#-variables-de-entorno)
+10. [Scripts](#-scripts)
+11. [Datos mock y códigos](#-datos-mock-y-códigos-para-probar)
+12. [Rutas principales](#-rutas-principales)
+13. [API mock](#-api-mock)
+14. [Diseño y UX](#-diseño-y-ux)
+15. [Deploy](#-deploy)
+16. [Roadmap](#-roadmap)
+17. [Troubleshooting](#-troubleshooting)
+18. [Autor](#-autor-contacto-y-licencia)
 
 ---
 
-## Stack Tecnológico
+## 💡 Qué es y qué problema resuelve
 
-| Categoría | Tecnología |
+**JustPhones** es una tienda de fundas y accesorios para iPhone (iPhone 11 → 16 Pro) construida como app de producción real y adaptada a demo de portfolio: la DB **Supabase (PostgreSQL)** se reemplazó por estado en memoria, el storage **Cloudflare R2** por URLs de Unsplash, y el **login del admin** se removió para acceso directo desde el botón **Admin** del header.
+
+| Antes (negocio sin sistema) | Ahora (JustPhones) |
 |---|---|
-| Framework | Next.js 15 (App Router) |
-| Lenguaje | TypeScript 5 |
-| Estilos | Tailwind CSS 3 + shadcn/ui |
-| Animaciones | Framer Motion 11 |
-| Gráficos | Recharts 2 |
-| Formularios | React Hook Form + Zod |
-| Carrusel | Embla Carousel |
-| Íconos | Lucide React |
-| Deploy | Vercel |
+| Catálogo por fotos sueltas en redes | Catálogo con filtros por modelo/categoría, búsqueda, ficha con colores/stock/galería |
+| Pedidos por chat desordenados | Checkout por WhatsApp con mensaje formateado (productos, cantidades, precios, descuento) |
+| Descuentos a mano, sin control | Códigos validados en tiempo real (`DEMO10`, `PROMO20`, `PORTFOLIO`, `BIENVENIDA`) |
+| No saber qué deja cada producto | Dashboard financiero con ganancia neta, capital, patrimonio en stock, rentabilidad por método de pago y por producto |
+| Cierres de caja en papel | Cierres mensuales con historial + costos fijos + sueldos + movimientos monetarios |
 
 ---
 
-## Estructura del Proyecto
+## 🚀 Demo en vivo
+
+| Entorno | URL |
+|---|---|
+| 🌐 **Vercel (demo)** | https://justphones-fv.vercel.app |
+| 💻 Local | http://localhost:9002 (`npm run dev` con Turbopack) |
+
+Sin `.env`, sin credenciales, sin login: entrar y usar. El botón **Admin** lleva directo al panel.
+
+---
+
+## ✨ Características (tienda + admin + finanzas)
+
+### Tienda pública
+- Carrusel promocional, catálogo por modelo (iPhone 11–16 Pro) y categoría (fundas, accesorios, auriculares), filtros por subcategoría/modelo/stock, búsqueda por nombre/modelo.
+- Ficha `/product/[id]` con selector de color, stock en tiempo real y galería.
+- Carrito lateral: agregar/quitar, descuentos, persistencia `localStorage`.
+- Checkout WhatsApp: genera texto formateado y abre `https://wa.me/<numero>?text=…`.
+- FAQs acordeón + contacto (EmailJS en real).
+
+### Panel `/admin` (sin login en demo)
+| Sección | Qué hace |
+|---|---|
+| Productos | CRUD con imágenes, colores, stock, precios |
+| Pedidos | Solicitudes de clientes, registrar ventas, descuentos |
+| Finanzas | Dashboard completo (abajo) |
+| Códigos | CRUD de descuentos (% + activo/inactivo) |
+| Carrusel | Subir/ordenar imágenes home |
+| FAQs / Modelos / Nombres | Contenido y compatibilidades |
+
+### Dashboard `/admin/finanzas`
+**Métricas por mes:** ingreso productos, movimientos monetarios, costos fijos, sueldos, costos de pedidos (restock), costos/ingresos totales, **ganancia neta**, **capital acumulado**, patrimonio en stock, items vendidos, conversión.
+**Gráficos:** ventas día/mes/año (línea), por categoría (torta), ganancias vs costos (barras diario/semanal/mensual/por pedido).
+**Tablas:** popularidad (ventas/pedidos/vistas), rentabilidad por método (lista/efectivo/débito), restock con costos/márgenes.
+**Gestión:** costos fijos, sueldos, ingresos/egresos, cierres mensuales.
+
+---
+
+## 🏗️ Arquitectura
+
+```mermaid
+graph LR
+  A[Next.js 15 App Router<br/>src/app] --> B[Hooks en memoria<br/>use-products/sales/...]
+  B --> C[mock-data.ts<br/>20 productos + finanzas]
+  A --> D[Carrito localStorage<br/>+ wa.me checkout]
+  A --> E[API mocks<br/>finance-closures/upload/r2]
+  A --> F[(Supabase + R2 + EmailJS<br/>solo prod, referencia)]
+```
+
+Estado con custom hooks + `useState` (cada hook inicializa desde `mock-data.ts` y simula latencia con `setTimeout`). Carrito → valida código → arma mensaje → `wa.me`. APIs retornan mocks (cierres, `{success:true}`, URLs Unsplash).
+
+```ts
+// src/hooks/use-products.ts (ejemplo)
+const [products, setProducts] = useState<Product[]>(MOCK_PRODUCTS);
+const addProduct = async (data) => {
+  await new Promise(r => setTimeout(r, 400)); // latencia simulada
+  setProducts(prev => [newProduct, ...prev]);
+};
+```
+
+---
+
+## 🛠️ Stack y librerías
+
+Versiones de `package.json` (`nextn@0.1.0`, Next `15.3.8`):
+
+| Capa | Paquete | Versión | Uso |
+|---|---|---|---|
+| Framework | `next` | `15.3.8` | App Router |
+| UI | `react`, `react-dom` | `18.3.1` | Componentes |
+| Lang | `typescript` | `5.x` | Tipos + `typecheck` |
+| Estilos | `tailwindcss`, `tailwindcss-animate`, `tailwind-merge`, `clsx`, `class-variance-authority` | `3.4.1` | shadcn/ui |
+| Radix | 14 paquetes (dialog, select, toast…) | `1.x/2.x` | Base UI |
+| Animación | `framer-motion` | `11.0.0` | Transiciones |
+| 3D/fondo | `ogl` | `1.0.3` | Efecto Aurora welcome |
+| Recorte img | `react-image-crop` | `11.0.5` | Admin carrusel/productos |
+| Gráficos | `recharts` | `2.15.1` | Finanzas |
+| Forms | `react-hook-form`, `@hookform/resolvers`, `zod` | `7.54.2 / 3.24.2` | Validación |
+| Carrusel | `embla-carousel-react`, `autoplay` | `8.6.0` | Hero |
+| Temas | `next-themes` | `0.3.0` | Dark/light |
+| Iconos | `lucide-react` | `0.475.0` | Iconografía |
+| Fechas | `date-fns`, `react-day-picker` | `3.6.0 / 8.10.1` | Períodos/Filtros |
+| DB prod | `@supabase/supabase-js`, `@supabase/ssr` | `2.52.1 / 0.5.1` | Ref prod (mock en demo) |
+| Storage prod | `@aws-sdk/client-s3` | `3.850.0` | R2 ref prod |
+| Email prod | `@emailjs/browser` | `4.4.1` | Contacto real |
+| IA | `genkit`, `@genkit-ai/googleai`, `@genkit-ai/next` | `1.13.0` | Flujos `src/ai` |
+| Analytics | `@vercel/analytics` | `1.5.0` | Métricas |
+| Misc | `firebase`, `dotenv`, `patch-package` | `11.9.1` | Compat/scripts |
+
+---
+
+## 📁 Estructura
 
 ```
-src/
-├── app/
-│   ├── admin/                  # Panel de administración
-│   │   ├── page.tsx            # Dashboard con acceso a todas las secciones
-│   │   ├── products/           # CRUD completo de productos
-│   │   ├── pedidos/            # Gestión de solicitudes de clientes
-│   │   ├── finanzas/           # Dashboard financiero con gráficos
-│   │   ├── codigos/            # Códigos de descuento
-│   │   ├── carousel/           # Gestión de imágenes del carrusel
-│   │   ├── faqs/               # Preguntas frecuentes
-│   │   ├── models/             # Modelos de iPhone compatibles
-│   │   └── names/              # Nombres de productos
-│   ├── catalog/                # Catálogo público con filtros
-│   ├── product/[id]/           # Página de detalle de producto
-│   ├── contact/                # Formulario de contacto
-│   ├── faq/                    # Página pública de FAQs
-│   └── search/                 # Búsqueda de productos
-├── components/
-│   ├── layout/                 # Header, Footer, navegación
-│   ├── ui/                     # Componentes shadcn/ui
-│   ├── cart-sheet.tsx          # Carrito lateral con descuentos
-│   └── product-card.tsx        # Tarjeta de producto
-├── hooks/                      # Custom hooks con estado en memoria
-│   ├── use-products.ts
-│   ├── use-sales.ts
-│   ├── use-customer-requests.ts
-│   ├── use-fixed-costs.ts
-│   ├── use-monetary-income.ts
-│   └── ...
-└── lib/
-    ├── mock-data.ts            # Todos los datos demo (productos, ventas, finanzas)
-    └── utils.ts
+justphones/justphones/
+├── src/
+│   ├── app/{admin/{products,pedidos,finanzas,codigos,carousel,faqs,models,names},
+│   │        catalog,catalog/[model],product/[id],search,faq,contact}
+│   ├── components/{layout/Header,Footer,ui/*,cart-sheet,product-card}
+│   ├── hooks/{use-products,use-sales,use-customer-requests,use-fixed-costs,
+│   │          use-monetary-income,use-salary-withdrawals,…}
+│   └── lib/{mock-data.ts (743 líneas),products,sales,discount-codes,supabase/,
+│            cloudflare-r2.ts,r2-storage.ts,emailjs.ts,demo.ts,…}
+├── supabase/ public/ examples/ vercel.json apphosting.yaml components.json
+├── .env.local.example package.json
+└── README.md README.en.md
+```
+
+> Nota: el repo tiene doble carpeta `justphones/justphones/` (wrapper + app real). Los comandos se corren **dentro de `justphones/justphones/`**.
+
+---
+
+## ⚡ Quick Start (30 segundos)
+
+```bash
+cd referencias/justphones/justphones
+npm install
+npm run dev
+# 👉 http://localhost:9002
 ```
 
 ---
 
-## Funcionalidades
+## 🔧 Instalación completa
 
-### Tienda Pública
+**Prerrequisitos:** Node 20+, npm 10+. Nada más para demo.
 
-- **Carrusel** de imágenes promocionales en la página principal
-- **Catálogo** con navegación por modelo (iPhone 11 a 16 Pro) y categoría (fundas, accesorios, auriculares)
-- **Filtros** por subcategoría, modelo y disponibilidad de stock
-- **Búsqueda** de productos por nombre o modelo
-- **Página de producto** con selector de color, stock en tiempo real y galería de imágenes
-- **Carrito lateral** con:
-  - Agregar / quitar productos
-  - Aplicar códigos de descuento
-  - Persistencia en `localStorage`
-- **Checkout por WhatsApp** — genera un mensaje formateado con el pedido completo y abre WhatsApp directamente
-- **FAQs** con acordeón
-- **Formulario de contacto**
+```bash
+# desde la raíz del portfolio
+cd referencias/justphones/justphones
+npm install
+npm run dev      # Turbopack :9002
+npm run typecheck
+npm run build && npm start  # prod
+```
 
-### Panel de Administración (`/admin`)
-
-Accesible directamente desde el botón **Admin** en la barra de navegación. Sin login requerido en modo demo.
-
-| Sección | Funcionalidad |
-|---|---|
-| **Productos** | Crear, editar y eliminar productos con imágenes, colores, stock y precios |
-| **Pedidos** | Ver solicitudes de clientes, registrar ventas, aplicar descuentos |
-| **Finanzas** | Dashboard completo (ver sección debajo) |
-| **Códigos** | CRUD de códigos de descuento con porcentaje y estado activo/inactivo |
-| **Carrusel** | Subir y ordenar imágenes del carrusel principal |
-| **FAQs** | Crear y editar preguntas frecuentes |
-| **Modelos** | Gestión de modelos de iPhone compatibles |
-| **Nombres** | Gestión de nombres de productos (subcategorías) |
-
-### Dashboard Financiero (`/admin/finanzas`)
-
-Panel completo de análisis financiero con:
-
-**Métricas por período (selector de mes):**
-- Ingreso por Productos
-- Movimientos Monetarios (ingresos y egresos)
-- Costos Fijos del período
-- Extracciones de Sueldos
-- Costos de Pedidos (restock)
-- Costos Totales e Ingresos Totales
-- **Ganancia Neta**
-- **Capital Disponible** acumulado histórico
-- Patrimonio Total en stock
-- Items Vendidos y Tasa de Conversión
-
-**Gráficos interactivos:**
-- Ventas por día / mes / año (LineChart)
-- Ventas por categoría (PieChart)
-- Resumen de Ganancias y Costos (BarChart) — diario, semanal, mensual, por pedido
-
-**Tablas:**
-- Popularidad de productos (por ventas, pedidos o vistas)
-- Rentabilidad por método de pago (lista, efectivo, débito)
-- Historial de pedidos de restock con costos y márgenes
-
-**Gestión en vivo:**
-- Agregar / editar / eliminar costos fijos por período
-- Registrar extracciones de sueldo
-- Registrar ingresos y egresos monetarios
-- Cierres de caja mensuales con historial
+**Modo real (opcional):** copiar `.env.local.example` → `.env.local`, completar Supabase/R2/EmailJS, y el código de integración original (clientes `src/lib/supabase/`, `r2-storage.ts`, `emailjs.ts`) vuelve a hablar con servicios reales. En demo esos clientes usan placeholder y degradan a mocks/Unsplash.
 
 ---
 
-## Datos Mock
+## 🔑 Variables de entorno
 
-Todos los datos están definidos en [`src/lib/mock-data.ts`](src/lib/mock-data.ts) y se reinician con cada recarga de página.
+Solo necesarias en **real** (`.env.local.example`, 17 líneas). En demo no hace falta crear `.env`:
 
-| Dataset | Cantidad |
+| Variable | Para qué |
 |---|---|
-| Productos | 20 (fundas, accesorios, auriculares) |
-| Ventas | 20 registros (abr–jun 2026) |
-| Solicitudes de clientes | 15 registros |
-| Costos fijos | 15 registros (3 meses) |
-| Extracciones de sueldo | 4 registros |
-| Movimientos monetarios | 5 registros |
-| Historial de stock | 30 entradas en 3 pedidos |
-| Cierres de caja | 3 períodos (abr / may / jun 2026) |
-| Códigos de descuento | 4 códigos activos |
-| Imágenes de carrusel | 5 imágenes |
-| FAQs | 6 preguntas |
-| Modelos de iPhone | 12 modelos (iPhone 11 a 16 Pro) |
+| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | DB prod (demo: placeholder) |
+| `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ACCOUNT_ID`, `R2_PUBLIC_DOMAIN` (opcional) | Storage prod (demo: Unsplash) |
+| `NEXT_PUBLIC_EMAILJS_SERVICE_ID`, `NEXT_PUBLIC_EMAILJS_TEMPLATE_ID`, `NEXT_PUBLIC_EMAILJS_PUBLIC_KEY` | Formulario `/contact` real (sin ellas: toast de error) |
 
-**Códigos de descuento para probar:**
+---
+
+## 📜 Scripts
+
+```bash
+npm run dev            # dev Turbopack :9002
+npm run build          # build prod
+npm run start          # servir prod
+npm run typecheck      # tsc --noEmit
+npm run lint           # ESLint
+npm run test-r2        # node test-r2-connection.js (diagnóstico R2 real)
+npm run test-r2-api    # test vía API route
+npm run test-r2-upload # test upload
+npm run genkit:dev     # flujos IA (tsx src/ai/dev.ts)
+```
+
+---
+
+## 📦 Datos mock y códigos para probar
+
+`src/lib/mock-data.ts`: 20 productos, 20 ventas (abr–jun 2026), 15 solicitudes, 15 costos fijos (3 meses), 4 sueldos, 5 movimientos, 30 stocks en 3 pedidos, 3 cierres (abr/may/jun 2026), 4 códigos, 5 carrusel, 6 FAQs, 12 modelos (iPhone 11–16 Pro). Se reinician con cada recarga.
+
 | Código | Descuento |
 |---|---|
 | `DEMO10` | 10% |
@@ -172,161 +239,83 @@ Todos los datos están definidos en [`src/lib/mock-data.ts`](src/lib/mock-data.t
 | `PORTFOLIO` | 15% |
 | `BIENVENIDA` | 10% |
 
----
-
-## Instalación y Uso Local
-
-```bash
-# Clonar el repositorio
-git clone <url-del-repo>
-cd justphones
-
-# Instalar dependencias
-npm install
-
-# Iniciar servidor de desarrollo (puerto 9002)
-npm run dev
-```
-
-Abrir [http://localhost:9002](http://localhost:9002) en el navegador.
-
-> No se requieren variables de entorno para correr el proyecto en modo demo.
-
-### Scripts Disponibles
-
-```bash
-npm run dev        # Servidor de desarrollo con Turbopack
-npm run build      # Build de producción
-npm run start      # Servidor de producción
-npm run typecheck  # Verificación de tipos TypeScript
-npm run lint       # Linting con ESLint
-```
+Sin login ni passwords en demo.
 
 ---
 
-## Modo demo (sin keys)
+## 🗺️ Rutas principales
 
-El proyecto corre **completo sin ninguna variable de entorno**. No hace falta crear `.env.local` (ver `.env.local.example` solo si se quiere conectar los servicios reales de producción: Supabase, Cloudflare R2, EmailJS).
-
-### Qué funciona sin keys
-
-- **Tienda pública completa**: home con carrusel, catálogo con filtros, detalle de producto, búsqueda, FAQs, carrito persistente en `localStorage`, checkout por WhatsApp (`wa.me`) y códigos de descuento (`DEMO10`, `PROMO20`, `PORTFOLIO`, `BIENVENIDA`).
-- **Panel `/admin` completo sin login**: productos, pedidos, finanzas con gráficos, códigos, carrusel, FAQs, modelos y nombres.
-- Los clientes degradan solos: Supabase usa URL/key placeholder (`src/lib/supabase/client.ts`), las API routes devuelven mocks y los uploads devuelven URLs de Unsplash.
-
-### Qué NO anda sin keys
-
-- **Formulario `/contact`**: requiere `NEXT_PUBLIC_EMAILJS_SERVICE_ID`, `NEXT_PUBLIC_EMAILJS_TEMPLATE_ID` y `NEXT_PUBLIC_EMAILJS_PUBLIC_KEY`; sin ellas muestra un toast de error al enviar.
-- **Persistencia**: los datos mock viven en memoria y se reinician con cada recarga.
-
-### Cómo correr
-
-```bash
-npm install
-npm run dev      # Turbopack en http://localhost:9002
-```
-
-Sin `.env`, sin credenciales, sin login: entrar y usar. El botón **Admin** en el header lleva directo al panel.
-
-### Credenciales
-
-No aplica — **no hay login ni passwords en modo demo**. Los únicos "secretos" de juguete son los códigos de descuento de arriba.
-
----
-
-## Rutas Principales
-
-| Ruta | Descripción |
+| Ruta | Qué es |
 |---|---|
-| `/` | Página principal con carrusel y bienvenida |
-| `/catalog` | Catálogo completo de productos |
-| `/catalog/cases` | Fundas para iPhone |
-| `/catalog/accessories` | Accesorios |
-| `/catalog/auriculares` | Auriculares |
-| `/catalog/[model]` | Productos por modelo (ej: `/catalog/iphone-16`) |
-| `/product/[id]` | Detalle de producto con colores y stock |
-| `/search` | Búsqueda de productos |
-| `/faq` | Preguntas frecuentes |
-| `/contact` | Formulario de contacto |
-| `/admin` | Dashboard administrativo |
-| `/admin/products` | Gestión de productos |
-| `/admin/pedidos` | Gestión de pedidos y ventas |
-| `/admin/finanzas` | Dashboard financiero |
-| `/admin/codigos` | Códigos de descuento |
-| `/admin/carousel` | Imágenes del carrusel |
-| `/admin/faqs` | Gestión de FAQs |
-| `/admin/models` | Modelos de iPhone |
+| `/` | Home con carrusel + Aurora |
+| `/catalog`, `/catalog/cases`, `/catalog/accessories`, `/catalog/auriculares`, `/catalog/[model]` | Catálogo y filtros |
+| `/product/[id]` | Detalle con colores/stock |
+| `/search`, `/faq`, `/contact` | Búsqueda, FAQs, contacto |
+| `/admin` | Dashboard admin |
+| `/admin/products`, `/admin/pedidos`, `/admin/finanzas`, `/admin/codigos`, `/admin/carousel`, `/admin/faqs`, `/admin/models` | Secciones admin |
 
 ---
 
-## Arquitectura
+## 🔌 API mock
 
-### Estado en Memoria
-
-El proyecto usa **custom hooks con `useState`** para toda la lógica de datos. Cada hook inicializa su estado con datos de `mock-data.ts` y expone funciones CRUD que mutan el estado local simulando operaciones async con `setTimeout`.
-
-```ts
-// Ejemplo: use-products.ts
-export function useProductsState() {
-  const [products, setProducts] = useState<Product[]>(MOCK_PRODUCTS);
-
-  const addProduct = async (data) => {
-    await new Promise(r => setTimeout(r, 400)); // simula latencia
-    setProducts(prev => [newProduct, ...prev]);
-    return true;
-  };
-  // ...
-}
-```
-
-### Flujo del Carrito → WhatsApp
-
-1. El usuario agrega productos al carrito (persiste en `localStorage`)
-2. Opcionalmente aplica un código de descuento (validado con `validateDiscountCode()`)
-3. Al hacer checkout, se genera un mensaje de texto formateado con todos los productos, cantidades, precios y descuentos
-4. Se abre `https://wa.me/<numero>?text=<mensaje>` en una nueva pestaña
-
-### API Routes (Mock)
-
-Las rutas de API no acceden a ninguna base de datos — retornan respuestas simuladas:
-
-| Endpoint | Método | Respuesta |
-|---|---|---|
-| `/api/admin/finance-closures` | GET | Lista de cierres de caja mock |
-| `/api/admin/finance-closures` | POST | Nuevo cierre generado |
-| `/api/admin/customer-requests` | DELETE/PATCH | `{ success: true }` |
-| `/api/upload/product-cover` | POST | URL de Unsplash mock |
-| `/api/upload/product-color` | POST | URL de Unsplash mock |
-| `/api/r2/delete` | POST | `{ success: true }` |
+| Endpoint | Respuesta |
+|---|---|
+| `GET /api/admin/finance-closures` | Cierres mock |
+| `POST /api/admin/finance-closures` | Cierre generado |
+| `DELETE/PATCH /api/admin/customer-requests` | `{success:true}` |
+| `POST /api/upload/product-cover`, `/api/upload/product-color` | URL Unsplash mock |
+| `POST /api/r2/delete` | `{success:true}` |
 
 ---
 
-## Diseño y UX
+## 🎨 Diseño y UX
 
-- **Tema oscuro/claro** con `next-themes` y toggle en el header
-- **Responsive** — sidebar en desktop, menú hamburguesa en mobile con accesos rápidos al panel admin
-- **Animaciones** con Framer Motion en transiciones de página y elementos interactivos
-- **Skeleton loaders** durante estados de carga simulados
-- **Toast notifications** para feedback de todas las acciones CRUD
-- **Efecto Aurora** animado en el fondo de la página de bienvenida
+Tema oscuro/claro (`next-themes` + toggle), responsive (sidebar desktop / hamburguesa mobile con accesos admin), Framer Motion, skeleton loaders, toasts en cada CRUD, Aurora animada en welcome.
 
 ---
 
-## Notas de Portfolio
+## ☁️ Deploy
 
-Este proyecto fue construido como aplicación de producción real y luego adaptado para demo de portfolio:
-
-- La base de datos **Supabase (PostgreSQL)** fue reemplazada por estado en memoria
-- El almacenamiento **Cloudflare R2** fue reemplazado con URLs de Unsplash
-- El sistema de **autenticación** del admin fue removido para acceso directo
-- Las **imágenes reales** de productos fueron reemplazadas por fotos de stock de Unsplash
-
-El código de integración original (Supabase, R2, auth) sigue presente en el repositorio como referencia de la arquitectura de producción.
+Vercel (`vercel.json` → `framework: nextjs`): importar `justphones/justphones/` como root, `npm run build`, sin envs para demo. Vivo: https://justphones-fv.vercel.app. Firebase App Hosting vía `apphosting.yaml`.
 
 ---
 
-## Autor
+## 🗺️ Roadmap
 
-**Felipe Diaz Aimar**
+- [x] Tienda + WA checkout + descuentos + admin + finanzas mock
+- [ ] Reconectar Supabase/R2/Auth para prod con switch `DEMO=false`
+- [ ] Pagos online (MP/Stripe) + tracking de envío
+- [ ] Tests (Vitest) para hooks financieros
 
-Desarrollado con Next.js 15, TypeScript y mucho café ☕
+---
+
+## ❓ Troubleshooting
+
+| Síntoma | Solución |
+|---|---|
+| Puerto ocupado `:9002` | `npx next dev -p 9003` o liberar puerto |
+| Contacto da error | Falta EmailJS envs (esperado en demo) |
+| Datos se "resetean" | Normal: memoria, no DB |
+| Imágenes Unsplash | Normal en demo (R2 solo en real) |
+| `npm run dev` desde `referencias/justphones/` falla | Entrar a `justphones/justphones/` (doble carpeta) |
+
+---
+
+## 👤 Autor, contacto y licencia
+
+**Felipe Diaz Aimar** — Full-stack (Next.js, Supabase, R2, IA).
+- 💼 LinkedIn: https://www.linkedin.com/in/felipe-aimar/
+- 📧 Email: felipediazaimar@gmail.com
+- 🐙 GitHub: https://github.com/FelipeDiazAimar
+- 🌐 Demo: https://justphones-fv.vercel.app — Repo: https://github.com/FelipeDiazAimar/justphones
+
+Privado adaptado a portfolio. Todos los derechos reservados.
+
+[(volver arriba)](#-justphones--e-commerce-de-fundas-y-accesorios-para-iphone)
+
+<details>
+<summary><b>🇬🇧 English summary (full version in README.en.md)</b></summary>
+
+JustPhones is an iPhone cases store with WhatsApp checkout, live discount codes and a complete login-free demo admin (products/orders/finance/charts/carousel/FAQs). Zero-config: `npm install && npm run dev` inside `justphones/justphones/`. Live: https://justphones-fv.vercel.app.
+
+</details>
